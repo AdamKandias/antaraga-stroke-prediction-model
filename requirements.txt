@@ -1,0 +1,14 @@
+fastapi[standard]>=0.137.2
+uvicorn[standard]>=0.30
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+python-dotenv>=1.0
+scikit-learn>=1.5
+xgboost>=2.0
+pandas>=2.2
+numpy>=1.26
+joblib>=1.4
+pydantic>=2.8
+streamlit>=1.38
+pyjwt>=2.9
+bcrypt>=4.2

@@ -1,0 +1,118 @@
+# ANTARAGA — Stroke Risk Model & API
+
+Backend untuk aplikasi mobile ANTARAGA: model machine learning untuk estimasi
+risiko stroke iskemik + skoring ABCD2, dibungkus jadi API (FastAPI) yang
+dipanggil dari app Flutter, plus dashboard internal untuk testing model dan
+melihat log prediksi.
+
+## Struktur Folder
+
+```
+model/        Training script, logika ABCD2, dan artifact model terlatih
+api/          FastAPI app (endpoint yang dipanggil dari Flutter)
+dashboard/    Dashboard Streamlit untuk testing & lihat log
+notebooks/    Notebook eksplorasi data (EDA) lama, bukan bagian dari sistem produksi
+```
+
+## 1. Setup Awal
+
+Butuh Python 3.11+ (disarankan pakai virtual environment).
+
+```bash
+cd stroke-prediction-model
+python3 -m venv .venv && source .venv/bin/activate   # opsional tapi disarankan
+pip install -r requirements.txt
+cp .env.example .env   # lalu sesuaikan isinya, lihat penjelasan di bawah
+```
+
+### Isi `.env`
+
+| Variabel | Default | Keterangan |
+|---|---|---|
+| `DATABASE_URL` | `sqlite:///./antaraga.db` | Satu database untuk semuanya: users, profiles, dan log prediksi. SQLite lokal sudah cukup; ganti ke Postgres kalau perlu skala lebih besar. |
+| `DEV_MODE` | `true` | `true` = simulator hardware otomatis jalan + endpoint bisa dites tanpa token (dianggap `dev-user`). `false` = wajib kirim Bearer token dari `/auth/login`, simulator mati. **Set `false` sebelum deploy ke production.** |
+| `JWT_SECRET` | (insecure default) | Secret untuk menandatangani access token kita sendiri (bukan dari pihak ketiga). Generate dengan `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`. **Wajib diganti sebelum production** — siapa pun yang tahu ini bisa membuat token palsu untuk user manapun. |
+| `JWT_EXPIRE_DAYS` | `30` | Berapa lama access token berlaku sebelum user harus login ulang. |
+| `SIMULATOR_INTERVAL_SECONDS` | `20` | Seberapa sering simulator hardware bikin data palsu saat `DEV_MODE=true`. |
+
+## 2. Latih Model
+
+```bash
+python3 model/train.py
+```
+
+Script ini akan:
+- Load `healthcare-dataset-stroke-data.csv`
+- Coba 2 algoritma (HistGradientBoosting & XGBoost) dengan hyperparameter
+  tuning + 5-fold cross-validation, pilih yang terbaik
+- Simpan model terlatih ke `model/artifacts/stroke_risk_model.joblib`
+- Simpan ringkasan metrik ke `model/artifacts/metrics.json`
+
+Jalankan ulang **hanya** kalau dataset, daftar fitur, atau kode training
+diubah — tidak perlu setiap hari. API dan dashboard akan otomatis memuat
+artifact yang sudah tersimpan tanpa perlu training ulang.
+
+## 3. Jalankan API
+
+```bash
+python3 -m uvicorn api.main:app --reload --port 8000
+```
+
+- Dokumentasi interaktif (Swagger): http://localhost:8000/docs
+- Endpoint auth (tidak butuh token):
+  - `POST /auth/register` — body: `{ "email": "...", "phone": "...", "password": "..." }` (isi salah satu `email`/`phone`, boleh keduanya). Tanpa verifikasi email. Balasan: `{ "access_token", "user_id" }`.
+  - `POST /auth/login` — body: `{ "identifier": "email atau no HP", "password": "..." }`. Balasan sama seperti register.
+- Endpoint lain (semua butuh header `Authorization: Bearer <access_token>` kecuali `DEV_MODE=true`):
+  - `GET /auth/me` — info user yang login
+  - `POST /profile` — upsert profil lansia yang dipantau (body sama dengan `UserProfile.toJson()` di app Flutter, minus `id`)
+  - `GET /profile` — ambil profil yang sudah disimpan
+  - `POST /predict/stroke-risk` — body **cuma vital** (`VitalData.toJson()`), profil diambil otomatis dari yang sudah disimpan lewat `POST /profile`
+  - `POST /assessment/abcd2` — body sama persis dengan `AssessmentResult.toJson()`
+  - `GET /logs` — riwayat prediksi terakhir
+  - `GET /health` — cek server hidup (tidak butuh token)
+
+Auth ini murni buatan sendiri (password di-hash dengan bcrypt, token JWT
+ditandatangani dengan `JWT_SECRET` kita sendiri) — tidak ada Supabase Auth
+atau provider pihak ketiga lain yang dilibatkan. Semua data (users, profiles,
+log prediksi) hidup di satu database yang sama (`DATABASE_URL`).
+
+### Mode Development (`DEV_MODE=true`)
+
+- Endpoint bisa dipanggil **tanpa** header `Authorization` (otomatis dianggap
+  `dev-user`) — supaya gampang dites lewat curl/dashboard tanpa perlu login.
+- Background simulator (`api/simulator.py`) otomatis jalan: setiap
+  `SIMULATOR_INTERVAL_SECONDS`, dia berpura-pura jadi smartband yang baru
+  selesai membaca vital 2 user demo (`dev-user-budi`, `dev-user-siti`),
+  lempar ke model, dan catat hasilnya ke log — supaya kelihatan seperti ada
+  hardware asli yang terus mengirim data, tanpa perlu alat fisik atau app
+  Flutter menyala. Cek hasilnya lewat tab **Log Riwayat** di dashboard atau
+  `GET /logs`.
+- **Matikan (`DEV_MODE=false`) sebelum deploy ke production** — kalau tidak,
+  siapapun bisa memanggil API tanpa token.
+
+## 4. Jalankan Dashboard Testing
+
+```bash
+streamlit run dashboard/app.py
+```
+
+Otomatis terbuka di browser (http://localhost:8501). Dashboard ini membaca
+model & log langsung dari disk, **tidak perlu** API menyala bersamaan.
+
+3 tab yang tersedia:
+- **Coba Prediksi** — form manual untuk uji model risiko stroke & skor ABCD2
+- **Metrics Model** — AUC, F1, confusion matrix, feature importance dari
+  training terakhir
+- **Log Riwayat** — semua prediksi yang pernah dibuat (dari dashboard maupun
+  dari API)
+
+## Troubleshooting
+
+- **`FileNotFoundError: Model artifact not found`** → jalankan `python3 model/train.py` dulu.
+- **Port sudah dipakai** (`address already in use`) → cari proses lama lalu matikan:
+  ```bash
+  lsof -ti:8000 | xargs kill -9   # untuk API
+  lsof -ti:8501 | xargs kill -9   # untuk dashboard
+  ```
+- **Mau reset log lokal** → hapus file `antaraga.db` di root project, akan
+  otomatis dibuat ulang kosong saat API/dashboard jalan lagi.

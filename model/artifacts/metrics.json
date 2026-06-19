@@ -1,0 +1,33 @@
+{
+  "model_name": "XGBClassifier",
+  "best_params": {
+    "subsample": 1.0,
+    "scale_pos_weight": 19.557471264367816,
+    "reg_lambda": 1.0,
+    "n_estimators": 100,
+    "min_child_weight": 5,
+    "max_depth": 4,
+    "learning_rate": 0.03,
+    "colsample_bytree": 1.0
+  },
+  "cv_average_precision": 0.23129946114005323,
+  "threshold": 0.705,
+  "test_auc": 0.8229629629629629,
+  "test_average_precision": 0.2500068286049613,
+  "test_precision": 0.20555555555555555,
+  "test_recall": 0.49333333333333335,
+  "test_f1": 0.2901960784313726,
+  "test_confusion_matrix": [
+    [
+      1315,
+      143
+    ],
+    [
+      38,
+      37
+    ]
+  ],
+  "n_train": 3577,
+  "n_test": 1533,
+  "positive_rate": 0.0487279843444227
+}
