@@ -124,3 +124,25 @@ class Abcd2Response(BaseModel):
     risk_2day_percent: float
     risk_7day_percent: float
     risk_90day_percent: float
+
+
+class VitalsFromPpgRequest(BaseModel):
+    """Raw multi-wavelength PPG segment from the smartband (>= 8s recommended)
+    plus the user's age. At least one channel must be provided."""
+
+    fs_hz: float = Field(..., gt=0)
+    green: list[float] | None = None
+    red: list[float] | None = None
+    infrared: list[float] | None = None
+
+    @model_validator(mode="after")
+    def require_one_channel(self):
+        if not self.green and not self.red and not self.infrared:
+            raise ValueError("isi minimal salah satu channel: green, red, atau infrared")
+        return self
+
+
+class VitalsFromPpgResponse(BaseModel):
+    systolic_bp_mmhg: float
+    diastolic_bp_mmhg: float
+    blood_glucose_mg_dl: float

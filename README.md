@@ -91,6 +91,7 @@ Ctrl+C di script ini akan mematikan API dan ngrok sama-sama.
   - `GET /profile` — ambil profil yang sudah disimpan
   - `POST /predict/stroke-risk` — body **cuma vital** (`VitalData.toJson()`), profil diambil otomatis dari yang sudah disimpan lewat `POST /profile`
   - `POST /assessment/abcd2` — body sama persis dengan `AssessmentResult.toJson()`
+  - `POST /estimate/vitals-from-ppg` — estimasi tekanan darah & gula darah dari sinyal PPG mentah. **503** sampai model dilatih (lihat bagian 3b).
   - `GET /logs` — riwayat prediksi terakhir
   - `GET /health` — cek server hidup (tidak butuh token)
 
@@ -112,6 +113,44 @@ log prediksi) hidup di satu database yang sama (`DATABASE_URL`).
   `GET /logs`.
 - **Matikan (`DEV_MODE=false`) sebelum deploy ke production** — kalau tidak,
   siapapun bisa memanggil API tanpa token.
+
+## 3b. Pipeline PPG -> Vitals (Tekanan Darah & Gula Darah) — belum dilatih
+
+Sesuai proposal, tekanan darah dan gula darah tidak dipakai langsung dari
+pembacaan mentah hardware — keduanya harus lewat estimasi MLP dari sinyal
+PPG dulu (mirip pendekatan Gusti et al., 2025, tapi mereka cuma menutupi gula
+darah/kolesterol/asam urat, bukan tekanan darah). Detak jantung TIDAK lewat
+jalur ini — itu langsung dihitung dari deteksi puncak sinyal PPG
+(`model/ppg_features.py`), tidak perlu model.
+
+Status saat ini: **pipeline-nya sudah jadi, modelnya belum dilatih** —
+sengaja, karena belum ada data kalibrasi asli dari prototipe ANTARAGA.
+Bagian-bagiannya:
+
+- `model/ppg_features.py` — ekstraksi fitur Pulse Wave Analysis (filter
+  bandpass, deteksi pulsa, amplitude/crest time/lebar pulsa per channel
+  warna, rasio antar-channel). Tidak ada parameter yang dilatih, jadi sudah
+  bisa dipakai & diuji sekarang dengan sinyal sintetis.
+- `model/train_ppg_vitals.py` — script training `MLPRegressor` multi-output
+  (sistolik, diastolik, gula darah). **Akan berhenti dengan pesan jelas**
+  kalau `data/calibration/calibration_data.csv` belum ada — lihat
+  `data/calibration/README.md` untuk format kolom yang diharapkan saat
+  pengujian alat fisik nanti.
+- `data/external_reference/` — 30 baris data Tabel 2 dari jurnal Gusti et
+  al. (2025) untuk *sanity-check saja*, BUKAN dataset training (beda
+  hardware, populasi, dan tidak ada data tekanan darah sama sekali — lihat
+  README di folder itu untuk alasan lengkapnya).
+- `POST /estimate/vitals-from-ppg` — endpoint sudah ada di API, tapi
+  mengembalikan **503** sampai `model/artifacts/ppg_vitals_model.joblib`
+  ada (hasil training di atas). Body: `{ "fs_hz": ..., "green": [...], "red": [...], "infrared": [...] }`
+  (isi minimal satu channel).
+
+Begitu prototipe fisik selesai dan tahap "Pengujian Alat" mengumpulkan data
+kalibrasi nyata (PPG + ground truth dari tensimeter/alat gula darah), jalankan:
+
+```bash
+python3 -m model.train_ppg_vitals
+```
 
 ## 4. Jalankan Dashboard Testing
 

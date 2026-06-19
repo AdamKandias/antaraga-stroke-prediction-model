@@ -16,6 +16,7 @@ from api.config import DEV_MODE
 from api.database import Base, engine, get_db
 from api.logging_utils import log_prediction, logger
 from api.ml import predict_stroke_risk
+from api.ml_vitals import is_model_available, predict_vitals_from_ppg
 from api.security import hash_password, verify_password
 from api.simulator import run_simulator
 from model.abcd2 import calculate_abcd2
@@ -224,6 +225,50 @@ def assess_abcd2(
 
     latency_ms = (time.perf_counter() - start) * 1000
     log_prediction(db, "abcd2", payload.model_dump(), response.model_dump(), latency_ms, user_id=user_id)
+    return response
+
+
+@app.post("/estimate/vitals-from-ppg", response_model=schemas.VitalsFromPpgResponse)
+def estimate_vitals_from_ppg(
+    payload: schemas.VitalsFromPpgRequest,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+) -> schemas.VitalsFromPpgResponse:
+    if not is_model_available():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Model PPG->vitals belum dilatih. Pipeline-nya sudah siap, tapi "
+                "menunggu data kalibrasi asli dari prototipe ANTARAGA (lihat "
+                "data/calibration/README.md) -- bukan bug, ini status yang "
+                "diharapkan sampai tahap Pengujian Alat selesai."
+            ),
+        )
+
+    start = time.perf_counter()
+
+    profile = db.get(models_db.Profile, user_id)
+    if profile is None:
+        raise HTTPException(status_code=400, detail="Isi profil dulu lewat POST /profile sebelum estimasi")
+
+    result = predict_vitals_from_ppg(
+        fs_hz=payload.fs_hz,
+        age_years=_age_from_birthday(profile.birthday),
+        green=payload.green,
+        red=payload.red,
+        infrared=payload.infrared,
+    )
+    response = schemas.VitalsFromPpgResponse(**result)
+
+    latency_ms = (time.perf_counter() - start) * 1000
+    log_prediction(
+        db,
+        "vitals_from_ppg",
+        {"fs_hz": payload.fs_hz, "n_channels": sum(c is not None for c in (payload.green, payload.red, payload.infrared))},
+        response.model_dump(),
+        latency_ms,
+        user_id=user_id,
+    )
     return response
 
 
