@@ -58,6 +58,29 @@ artifact yang sudah tersimpan tanpa perlu training ulang.
 python3 -m uvicorn api.main:app --reload --port 8000
 ```
 
+### Cara lain: API + ngrok bersamaan (biar tidak perlu cek-cek IP LAN)
+
+```bash
+./scripts/dev.sh
+```
+
+Script ini menjalankan `uvicorn` **dan** `ngrok` sekaligus, lalu otomatis
+mengisi `API_BASE_URL_DEV` di `.env` app Flutter (`../antaraga/.env`) dengan
+URL ngrok yang baru didapat. Keuntungannya dibanding IP LAN manual:
+- Device fisik/emulator tidak perlu satu WiFi dengan komputer — ngrok URL
+  bisa diakses dari internet manapun.
+- Tidak perlu beda config untuk Android emulator (`10.0.2.2`) vs device fisik
+  vs iOS simulator — satu URL ngrok buat semua.
+- Setelah script ini jalan, cukup **hot-restart** (bukan hot-reload) app
+  Flutter supaya `.env` yang baru terbaca.
+
+Butuh `ngrok` terpasang dan sudah login (`brew install ngrok` lalu
+`ngrok config add-authtoken <token>` dari dashboard ngrok, sekali saja).
+URL ngrok gratis berubah setiap restart — itu sebabnya di-auto-update,
+bukan ditulis manual.
+
+Ctrl+C di script ini akan mematikan API dan ngrok sama-sama.
+
 - Dokumentasi interaktif (Swagger): http://localhost:8000/docs
 - Endpoint auth (tidak butuh token):
   - `POST /auth/register` — body: `{ "email": "...", "phone": "...", "password": "..." }` (isi salah satu `email`/`phone`, boleh keduanya). Tanpa verifikasi email. Balasan: `{ "access_token", "user_id" }`.
