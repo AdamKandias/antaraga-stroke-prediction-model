@@ -32,11 +32,13 @@ def log_prediction(
     response_payload: dict,
     latency_ms: float,
     user_id: str | None = None,
+    profile_id: str | None = None,
 ) -> None:
     risk_level = response_payload.get("risk_level") or response_payload.get("urgency")
     entry = PredictionLog(
         endpoint=endpoint,
         user_id=user_id,
+        profile_id=profile_id,
         request_payload=json.dumps(request_payload, default=str),
         response_payload=json.dumps(response_payload, default=str),
         risk_level=risk_level,

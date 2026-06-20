@@ -84,19 +84,24 @@ class ProfilePayload(BaseModel):
 
 
 class ProfileResponse(ProfilePayload):
-    pass
+    id: str
 
 
 class VitalPayload(BaseModel):
     """Mirrors VitalData.toJson() in the Flutter app. Only the fields the
     risk model needs are required; heart_rate_bpm/spo2_percent are accepted
-    but unused by /predict/stroke-risk."""
+    but unused by /predict/stroke-risk.
+
+    `profile_id` is optional: omit it to target the account's active
+    (last-viewed, else default) parent profile. Pass it explicitly once the
+    app supports monitoring more than one parent at a time."""
 
     systolic_bp: float = Field(..., ge=0)
     diastolic_bp: float | None = Field(None, ge=0)
     blood_glucose_mg_dl: float = Field(..., ge=0)
     heart_rate_bpm: float | None = None
     spo2_percent: float | None = None
+    profile_id: str | None = None
 
 
 class StrokeRiskResponse(BaseModel):
@@ -115,6 +120,7 @@ class Abcd2Request(BaseModel):
     abcd2_clinical: int = Field(..., ge=0, le=2)
     abcd2_duration: int = Field(..., ge=0, le=2)
     abcd2_diabetes: bool
+    profile_id: str | None = None
 
 
 class Abcd2Response(BaseModel):
@@ -134,6 +140,7 @@ class VitalsFromPpgRequest(BaseModel):
     green: list[float] | None = None
     red: list[float] | None = None
     infrared: list[float] | None = None
+    profile_id: str | None = None
 
     @model_validator(mode="after")
     def require_one_channel(self):

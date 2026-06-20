@@ -7,9 +7,9 @@ from api.database import Base
 
 
 class User(Base):
-    """A family account that logs in and monitors one elderly profile.
-    Login is by email OR phone (at least one set) + password — no email
-    verification, no third-party auth provider."""
+    """A family account that logs in and can monitor multiple elderly
+    profiles ("parent"). Login is by email OR phone (at least one set) +
+    password — no email verification, no third-party auth provider."""
 
     __tablename__ = "users"
 
@@ -19,17 +19,31 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    profile: Mapped["Profile"] = relationship(
-        back_populates="user", uselist=False, cascade="all, delete-orphan"
+    # Updated on every authenticated request with a real Bearer token (not
+    # the DEV_MODE no-header fallback) -- used to decide which users count
+    # as "currently active" for the dev hardware simulator.
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Plain string, not a ForeignKey constraint: a Profile can be deleted
+    # independently and that shouldn't be blocked by this pointer. Validity
+    # is checked in application code (api/profile_utils.py).
+    last_viewed_profile_id: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    profiles: Mapped[list["Profile"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="Profile.created_at",
     )
 
 
 class Profile(Base):
-    """The elderly person being monitored. One per user account for now."""
+    """One elderly person ("parent") being monitored. A single account can
+    have several of these; the first one ever created is the default."""
 
     __tablename__ = "profiles"
 
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     gender: Mapped[str] = mapped_column(String, nullable=False)  # 'L' / 'P'
     birthday: Mapped[date] = mapped_column(Date, nullable=False)
@@ -40,17 +54,19 @@ class Profile(Base):
     is_working: Mapped[bool] = mapped_column(Boolean, default=True)
     residence_type: Mapped[str] = mapped_column(String, default="Urban")
     has_diabetes: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
-    user: Mapped["User"] = relationship(back_populates="profile")
+    user: Mapped["User"] = relationship(back_populates="profiles")
 
 
 class PredictionLog(Base):
-    """Every call to /predict/stroke-risk or /assessment/abcd2 is recorded here,
-    purely so the testing dashboard can show what the model/ABCD2 logic has
-    been asked and what it answered.
+    """Every call to /predict/stroke-risk, /assessment/abcd2, or
+    /estimate/vitals-from-ppg is recorded here, purely so the testing
+    dashboard can show what the model/ABCD2 logic has been asked and what
+    it answered.
     """
 
     __tablename__ = "prediction_logs"
@@ -58,6 +74,7 @@ class PredictionLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     endpoint: Mapped[str] = mapped_column(String, nullable=False)
     user_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    profile_id: Mapped[str | None] = mapped_column(String, nullable=True)
     request_payload: Mapped[str] = mapped_column(Text, nullable=False)
     response_payload: Mapped[str] = mapped_column(Text, nullable=False)
     risk_level: Mapped[str | None] = mapped_column(String, nullable=True)

@@ -34,6 +34,7 @@ cp .env.example .env   # lalu sesuaikan isinya, lihat penjelasan di bawah
 | `JWT_SECRET` | (insecure default) | Secret untuk menandatangani access token kita sendiri (bukan dari pihak ketiga). Generate dengan `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`. **Wajib diganti sebelum production** — siapa pun yang tahu ini bisa membuat token palsu untuk user manapun. |
 | `JWT_EXPIRE_DAYS` | `30` | Berapa lama access token berlaku sebelum user harus login ulang. |
 | `SIMULATOR_INTERVAL_SECONDS` | `20` | Seberapa sering simulator hardware bikin data palsu saat `DEV_MODE=true`. |
+| `SIMULATOR_ACTIVE_WINDOW_SECONDS` | `1800` | Akun dianggap "aktif" (jadi target simulator) kalau pernah memanggil API dengan Bearer token asli dalam sekian detik terakhir. |
 
 ## 2. Latih Model
 
@@ -87,9 +88,12 @@ Ctrl+C di script ini akan mematikan API dan ngrok sama-sama.
   - `POST /auth/login` — body: `{ "identifier": "email atau no HP", "password": "..." }`. Balasan sama seperti register.
 - Endpoint lain (semua butuh header `Authorization: Bearer <access_token>` kecuali `DEV_MODE=true`):
   - `GET /auth/me` — info user yang login
-  - `POST /profile` — upsert profil lansia yang dipantau (body sama dengan `UserProfile.toJson()` di app Flutter, minus `id`)
-  - `GET /profile` — ambil profil yang sudah disimpan
-  - `POST /predict/stroke-risk` — body **cuma vital** (`VitalData.toJson()`), profil diambil otomatis dari yang sudah disimpan lewat `POST /profile`
+  - `GET /profiles` — semua parent (profil orang tua/lansia) milik akun ini
+  - `POST /profiles` — bikin parent baru (body sama dengan `UserProfile.toJson()` di app Flutter, minus `id`). Satu akun bisa punya banyak parent; yang pertama dibuat otomatis jadi default.
+  - `GET /profiles/active` — parent aktif (terakhir dilihat, default ke yang pertama dibuat). **404** kalau akun belum punya parent sama sekali -> app harus arahkan ke form isi profil.
+  - `GET /profiles/{id}` / `PUT /profiles/{id}` — ambil/perbarui satu parent tertentu
+  - `POST /profiles/{id}/select` — tandai parent ini sebagai yang terakhir dilihat (dipakai kalau ganti-ganti parent yang dipantau)
+  - `POST /predict/stroke-risk` — body **cuma vital** (`VitalData.toJson()`), profil diambil otomatis dari parent aktif akun ini (atau `profile_id` eksplisit di body kalau menarget parent tertentu)
   - `POST /assessment/abcd2` — body sama persis dengan `AssessmentResult.toJson()`
   - `POST /estimate/vitals-from-ppg` — estimasi tekanan darah & gula darah dari sinyal PPG mentah. **503** sampai model dilatih (lihat bagian 3b).
   - `GET /logs` — riwayat prediksi terakhir
@@ -106,11 +110,13 @@ log prediksi) hidup di satu database yang sama (`DATABASE_URL`).
   `dev-user`) — supaya gampang dites lewat curl/dashboard tanpa perlu login.
 - Background simulator (`api/simulator.py`) otomatis jalan: setiap
   `SIMULATOR_INTERVAL_SECONDS`, dia berpura-pura jadi smartband yang baru
-  selesai membaca vital 2 user demo (`dev-user-budi`, `dev-user-siti`),
-  lempar ke model, dan catat hasilnya ke log — supaya kelihatan seperti ada
-  hardware asli yang terus mengirim data, tanpa perlu alat fisik atau app
-  Flutter menyala. Cek hasilnya lewat tab **Log Riwayat** di dashboard atau
-  `GET /logs`.
+  selesai membaca vital -- tapi **hanya untuk akun yang sedang aktif**
+  (login lewat app/curl dengan Bearer token asli dalam
+  `SIMULATOR_ACTIVE_WINDOW_SECONDS` terakhir, default 30 menit) **dan**
+  sudah punya minimal satu parent (`POST /profiles`). Tidak ada user demo
+  tetap lagi -- daftar, isi profil, dan selama sesi itu masih "aktif",
+  simulator otomatis mengirim data untuk parent aktifnya. Cek hasilnya
+  lewat tab **Log Riwayat** di dashboard atau `GET /logs`.
 - **Matikan (`DEV_MODE=false`) sebelum deploy ke production** — kalau tidak,
   siapapun bisa memanggil API tanpa token.
 

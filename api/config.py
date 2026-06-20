@@ -18,3 +18,9 @@ JWT_SECRET = os.getenv("JWT_SECRET", "dev-insecure-secret-change-me")
 JWT_EXPIRE_DAYS = int(os.getenv("JWT_EXPIRE_DAYS", "30"))
 
 SIMULATOR_INTERVAL_SECONDS = int(os.getenv("SIMULATOR_INTERVAL_SECONDS", "20"))
+
+# A user counts as "currently active" for the simulator if they've made an
+# authenticated request (real Bearer token, see api/auth.py) within this
+# many seconds. Keeps the simulator from forever feeding someone who logged
+# in once and closed the app.
+SIMULATOR_ACTIVE_WINDOW_SECONDS = int(os.getenv("SIMULATOR_ACTIVE_WINDOW_SECONDS", "1800"))
