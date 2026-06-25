@@ -1,10 +1,11 @@
 import asyncio
+import json
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from sqlalchemy import desc, or_
@@ -17,7 +18,12 @@ from api.database import Base, engine, get_db
 from api.logging_utils import log_prediction, logger
 from api.ml import predict_stroke_risk
 from api.ml_vitals import is_model_available, predict_vitals_from_ppg
-from api.profile_utils import age_from_birthday, profile_to_features, resolve_active_profile
+from api.profile_utils import (
+    age_from_birthday,
+    profile_to_features,
+    record_vital_reading,
+    resolve_active_profile,
+)
 from api.security import hash_password, verify_password
 from api.simulator import run_simulator
 from model.abcd2 import calculate_abcd2
@@ -280,12 +286,101 @@ def predict_stroke_risk_endpoint(
     result = predict_stroke_risk(profile_to_features(profile, vital_dict))
     response = schemas.StrokeRiskResponse(**result)
 
+    record_vital_reading(
+        db,
+        profile.id,
+        systolic_bp=vital.systolic_bp,
+        blood_glucose_mg_dl=vital.blood_glucose_mg_dl,
+        diastolic_bp=vital.diastolic_bp,
+        heart_rate_bpm=vital.heart_rate_bpm,
+        spo2_percent=vital.spo2_percent,
+    )
+
     latency_ms = (time.perf_counter() - start) * 1000
     log_prediction(
         db, "stroke_risk", vital.model_dump(), response.model_dump(), latency_ms,
         user_id=user_id, profile_id=profile.id,
     )
     return response
+
+
+@app.get("/vitals/latest", response_model=schemas.LatestVitalResponse)
+def get_latest_vital(
+    profile_id: str | None = None,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+) -> schemas.LatestVitalResponse:
+    """Most recent vital-signs reading for the resolved profile, plus the
+    risk assessment that was already computed for it -- purely a read, no
+    new prediction is triggered (that only happens from a real
+    /predict/stroke-risk call). 404 means no reading has ever arrived for
+    this profile yet."""
+    profile = _resolve_profile_for_request(db, user_id, profile_id)
+    reading = (
+        db.query(models_db.VitalReading)
+        .filter(models_db.VitalReading.profile_id == profile.id)
+        .order_by(desc(models_db.VitalReading.created_at))
+        .first()
+    )
+    if reading is None:
+        raise HTTPException(status_code=404, detail="Belum ada data vital untuk parent ini")
+
+    log = (
+        db.query(models_db.PredictionLog)
+        .filter(models_db.PredictionLog.profile_id == profile.id)
+        .filter(models_db.PredictionLog.endpoint == "stroke_risk")
+        .order_by(desc(models_db.PredictionLog.created_at))
+        .first()
+    )
+    risk = schemas.StrokeRiskResponse(**json.loads(log.response_payload)) if log else None
+
+    return schemas.LatestVitalResponse(
+        vital=schemas.VitalReadingResponse(
+            systolic_bp=reading.systolic_bp,
+            diastolic_bp=reading.diastolic_bp,
+            heart_rate_bpm=reading.heart_rate_bpm,
+            spo2_percent=reading.spo2_percent,
+            blood_glucose_mg_dl=reading.blood_glucose_mg_dl,
+            timestamp=reading.created_at,
+        ),
+        risk=risk,
+    )
+
+
+@app.get("/vitals/history", response_model=list[schemas.VitalReadingResponse])
+def get_vital_history(
+    date_: date | None = Query(None, alias="date"),
+    profile_id: str | None = None,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+) -> list[schemas.VitalReadingResponse]:
+    """All vital-signs readings for the resolved profile on `date_` (server
+    local date, defaults to today), oldest first. Empty list, not 404, if
+    there's simply no data yet for that day."""
+    profile = _resolve_profile_for_request(db, user_id, profile_id)
+    day = date_ or datetime.now(timezone.utc).date()
+    day_start = datetime.combine(day, datetime.min.time())
+    day_end = day_start + timedelta(days=1)
+
+    readings = (
+        db.query(models_db.VitalReading)
+        .filter(models_db.VitalReading.profile_id == profile.id)
+        .filter(models_db.VitalReading.created_at >= day_start)
+        .filter(models_db.VitalReading.created_at < day_end)
+        .order_by(models_db.VitalReading.created_at)
+        .all()
+    )
+    return [
+        schemas.VitalReadingResponse(
+            systolic_bp=r.systolic_bp,
+            diastolic_bp=r.diastolic_bp,
+            heart_rate_bpm=r.heart_rate_bpm,
+            spo2_percent=r.spo2_percent,
+            blood_glucose_mg_dl=r.blood_glucose_mg_dl,
+            timestamp=r.created_at,
+        )
+        for r in readings
+    ]
 
 
 @app.post("/assessment/abcd2", response_model=schemas.Abcd2Response)

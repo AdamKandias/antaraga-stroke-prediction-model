@@ -62,6 +62,25 @@ class Profile(Base):
     user: Mapped["User"] = relationship(back_populates="profiles")
 
 
+class VitalReading(Base):
+    """One vital-signs reading for a profile -- from the real smartband
+    (via /predict/stroke-risk) or the dev-mode simulator. Kept separate from
+    PredictionLog (whose request_payload shape differs between callers) so
+    the app has one clean, typed source for "latest vitals" and history
+    charts."""
+
+    __tablename__ = "vital_readings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    profile_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    systolic_bp: Mapped[float] = mapped_column(Float, nullable=False)
+    diastolic_bp: Mapped[float | None] = mapped_column(Float, nullable=True)
+    heart_rate_bpm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    spo2_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    blood_glucose_mg_dl: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
 class PredictionLog(Base):
     """Every call to /predict/stroke-risk, /assessment/abcd2, or
     /estimate/vitals-from-ppg is recorded here, purely so the testing

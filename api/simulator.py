@@ -9,9 +9,10 @@ anymore: register + fill in a profile, and the simulator picks you up
 automatically while your session stays active; stop using the app and it
 stops sending you data.
 
-This only ever writes to *our own* prediction_logs table, since the
-simulator's job is to let you watch the model/ABCD2 logic react to "live"
-data, not to fabricate rows anywhere else.
+This only ever writes to *our own* prediction_logs/vital_readings tables,
+since the simulator's job is to let you watch the model/ABCD2 logic and the
+dashboard's vital cards react to "live" data, not to fabricate rows
+anywhere else.
 """
 
 import asyncio
@@ -23,7 +24,7 @@ from api.config import SIMULATOR_ACTIVE_WINDOW_SECONDS, SIMULATOR_INTERVAL_SECON
 from api.database import SessionLocal
 from api.logging_utils import log_prediction, logger
 from api.ml import predict_stroke_risk
-from api.profile_utils import profile_to_features, resolve_active_profile
+from api.profile_utils import profile_to_features, record_vital_reading, resolve_active_profile
 
 
 def _simulate_vitals() -> dict:
@@ -64,6 +65,16 @@ async def _tick() -> None:
         vitals = _simulate_vitals()
         features = profile_to_features(profile, vitals)
         result = predict_stroke_risk(features)
+
+        record_vital_reading(
+            db,
+            profile.id,
+            systolic_bp=vitals["systolic_bp"],
+            blood_glucose_mg_dl=vitals["avg_glucose_level"],
+            diastolic_bp=vitals["diastolic_bp"],
+            heart_rate_bpm=vitals["heart_rate_bpm"],
+            spo2_percent=vitals["spo2_percent"],
+        )
 
         log_prediction(
             db,

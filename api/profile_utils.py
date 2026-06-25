@@ -46,6 +46,31 @@ def resolve_active_profile(db: Session, user_id: str) -> models_db.Profile | Non
     )
 
 
+def record_vital_reading(
+    db: Session,
+    profile_id: str,
+    systolic_bp: float,
+    blood_glucose_mg_dl: float,
+    diastolic_bp: float | None = None,
+    heart_rate_bpm: float | None = None,
+    spo2_percent: float | None = None,
+) -> models_db.VitalReading:
+    """Stores one vital-signs reading for a profile, regardless of whether it
+    came from a real /predict/stroke-risk call or the dev-mode simulator --
+    this is what GET /vitals/latest and /vitals/history read back."""
+    reading = models_db.VitalReading(
+        profile_id=profile_id,
+        systolic_bp=systolic_bp,
+        diastolic_bp=diastolic_bp,
+        heart_rate_bpm=heart_rate_bpm,
+        spo2_percent=spo2_percent,
+        blood_glucose_mg_dl=blood_glucose_mg_dl,
+    )
+    db.add(reading)
+    db.commit()
+    return reading
+
+
 def profile_to_features(profile: models_db.Profile, vital: dict) -> dict:
     """Builds the exact feature dict api/ml.py::predict_stroke_risk expects,
     combining the profile's static data with a fresh vital reading."""

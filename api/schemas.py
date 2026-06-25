@@ -111,6 +111,30 @@ class StrokeRiskResponse(BaseModel):
     model_name: str
 
 
+class VitalReadingResponse(BaseModel):
+    """Mirrors VitalData.fromJson() in the Flutter app -- same field names
+    (including `timestamp`, not `recorded_at`) so the client can parse this
+    directly with no field-renaming glue code."""
+
+    systolic_bp: float
+    diastolic_bp: float | None
+    heart_rate_bpm: float | None
+    spo2_percent: float | None
+    blood_glucose_mg_dl: float
+    timestamp: datetime
+
+
+class LatestVitalResponse(BaseModel):
+    """What the dashboard polls: the latest vital reading plus whatever risk
+    assessment was computed for it (same call that wrote the reading also
+    wrote a StrokeRiskResponse -- this just reads it back, no new prediction
+    triggered). `risk` is null only if a reading exists but somehow no
+    matching prediction was ever logged for it."""
+
+    vital: VitalReadingResponse
+    risk: StrokeRiskResponse | None = None
+
+
 class Abcd2Request(BaseModel):
     """Mirrors AssessmentResult.toJson() in the Flutter app — the app already
     resolves each component to its point value before sending it."""
