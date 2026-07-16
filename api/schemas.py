@@ -177,3 +177,8 @@ class VitalsFromPpgResponse(BaseModel):
     systolic_bp_mmhg: float
     diastolic_bp_mmhg: float
     blood_glucose_mg_dl: float
+
+
+class RegisterDeviceTokenRequest(BaseModel):
+    """Body untuk POST /device/register-token."""
+    fcm_token: str

@@ -29,6 +29,14 @@ class User(Base):
     # is checked in application code (api/profile_utils.py).
     last_viewed_profile_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # FCM device token for push notifications. Registered by the mobile app
+    # on launch (POST /device/register-token). Nullable because old accounts
+    # may not have registered yet.
+    fcm_token: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Throttle high-risk notifications: only send once per cooldown window.
+    last_notified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     profiles: Mapped[list["Profile"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",

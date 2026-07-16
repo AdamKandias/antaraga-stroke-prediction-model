@@ -24,3 +24,11 @@ SIMULATOR_INTERVAL_SECONDS = int(os.getenv("SIMULATOR_INTERVAL_SECONDS", "20"))
 # many seconds. Keeps the simulator from forever feeding someone who logged
 # in once and closed the app.
 SIMULATOR_ACTIVE_WINDOW_SECONDS = int(os.getenv("SIMULATOR_ACTIVE_WINDOW_SECONDS", "1800"))
+
+# Path ke service account JSON dari Firebase Console (Project Settings →
+# Service accounts → Generate new private key). Wajib diisi agar push
+# notification bisa dikirim; kalau kosong/tidak ada, FCM dinonaktifkan.
+FCM_SERVICE_ACCOUNT_PATH = os.getenv("FCM_SERVICE_ACCOUNT_PATH", "api/serviceAccountKey.json")
+
+# Jeda minimum (detik) antar notifikasi HIGH-risk per user supaya tidak spam.
+FCM_NOTIFICATION_COOLDOWN_SECONDS = int(os.getenv("FCM_NOTIFICATION_COOLDOWN_SECONDS", "300"))

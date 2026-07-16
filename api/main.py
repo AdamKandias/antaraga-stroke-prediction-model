@@ -98,6 +98,19 @@ def health() -> dict:
     return {"status": "ok", "dev_mode": DEV_MODE}
 
 
+@app.post("/device/register-token", status_code=204)
+def register_device_token(
+    body: schemas.RegisterDeviceTokenRequest,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+) -> None:
+    """Simpan FCM token device agar backend bisa kirim push notification."""
+    user = db.query(models_db.User).filter(models_db.User.id == user_id).first()
+    if user:
+        user.fcm_token = body.fcm_token
+        db.commit()
+
+
 @app.post("/auth/register", response_model=schemas.AuthResponse)
 def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)) -> schemas.AuthResponse:
     filters = []
@@ -341,7 +354,12 @@ def get_latest_vital(
             heart_rate_bpm=reading.heart_rate_bpm,
             spo2_percent=reading.spo2_percent,
             blood_glucose_mg_dl=reading.blood_glucose_mg_dl,
-            timestamp=reading.created_at,
+            # All our DateTime columns are naive-but-conceptually-UTC
+            # (datetime.utcnow() at insert time) -- attach the tz explicitly
+            # so the JSON carries a UTC offset and the Flutter app's
+            # DateTime.parse(...).toLocal() converts to the *device's*
+            # timezone instead of silently treating UTC as if it were local.
+            timestamp=reading.created_at.replace(tzinfo=timezone.utc),
         ),
         risk=risk,
     )
@@ -377,7 +395,7 @@ def get_vital_history(
             heart_rate_bpm=r.heart_rate_bpm,
             spo2_percent=r.spo2_percent,
             blood_glucose_mg_dl=r.blood_glucose_mg_dl,
-            timestamp=r.created_at,
+            timestamp=r.created_at.replace(tzinfo=timezone.utc),
         )
         for r in readings
     ]

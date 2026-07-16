@@ -20,8 +20,13 @@ import random
 from datetime import datetime, timedelta, timezone
 
 from api import models_db
-from api.config import SIMULATOR_ACTIVE_WINDOW_SECONDS, SIMULATOR_INTERVAL_SECONDS
+from api.config import (
+    FCM_NOTIFICATION_COOLDOWN_SECONDS,
+    SIMULATOR_ACTIVE_WINDOW_SECONDS,
+    SIMULATOR_INTERVAL_SECONDS,
+)
 from api.database import SessionLocal
+from api.fcm import send_high_risk_notification
 from api.logging_utils import log_prediction, logger
 from api.ml import predict_stroke_risk
 from api.profile_utils import profile_to_features, record_vital_reading, resolve_active_profile
@@ -93,6 +98,17 @@ async def _tick() -> None:
             result["risk_level"],
             result["probability"],
         )
+
+        if result["risk_level"] == "HIGH" and user.fcm_token:
+            cooldown = timedelta(seconds=FCM_NOTIFICATION_COOLDOWN_SECONDS)
+            now_utc = datetime.now(timezone.utc)
+            last = user.last_notified_at
+            last_utc = last.replace(tzinfo=timezone.utc) if last else None
+            if last_utc is None or (now_utc - last_utc) > cooldown:
+                sent = send_high_risk_notification(user.fcm_token, profile.name)
+                if sent:
+                    user.last_notified_at = datetime.utcnow()
+                    db.commit()
     finally:
         db.close()
 
