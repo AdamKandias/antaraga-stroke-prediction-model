@@ -5,7 +5,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from sqlalchemy import desc, or_
@@ -500,3 +500,173 @@ def list_logs(limit: int = 50, db: Session = Depends(get_db)) -> list[dict]:
         }
         for row in rows
     ]
+
+
+# ---------------------------------------------------------------------------
+# /v1/ingest — menerima batch PPG dari firmware XIAO ESP32-S3
+# ---------------------------------------------------------------------------
+
+@app.post("/v1/ingest", response_model=schemas.IngestResponse)
+def ingest_firmware_batch(
+    batch: schemas.IngestBatch,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+) -> schemas.IngestResponse:
+    """Endpoint utama yang dipanggil firmware setiap BATCH_MS (default 500 ms).
+    Pipeline: PPG arrays → estimasi vital (MLP, jika tersedia) → stroke risk
+    (XGBoost) → simpan reading → trigger FCM kalau risiko HIGH."""
+    start = time.perf_counter()
+
+    profile = resolve_active_profile(db, user_id)
+    if profile is None:
+        # Tidak ada profil → terima data tapi skip prediksi
+        return schemas.IngestResponse(ok=True, seq=batch.seq)
+
+    # --- Estimasi vital dari sinyal PPG --------------------------------
+    vitals: dict = {}
+    if is_model_available() and (batch.ppg or batch.red or batch.ir):
+        try:
+            vitals = predict_vitals_from_ppg(
+                fs_hz=float(batch.fs_ppg or batch.fs_max or 200),
+                age_years=age_from_birthday(profile.birthday),
+                green=[float(v) for v in batch.ppg] if batch.ppg else None,
+                red=[float(v) for v in batch.red] if batch.red else None,
+                infrared=[float(v) for v in batch.ir] if batch.ir else None,
+            )
+        except Exception:
+            pass  # model belum dilatih atau sinyal terlalu pendek
+
+    if not vitals:
+        # MLP belum tersedia: ambil vital terakhir yang sudah ada di DB
+        last = (
+            db.query(models_db.VitalReading)
+            .filter(models_db.VitalReading.profile_id == profile.id)
+            .order_by(desc(models_db.VitalReading.created_at))
+            .first()
+        )
+        if last:
+            vitals = {
+                "systolic_bp_mmhg": last.systolic_bp,
+                "diastolic_bp_mmhg": last.diastolic_bp,
+                "blood_glucose_mg_dl": last.blood_glucose_mg_dl,
+            }
+
+    if not vitals:
+        # Tidak ada data vital sama sekali → simpan batch metadata saja
+        return schemas.IngestResponse(ok=True, seq=batch.seq)
+
+    # --- Prediksi stroke risk -------------------------------------------
+    features = profile_to_features(profile, {
+        "systolic_bp": vitals.get("systolic_bp_mmhg", 120.0),
+        "diastolic_bp": vitals.get("diastolic_bp_mmhg"),
+        "avg_glucose_level": vitals.get("blood_glucose_mg_dl", 100.0),
+    })
+    result = predict_stroke_risk(features)
+
+    # --- Simpan reading -------------------------------------------------
+    record_vital_reading(
+        db,
+        profile.id,
+        systolic_bp=vitals.get("systolic_bp_mmhg", 120.0),
+        diastolic_bp=vitals.get("diastolic_bp_mmhg"),
+        blood_glucose_mg_dl=vitals.get("blood_glucose_mg_dl", 100.0),
+    )
+
+    latency_ms = (time.perf_counter() - start) * 1000
+    log_prediction(
+        db, "stroke_risk",
+        {"source": "firmware", "device_id": batch.id, "seq": batch.seq,
+         "batt_pct": batch.batt_pct, "ppg_n": len(batch.ppg)},
+        result, latency_ms,
+        user_id=user_id, profile_id=profile.id,
+    )
+
+    # --- FCM kalau HIGH -------------------------------------------------
+    if result["risk_level"] == "HIGH":
+        from api.config import FCM_NOTIFICATION_COOLDOWN_SECONDS
+        from api.fcm import send_high_risk_notification
+
+        user = db.query(models_db.User).filter(models_db.User.id == user_id).first()
+        if user and user.fcm_token:
+            cooldown = timedelta(seconds=FCM_NOTIFICATION_COOLDOWN_SECONDS)
+            now_utc = datetime.now(timezone.utc)
+            last_notified = user.last_notified_at
+            last_utc = last_notified.replace(tzinfo=timezone.utc) if last_notified else None
+            if last_utc is None or (now_utc - last_utc) > cooldown:
+                sent = send_high_risk_notification(user.fcm_token, profile.name)
+                if sent:
+                    user.last_notified_at = datetime.utcnow()
+                    db.commit()
+
+    return schemas.IngestResponse(ok=True, seq=batch.seq, risk_level=result["risk_level"])
+
+
+# ---------------------------------------------------------------------------
+# /serial — monitor port serial firmware via WebSocket
+# ---------------------------------------------------------------------------
+
+@app.get("/serial/ports")
+def list_serial_ports() -> list[dict]:
+    """Daftar port serial yang tersambung di mesin ini. Buka di browser untuk
+    cari tahu nama port sebelum sambungkan WebSocket."""
+    try:
+        import serial.tools.list_ports  # type: ignore
+    except ImportError:
+        raise HTTPException(status_code=503, detail="pyserial tidak terinstall")
+    ports = serial.tools.list_ports.comports()
+    return [{"port": p.device, "description": p.description, "hwid": p.hwid} for p in ports]
+
+
+@app.websocket("/serial/ws")
+async def serial_ws(
+    websocket: WebSocket,
+    port: str = Query(..., description="Nama port, mis. /dev/ttyUSB0 atau COM3"),
+    baud: int = Query(115200),
+) -> None:
+    """Stream data serial secara real-time lewat WebSocket.
+
+    Sambungkan via browser:
+      ws://localhost:8000/serial/ws?port=/dev/ttyUSB0&baud=115200
+
+    Setiap baris dari port serial dikirim sebagai satu pesan teks WebSocket.
+    Kirim pesan teks apa pun dari client untuk meneruskannya ke port serial."""
+    try:
+        import serial  # type: ignore
+    except ImportError:
+        await websocket.close(code=1011, reason="pyserial tidak terinstall")
+        return
+
+    try:
+        ser = serial.Serial(port, baudrate=baud, timeout=1)
+    except serial.SerialException as exc:
+        await websocket.close(code=1011, reason=str(exc))
+        return
+
+    await websocket.accept()
+    loop = asyncio.get_event_loop()
+    logger.info("[serial] klien WS tersambung ke %s @ %d baud", port, baud)
+
+    try:
+        while True:
+            # Baca satu baris (blocking, dibungkus executor agar non-blocking)
+            raw: bytes = await loop.run_in_executor(None, ser.readline)
+            if raw:
+                try:
+                    line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+                except Exception:
+                    line = raw.hex()
+                await websocket.send_text(line)
+
+            # Cek apakah client mengirim data ke serial (non-blocking)
+            try:
+                msg = await asyncio.wait_for(websocket.receive_text(), timeout=0.01)
+                ser.write((msg + "\n").encode())
+            except asyncio.TimeoutError:
+                pass
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:
+        logger.warning("[serial] error WS: %s", exc)
+    finally:
+        ser.close()
+        logger.info("[serial] koneksi WS ke %s ditutup", port)

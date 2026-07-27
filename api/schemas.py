@@ -182,3 +182,25 @@ class VitalsFromPpgResponse(BaseModel):
 class RegisterDeviceTokenRequest(BaseModel):
     """Body untuk POST /device/register-token."""
     fcm_token: str
+
+
+class IngestBatch(BaseModel):
+    """Payload dari firmware XIAO ESP32-S3 ke POST /v1/ingest."""
+    id: str
+    seq: int
+    t_ms: int
+    t_unix_ms: int
+    fs_ppg: int
+    fs_max: int
+    batt_mv: int = 0
+    batt_pct: int = 0
+    ovf: int = 0
+    ppg: list[int] = []
+    red: list[int] = []
+    ir: list[int] = []
+
+
+class IngestResponse(BaseModel):
+    ok: bool
+    seq: int
+    risk_level: str | None = None
