@@ -11,8 +11,10 @@ import jwt
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
+from sqlalchemy import desc
+
 from api import models_db
-from api.config import DEV_MODE, JWT_EXPIRE_DAYS, JWT_SECRET
+from api.config import DEV_MODE, DEVICE_INGEST_KEY, JWT_EXPIRE_DAYS, JWT_SECRET
 from api.database import get_db
 
 DEV_USER_ID = "dev-user"
@@ -61,3 +63,26 @@ def get_current_user_id(
     db.commit()
 
     return user_id
+
+
+def get_ingest_user_id(
+    authorization: str | None = Header(None), db: Session = Depends(get_db)
+) -> str:
+    """Seperti get_current_user_id, tapi juga menerima DEVICE_INGEST_KEY
+    sebagai static key untuk firmware yang tidak bisa refresh JWT.
+
+    Kalau device key dipakai, endpoint memakai user yang paling terakhir
+    aktif (last_seen_at) — cocok untuk 1-device + 1-akun di PKM prototype."""
+    if authorization == f"Bearer {DEVICE_INGEST_KEY}":
+        user = (
+            db.query(models_db.User)
+            .order_by(desc(models_db.User.last_seen_at))
+            .first()
+        )
+        if user:
+            return user.id
+        if DEV_MODE:
+            return DEV_USER_ID
+        raise HTTPException(status_code=401, detail="Belum ada user terdaftar — daftar dulu via mobile app")
+
+    return get_current_user_id(authorization=authorization, db=db)

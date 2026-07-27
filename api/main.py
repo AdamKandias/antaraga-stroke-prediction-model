@@ -5,14 +5,17 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 
+import os
+
+import numpy as np
 from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session
 
-from api import models_db, schemas
-from api.auth import create_access_token, get_current_user_id
+from api import ingest_buffer, models_db, schemas
+from api.auth import create_access_token, get_current_user_id, get_ingest_user_id
 from api.config import DEV_MODE
 from api.database import Base, engine, get_db
 from api.logging_utils import log_prediction, logger
@@ -506,20 +509,74 @@ def list_logs(limit: int = 50, db: Session = Depends(get_db)) -> list[dict]:
 # /v1/ingest — menerima batch PPG dari firmware XIAO ESP32-S3
 # ---------------------------------------------------------------------------
 
+@app.post("/device/pair", response_model=schemas.DeviceStatusResponse)
+def pair_device(
+    body: schemas.PairDeviceRequest,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+) -> schemas.DeviceStatusResponse:
+    """Hubungkan DEVICE_ID firmware ke akun ini. Masukkan nilai DEVICE_ID
+    dari config.h, misal 'antaraga-001'. Setelah ini, data dari firmware
+    tersebut otomatis masuk ke akun yang melakukan pairing."""
+    key = body.device_key.strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="device_key tidak boleh kosong")
+
+    # Cek kalau device sudah di-pair ke akun lain
+    existing = (
+        db.query(models_db.User)
+        .filter(models_db.User.device_key == key)
+        .filter(models_db.User.id != user_id)
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="Perangkat ini sudah terhubung ke akun lain")
+
+    user = db.query(models_db.User).filter(models_db.User.id == user_id).first()
+    if user:
+        user.device_key = key
+        db.commit()
+    return schemas.DeviceStatusResponse(paired=True, device_key=key)
+
+
+@app.get("/device/status", response_model=schemas.DeviceStatusResponse)
+def device_status(
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+) -> schemas.DeviceStatusResponse:
+    """Cek apakah akun ini sudah terhubung ke perangkat."""
+    user = db.query(models_db.User).filter(models_db.User.id == user_id).first()
+    if user and user.device_key:
+        return schemas.DeviceStatusResponse(paired=True, device_key=user.device_key)
+    return schemas.DeviceStatusResponse(paired=False)
+
+
 @app.post("/v1/ingest", response_model=schemas.IngestResponse)
 def ingest_firmware_batch(
     batch: schemas.IngestBatch,
     db: Session = Depends(get_db),
-    user_id: str = Depends(get_current_user_id),
+    user_id: str = Depends(get_ingest_user_id),
 ) -> schemas.IngestResponse:
     """Endpoint utama yang dipanggil firmware setiap BATCH_MS (default 500 ms).
-    Pipeline: PPG arrays → estimasi vital (MLP, jika tersedia) → stroke risk
-    (XGBoost) → simpan reading → trigger FCM kalau risiko HIGH."""
+    User diidentifikasi lewat device_key (batch.id) yang di-pair via mobile app.
+    Pipeline: PPG → estimasi vital (MLP jika tersedia) → stroke risk (XGBoost)
+    → simpan reading → FCM kalau HIGH."""
     start = time.perf_counter()
+
+    # Cari user yang sudah pair device ini — prioritas utama
+    paired_user = (
+        db.query(models_db.User)
+        .filter(models_db.User.device_key == batch.id)
+        .first()
+    )
+    if paired_user:
+        user_id = paired_user.id
+
+    # Simpan ke buffer dulu (sebelum early-return) supaya dashboard bisa membaca
+    ingest_buffer.store(batch.id, batch.model_dump())
 
     profile = resolve_active_profile(db, user_id)
     if profile is None:
-        # Tidak ada profil → terima data tapi skip prediksi
         return schemas.IngestResponse(ok=True, seq=batch.seq)
 
     # --- Estimasi vital dari sinyal PPG --------------------------------
@@ -599,6 +656,173 @@ def ingest_firmware_batch(
                     db.commit()
 
     return schemas.IngestResponse(ok=True, seq=batch.seq, risk_level=result["risk_level"])
+
+
+# ---------------------------------------------------------------------------
+# /dashboard — web dashboard untuk monitoring hardware
+# ---------------------------------------------------------------------------
+
+_DASHBOARD_HTML = os.path.join(os.path.dirname(__file__), "static", "dashboard.html")
+
+
+@app.get("/dashboard", include_in_schema=False)
+def serve_dashboard() -> FileResponse:
+    return FileResponse(_DASHBOARD_HTML, media_type="text/html")
+
+
+@app.get("/v1/devices")
+def list_devices() -> list[str]:
+    """Daftar device yang sudah mengirim data sejak server terakhir dijalankan."""
+    return ingest_buffer.list_devices()
+
+
+@app.get("/v1/ingest/latest")
+def ingest_latest_dashboard(device_id: str, db: Session = Depends(get_db)) -> dict:
+    """Kembalikan data terbaru dari device dalam 4 tahap pemrosesan:
+    raw → PWA → MLP → XGBoost. Dipakai oleh /dashboard."""
+    batches = ingest_buffer.get_window(device_id)
+    if not batches:
+        raise HTTPException(status_code=404, detail=f"Belum ada data dari device '{device_id}'")
+
+    latest  = batches[-1]
+    # Concatenate window untuk sinyal yang lebih panjang (PWA/MLP butuh ≥ 2 detik)
+    all_ppg = [float(v) for b in batches for v in b.get("ppg", [])]
+    all_red = [float(v) for b in batches for v in b.get("red", [])]
+    all_ir  = [float(v) for b in batches for v in b.get("ir", [])]
+    fs_ppg  = int(latest.get("fs_ppg", 200))
+    fs_max  = int(latest.get("fs_max", 400))
+
+    # --- Stage 1: Raw (tampilkan single batch terbaru) ---
+    ppg_raw = [float(v) for v in latest.get("ppg", [])]
+    red_raw = [float(v) for v in latest.get("red", [])]
+    ir_raw  = [float(v) for v in latest.get("ir", [])]
+    stage_raw = {
+        "ppg": ppg_raw, "red": red_raw, "ir": ir_raw,
+        "fs_ppg": fs_ppg, "fs_max": fs_max,
+        "n_ppg": len(ppg_raw), "n_max": len(red_raw),
+        "t_unix_ms": latest.get("t_unix_ms", 0),
+        "ovf": latest.get("ovf", 0),
+    }
+
+    # --- Stage 2: PWA (gunakan window penuh untuk akurasi BPM) ---
+    stage_pwa = _compute_pwa(all_ppg, all_red, all_ir, fs_ppg, fs_max)
+
+    # --- Stage 3: MLP ---
+    stage_mlp = _compute_mlp(all_ppg, all_red, all_ir, fs_ppg)
+
+    # --- Stage 4: XGBoost (ambil dari DB) ---
+    stage_xgb = _compute_xgboost(device_id, db)
+
+    return {
+        "device_id": device_id,
+        "seq": latest.get("seq", 0),
+        "received_at": latest.get("_received_at", ""),
+        "batt_pct": latest.get("batt_pct", 0),
+        "batt_mv": latest.get("batt_mv", 0),
+        "raw": stage_raw,
+        "pwa": stage_pwa,
+        "mlp": stage_mlp,
+        "xgboost": stage_xgb,
+    }
+
+
+def _compute_pwa(ppg: list, red: list, ir: list, fs_ppg: int, fs_max: int) -> dict:
+    from model.ppg_features import bandpass_filter, detect_pulses, extract_pwa_features
+
+    result: dict = {
+        "filtered_ppg": [], "peaks_ppg": [],
+        "filtered_red": [], "peaks_red": [],
+        "features": {}, "bpm": None, "note": None,
+        "fs_ppg": fs_ppg, "fs_max": fs_max,
+    }
+    min_samples = int(fs_ppg * 2)  # 2 detik minimum
+
+    def _process(signal: list, fs: int, key: str) -> None:
+        if len(signal) < min_samples:
+            return
+        arr = np.array(signal, dtype=float)
+        filt = bandpass_filter(arr, float(fs))
+        result[f"filtered_{key}"] = [float(v) for v in filt]   # np.float64 → float
+        pulses = detect_pulses(filt, float(fs))
+        result[f"peaks_{key}"] = [int(p.peak_idx) for p in pulses]  # np.int64 → int
+        if len(pulses) >= 2 and key == "ppg":
+            intervals = np.diff([p.peak_idx for p in pulses]) / float(fs)
+            result["bpm"] = round(float(60.0 / float(np.mean(intervals))), 1)
+
+    if ppg: _process(ppg, fs_ppg, "ppg")
+    if red: _process(red, fs_max, "red")
+
+    if len(ppg) < min_samples and len(red) < min_samples:
+        result["note"] = (
+            f"Window sinyal terlalu pendek ({len(ppg)}/{min_samples} sampel PPG). "
+            "Tunggu beberapa detik — backend mengakumulasi data otomatis."
+        )
+    else:
+        try:
+            raw_feats = extract_pwa_features(
+                fs=float(fs_ppg),
+                green=ppg or None,
+                red=red or None,
+                infrared=ir or None,
+            )
+            # Konversi semua nilai ke Python native (numpy scalar tidak bisa di-serialize)
+            result["features"] = {k: float(v) if isinstance(v, (int, float)) else v
+                                  for k, v in raw_feats.items()}
+        except Exception as exc:
+            result["note"] = f"Ekstraksi fitur gagal: {exc}"
+
+    return result
+
+
+def _compute_mlp(ppg: list, red: list, ir: list, fs_ppg: int) -> dict:
+    from api.ml_vitals import is_model_available, predict_vitals_from_ppg
+
+    if not is_model_available():
+        return {
+            "available": False,
+            "message": "Model MLP belum dilatih — menunggu data kalibrasi dari hardware",
+        }
+    try:
+        result = predict_vitals_from_ppg(
+            fs_hz=float(fs_ppg),
+            age_years=60.0,
+            green=ppg or None,
+            red=red or None,
+            infrared=ir or None,
+        )
+        return {"available": True, **result}
+    except Exception as exc:
+        return {"available": False, "message": str(exc)}
+
+
+def _compute_xgboost(device_id: str, db: Session) -> dict:
+    user = (
+        db.query(models_db.User)
+        .filter(models_db.User.device_key == device_id)
+        .first()
+    )
+    if not user:
+        return {"available": False, "message": "Perangkat belum di-pair ke akun — pair dulu via mobile app"}
+
+    log = (
+        db.query(models_db.PredictionLog)
+        .filter(models_db.PredictionLog.user_id == user.id)
+        .filter(models_db.PredictionLog.endpoint == "stroke_risk")
+        .order_by(desc(models_db.PredictionLog.created_at))
+        .first()
+    )
+    if not log:
+        return {"available": False, "message": "Belum ada prediksi risiko stroke — tunggu batch berikutnya"}
+
+    resp = json.loads(log.response_payload)
+    return {
+        "available": True,
+        "probability": resp.get("probability"),
+        "risk_level": resp.get("risk_level"),
+        "threshold": resp.get("threshold"),
+        "model_name": resp.get("model_name"),
+        "predicted_at": log.created_at.isoformat(),
+    }
 
 
 # ---------------------------------------------------------------------------

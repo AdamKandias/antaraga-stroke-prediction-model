@@ -37,6 +37,11 @@ class User(Base):
     # Throttle high-risk notifications: only send once per cooldown window.
     last_notified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # DEVICE_ID firmware yang di-pair ke akun ini (misal "antaraga-001").
+    # Diisi lewat POST /device/pair dari mobile app.
+    # Batch masuk ke /v1/ingest dicocokkan dengan field "id" di payload.
+    device_key: Mapped[str | None] = mapped_column(String, nullable=True)
+
     profiles: Mapped[list["Profile"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",

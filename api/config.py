@@ -32,3 +32,9 @@ FCM_SERVICE_ACCOUNT_PATH = os.getenv("FCM_SERVICE_ACCOUNT_PATH", "api/serviceAcc
 
 # Jeda minimum (detik) antar notifikasi HIGH-risk per user supaya tidak spam.
 FCM_NOTIFICATION_COOLDOWN_SECONDS = int(os.getenv("FCM_NOTIFICATION_COOLDOWN_SECONDS", "300"))
+
+# Kunci statis untuk perangkat keras (firmware). Dikirim sebagai
+# "Authorization: Bearer <DEVICE_INGEST_KEY>" dari config.h CLOUD_API_KEY.
+# Berbeda dari JWT (yang expire) — kunci ini permanen sampai diubah manual.
+# Ganti ke nilai random sebelum production!
+DEVICE_INGEST_KEY = os.getenv("DEVICE_INGEST_KEY", "antaraga-hw-2026-01")

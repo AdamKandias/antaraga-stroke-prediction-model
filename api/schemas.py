@@ -204,3 +204,12 @@ class IngestResponse(BaseModel):
     ok: bool
     seq: int
     risk_level: str | None = None
+
+
+class PairDeviceRequest(BaseModel):
+    device_key: str
+
+
+class DeviceStatusResponse(BaseModel):
+    paired: bool
+    device_key: str | None = None

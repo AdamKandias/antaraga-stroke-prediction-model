@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="id" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ANTARAGA — Hardware Monitor</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+/* ── Palette: reference palette dark mode (palette.md) ── */
+:root {
+  --bg:       #0d0d0d;
+  --surface:  #1a1a19;
+  --surface2: #252523;
+  --border:   rgba(255,255,255,0.10);
+  --text:     #ffffff;
+  --text2:    #c3c2b7;
+  --muted:    #898781;
+  --grid:     #2c2c2a;
+  --axis:     #383835;
+
+  /* Categorical series — slots 3 · 8 · 7 (dark) */
+  --c1: #199e70;   /* aqua  — PPG / SEN0203 */
+  --c2: #e66767;   /* red   — MAX30102 RED  */
+  --c3: #9085e9;   /* violet— MAX30102 IR   */
+  --c4: #fab219;   /* yellow— peak markers  */
+
+  /* Status (reference palette status, mode-invariant) */
+  --good:     #0ca30c;
+  --warn:     #fab219;
+  --serious:  #ec835a;
+  --critical: #d03b3b;
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.5}
+
+/* ── Layout ── */
+.app{max-width:1280px;margin:0 auto;padding:16px 20px}
+
+/* ── Header ── */
+.hdr{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid var(--border);margin-bottom:14px}
+.hdr h1{font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.hdr h1 svg{opacity:.7}
+.dev-row{display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap}
+.dev-row select,.dev-row input{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:13px;min-width:140px;outline:none}
+.dev-row select:focus,.dev-row input:focus{border-color:rgba(57,135,229,.6)}
+.btn{background:#3987e5;color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;white-space:nowrap}
+.btn:hover{background:#2a78d6}
+
+/* ── Status bar ── */
+.sbar{display:flex;gap:18px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 14px;margin-bottom:14px;font-size:12px;color:var(--text2)}
+.si{display:flex;align-items:center;gap:5px}
+.si .lbl{color:var(--muted)}
+.si .val{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.dot.ok{background:var(--good)}
+.dot.err{background:var(--critical)}
+
+/* ── Tabs ── */
+.tabbar{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:16px}
+.tab{background:none;border:none;color:var(--muted);padding:8px 18px;cursor:pointer;font-size:13px;font-weight:500;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .12s}
+.tab:hover{color:var(--text2)}
+.tab.on{color:var(--text);border-bottom-color:#3987e5}
+
+.pane{display:none}.pane.on{display:block}
+
+/* ── Cards ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
+.card-ttl{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
+
+/* ── Charts ── */
+.cw{position:relative;height:200px}
+
+/* ── Legend ── */
+.leg{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px}
+.li{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2)}
+.ld{width:14px;height:2px;border-radius:2px}
+.lp{width:8px;height:8px;border-radius:50%}
+
+/* ── Stat tiles ── */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:14px}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.tile .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.tile .val{font-size:30px;font-weight:700;line-height:1}
+.tile .unit{font-size:12px;color:var(--muted);margin-top:3px}
+.tile .st{font-size:11px;font-weight:600;margin-top:6px}
+
+/* ── Feature table ── */
+.ftbl{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+.ftbl th,.ftbl td{padding:6px 10px;text-align:left;border-bottom:1px solid var(--grid)}
+.ftbl th{color:var(--muted);font-weight:500}
+.ftbl td{color:var(--text2)}
+.ftbl td:last-child{text-align:right;color:var(--text);font-weight:500}
+
+/* ── Risk gauge ── */
+.gbar{height:18px;background:var(--surface2);border-radius:9px;overflow:hidden;margin:8px 0}
+.gfill{height:100%;border-radius:9px;background:var(--good);transition:width .4s ease}
+.gfill.w{background:var(--warn)}.gfill.c{background:var(--critical)}
+.glbl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+.badge{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:10px;font-size:19px;font-weight:700;margin:14px 0}
+.badge.low{background:rgba(12,163,12,.15);color:var(--good)}
+.badge.med{background:rgba(250,178,25,.15);color:var(--warn)}
+.badge.hi{background:rgba(208,59,59,.15);color:var(--critical)}
+
+/* ── Empty / note ── */
+.empty{text-align:center;padding:40px 24px;color:var(--muted)}
+.empty h3{font-size:15px;margin-bottom:6px;color:var(--text2)}
+.empty p{font-size:13px}
+.note{padding:12px 14px;border-radius:8px;background:rgba(250,178,25,.12);border:1px solid rgba(250,178,25,.25);color:var(--warn);font-size:13px;margin-bottom:14px}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- Header -->
+<header class="hdr">
+  <h1>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+      <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+    </svg>
+    ANTARAGA Hardware Monitor
+  </h1>
+  <div class="dev-row">
+    <select id="devSel" onchange="onSelChange(this.value)">
+      <option value="">Pilih perangkat…</option>
+    </select>
+    <input id="devIn" type="text" placeholder="atau ketik DEVICE_ID" />
+    <button class="btn" onclick="connect()">Hubungkan</button>
+  </div>
+</header>
+
+<!-- Status bar -->
+<div class="sbar">
+  <span class="si"><span id="dot" class="dot"></span><span id="stTxt" class="val">Belum terhubung</span></span>
+  <span class="si"><span class="lbl">SEQ</span><span id="seq" class="val">—</span></span>
+  <span class="si"><span class="lbl">Baterai</span><span id="batt" class="val">—</span></span>
+  <span class="si"><span class="lbl">Diperbarui</span><span id="ts" class="val">—</span></span>
+  <span class="si"><span class="lbl">PPG</span><span id="nppg" class="val">—</span></span>
+  <span class="si"><span class="lbl">MAX30102</span><span id="nmax" class="val">—</span></span>
+</div>
+
+<!-- Tabs -->
+<div class="tabbar">
+  <button class="tab on"  onclick="tab('raw',this)">📡 Data Asli</button>
+  <button class="tab"     onclick="tab('pwa',this)">🌊 Setelah PWA</button>
+  <button class="tab"     onclick="tab('mlp',this)">🧠 Setelah MLP</button>
+  <button class="tab"     onclick="tab('xgb',this)">🎯 Setelah XGBoost</button>
+</div>
+
+<!-- ── TAB 1: Raw ── -->
+<div id="p-raw" class="pane on">
+  <div class="card">
+    <div class="card-ttl">PPG — SEN0203 (Green Photodiode, ADC 12-bit 0–4095)</div>
+    <div class="cw"><canvas id="cPpg"></canvas></div>
+    <div class="leg">
+      <div class="li"><div class="ld" style="background:var(--c1)"></div>PPG (SEN0203)</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-ttl">MAX30102 — RED &amp; IR (ADC 18-bit 0–262143)</div>
+    <div class="cw"><canvas id="cMax"></canvas></div>
+    <div class="leg">
+      <div class="li"><div class="ld" style="background:var(--c2)"></div>RED</div>
+      <div class="li"><div class="ld" style="background:var(--c3)"></div>IR</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-ttl">Metadata Batch</div>
+    <table class="ftbl">
+      <tr><th>Parameter</th><th>Nilai</th></tr>
+      <tbody id="rawMeta"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── TAB 2: PWA ── -->
+<div id="p-pwa" class="pane">
+  <div id="pwaNote"></div>
+  <div class="card">
+    <div class="card-ttl">PPG Terfilter — Bandpass 0.5–8 Hz (Deteksi Puncak: ●)</div>
+    <div class="cw"><canvas id="cPwaP"></canvas></div>
+    <div class="leg">
+      <div class="li"><div class="ld" style="background:var(--c1)"></div>Filtered PPG</div>
+      <div class="li"><div class="lp" style="background:var(--c4)"></div>Puncak sistol</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-ttl">RED Terfilter — Bandpass 0.5–8 Hz (Deteksi Puncak: ●)</div>
+    <div class="cw"><canvas id="cPwaR"></canvas></div>
+    <div class="leg">
+      <div class="li"><div class="ld" style="background:var(--c2)"></div>Filtered RED</div>
+      <div class="li"><div class="lp" style="background:var(--c4)"></div>Puncak sistol</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-ttl">Fitur Morfologi yang Diekstrak (Input ke MLP)</div>
+    <div id="featWrap"><div class="empty"><h3>Menunggu data…</h3></div></div>
+  </div>
+</div>
+
+<!-- ── TAB 3: MLP ── -->
+<div id="p-mlp" class="pane">
+  <div id="mlpNote"></div>
+  <div class="tiles">
+    <div class="tile">
+      <div class="lbl">Tekanan Sistolik</div>
+      <div id="mSys" class="val">—</div>
+      <div class="unit">mmHg</div>
+      <div id="mSysSt" class="st"></div>
+    </div>
+    <div class="tile">
+      <div class="lbl">Tekanan Diastolik</div>
+      <div id="mDia" class="val">—</div>
+      <div class="unit">mmHg</div>
+      <div id="mDiaSt" class="st"></div>
+    </div>
+    <div class="tile">
+      <div class="lbl">Gula Darah</div>
+      <div id="mGlu" class="val">—</div>
+      <div class="unit">mg/dL</div>
+      <div id="mGluSt" class="st"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── TAB 4: XGBoost ── -->
+<div id="p-xgb" class="pane">
+  <div class="card">
+    <div class="card-ttl">Prediksi Risiko Stroke — XGBoost</div>
+    <div id="xgbWrap"><div class="empty"><h3>Menunggu data…</h3></div></div>
+  </div>
+</div>
+
+</div><!-- .app -->
+<script>
+// ═══════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════
+let devId = '', timer = null, charts = {}, ready = false;
+
+// ═══════════════════════════════════════════════
+//  CHART FACTORY
+// ═══════════════════════════════════════════════
+const BASE_OPT = {
+  animation: false,
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      mode: 'index', intersect: false,
+      backgroundColor: '#252523',
+      borderColor: 'rgba(255,255,255,.12)', borderWidth: 1,
+      titleColor: '#898781', bodyColor: '#fff',
+      padding: 8,
+    }
+  },
+  scales: {
+    x: {
+      type: 'linear',
+      grid: { color: '#2c2c2a', lineWidth: .5 },
+      ticks: { color: '#898781', maxTicksLimit: 8 },
+      border: { color: '#383835' }
+    },
+    y: {
+      grid: { color: '#2c2c2a', lineWidth: .5 },
+      ticks: { color: '#898781', maxTicksLimit: 6 },
+      border: { color: '#383835' }
+    }
+  }
+};
+
+function deepOpt() { return JSON.parse(JSON.stringify(BASE_OPT)); }
+
+function makeXY(arr) {
+  return arr.map((v, i) => ({ x: i, y: v }));
+}
+
+function initCharts() {
+  if (ready) return;
+  ready = true;
+
+  // Raw PPG
+  charts.ppg = new Chart(document.getElementById('cPpg'), {
+    type: 'line',
+    data: { datasets: [{ label: 'PPG', data: [], borderColor: '#199e70', borderWidth: 1.5, pointRadius: 0, tension: 0 }] },
+    options: deepOpt()
+  });
+
+  // Raw MAX30102 (2 series — adjacent pair, slots 2&3 in order are safe)
+  charts.max = new Chart(document.getElementById('cMax'), {
+    type: 'line',
+    data: {
+      datasets: [
+        { label: 'RED', data: [], borderColor: '#e66767', borderWidth: 1.5, pointRadius: 0, tension: 0 },
+        { label: 'IR',  data: [], borderColor: '#9085e9', borderWidth: 1.5, pointRadius: 0, tension: 0 }
+      ]
+    },
+    options: deepOpt()
+  });
+
+  // PWA PPG — mixed line + scatter
+  charts.pwaP = new Chart(document.getElementById('cPwaP'), {
+    type: 'line',
+    data: {
+      datasets: [
+        { type: 'line',    label: 'Filtered PPG', data: [], borderColor: '#199e70', borderWidth: 1.5, pointRadius: 0, tension: 0 },
+        { type: 'scatter', label: 'Puncak',       data: [], backgroundColor: '#fab219', pointRadius: 5, pointHoverRadius: 7 }
+      ]
+    },
+    options: deepOpt()
+  });
+
+  // PWA RED — mixed line + scatter
+  charts.pwaR = new Chart(document.getElementById('cPwaR'), {
+    type: 'line',
+    data: {
+      datasets: [
+        { type: 'line',    label: 'Filtered RED', data: [], borderColor: '#e66767', borderWidth: 1.5, pointRadius: 0, tension: 0 },
+        { type: 'scatter', label: 'Puncak',       data: [], backgroundColor: '#fab219', pointRadius: 5, pointHoverRadius: 7 }
+      ]
+    },
+    options: deepOpt()
+  });
+}
+
+function upd(chart, ...series) {
+  series.forEach((s, i) => { chart.data.datasets[i].data = s; });
+  chart.update('none');
+}
+
+// ═══════════════════════════════════════════════
+//  DEVICE MANAGEMENT
+// ═══════════════════════════════════════════════
+async function loadDevices() {
+  try {
+    const r = await fetch('/v1/devices');
+    if (!r.ok) return;
+    const devs = await r.json();
+    const sel = document.getElementById('devSel');
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Pilih perangkat…</option>';
+    devs.forEach(d => {
+      const o = document.createElement('option');
+      o.value = d; o.textContent = d;
+      if (d === cur) o.selected = true;
+      sel.appendChild(o);
+    });
+  } catch {}
+}
+
+function onSelChange(v) { if (v) document.getElementById('devIn').value = v; }
+
+function connect() {
+  const v = (document.getElementById('devIn').value || document.getElementById('devSel').value).trim();
+  if (!v) { alert('Masukkan DEVICE_ID terlebih dahulu'); return; }
+  devId = v;
+  setStatus('...', `Menghubungkan ke "${devId}"…`);
+  initCharts();
+  if (timer) clearInterval(timer);
+  poll();
+  timer = setInterval(poll, 1000);
+}
+
+// ═══════════════════════════════════════════════
+//  POLLING
+// ═══════════════════════════════════════════════
+async function poll() {
+  if (!devId) return;
+  try {
+    const r = await fetch(`/v1/ingest/latest?device_id=${encodeURIComponent(devId)}`);
+    if (!r.ok) {
+      setStatus('err', r.status === 404 ? `Belum ada data dari "${devId}"` : `HTTP ${r.status}`);
+      return;
+    }
+    updateAll(await r.json());
+  } catch (e) {
+    setStatus('err', 'Server tidak terjangkau');
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  UPDATE UI
+// ═══════════════════════════════════════════════
+function updateAll(d) {
+  setStatus('ok', devId);
+  document.getElementById('seq').textContent  = d.seq;
+  document.getElementById('batt').textContent = `${d.batt_pct}% · ${d.batt_mv} mV`;
+  document.getElementById('ts').textContent   = new Date(d.received_at).toLocaleTimeString('id');
+  document.getElementById('nppg').textContent = `${d.raw.n_ppg} sp · ${d.raw.fs_ppg} Hz`;
+  document.getElementById('nmax').textContent = `${d.raw.n_max} sp · ${d.raw.fs_max} Hz`;
+
+  renderRaw(d.raw);
+  renderPwa(d.pwa);
+  renderMlp(d.mlp);
+  renderXgb(d.xgboost);
+}
+
+function setStatus(state, msg) {
+  document.getElementById('dot').className = 'dot' + (state === 'ok' ? ' ok' : state === 'err' ? ' err' : '');
+  document.getElementById('stTxt').textContent = msg;
+}
+
+// ── Raw ──
+function renderRaw(r) {
+  if (r.ppg.length) upd(charts.ppg, makeXY(r.ppg));
+  if (r.red.length) upd(charts.max, makeXY(r.red), makeXY(r.ir));
+
+  const ovf = r.ovf > 0 ? `<b style="color:var(--critical)">${r.ovf}</b>` : '0';
+  document.getElementById('rawMeta').innerHTML = `
+    <tr><td>PPG (SEN0203)</td><td>${r.n_ppg} sampel @ ${r.fs_ppg} Hz · resolusi 12-bit</td></tr>
+    <tr><td>MAX30102 RED</td><td>${r.n_max} sampel @ ${r.fs_max} Hz · resolusi 18-bit</td></tr>
+    <tr><td>MAX30102 IR</td><td>${r.n_max} sampel @ ${r.fs_max} Hz · resolusi 18-bit</td></tr>
+    <tr><td>t_unix (ms)</td><td>${r.t_unix_ms}</td></tr>
+    <tr><td>FIFO overflow</td><td>${ovf} (0 = tidak ada data hilang)</td></tr>
+  `;
+}
+
+// ── PWA ──
+function renderPwa(p) {
+  const noteEl = document.getElementById('pwaNote');
+  if (p.note) {
+    noteEl.innerHTML = `<div class="note">⚠️ ${p.note}</div>`;
+  } else {
+    noteEl.innerHTML = '';
+  }
+
+  if (p.filtered_ppg && p.filtered_ppg.length) {
+    const line = makeXY(p.filtered_ppg);
+    const peaks = (p.peaks_ppg || []).map(i => ({ x: i, y: p.filtered_ppg[i] }));
+    upd(charts.pwaP, line, peaks);
+  }
+  if (p.filtered_red && p.filtered_red.length) {
+    const line = makeXY(p.filtered_red);
+    const peaks = (p.peaks_red || []).map(i => ({ x: i, y: p.filtered_red[i] }));
+    upd(charts.pwaR, line, peaks);
+  }
+
+  const fw = document.getElementById('featWrap');
+  const feats = p.features || {};
+  const bpm   = p.bpm;
+
+  if (!Object.keys(feats).length) {
+    fw.innerHTML = `<div class="empty"><h3>Sinyal terlalu pendek</h3><p>Perlu ≥ 2 detik data bersih untuk ekstraksi fitur.<br>Pastikan sensor menempel dengan baik.</p></div>`;
+    return;
+  }
+
+  // Group features by channel prefix
+  const grouped = {};
+  for (const [k, v] of Object.entries(feats)) {
+    const prefix = k.split('_')[0];
+    if (!grouped[prefix]) grouped[prefix] = [];
+    grouped[prefix].push([k, v]);
+  }
+
+  const bpmTile = bpm != null
+    ? `<div class="tiles" style="margin-bottom:14px">
+        <div class="tile" style="border-color:rgba(25,158,112,.3)">
+          <div class="lbl">BPM (dari PPG)</div>
+          <div class="val" style="font-size:40px;color:var(--c1)">${bpm.toFixed(1)}</div>
+          <div class="unit">denyut / menit</div>
+        </div>
+       </div>` : '';
+
+  const rows = Object.entries(feats)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `<tr><td>${k.replace(/_/g,' ')}</td><td>${typeof v === 'number' ? v.toFixed(4) : v}</td></tr>`)
+    .join('');
+
+  fw.innerHTML = `${bpmTile}
+    <table class="ftbl">
+      <thead><tr><th>Fitur</th><th>Nilai</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// ── MLP ──
+function renderMlp(m) {
+  const noteEl = document.getElementById('mlpNote');
+  if (!m.available) {
+    noteEl.innerHTML = `<div class="note">⏳ ${m.message}</div>`;
+    ['mSys','mDia','mGlu'].forEach(id => document.getElementById(id).textContent = '—');
+    ['mSysSt','mDiaSt','mGluSt'].forEach(id => document.getElementById(id).textContent = '');
+    return;
+  }
+  noteEl.innerHTML = '';
+  tile('mSys','mSysSt', m.systolic_bp_mmhg,    sysStatus);
+  tile('mDia','mDiaSt', m.diastolic_bp_mmhg,   diaStatus);
+  tile('mGlu','mGluSt', m.blood_glucose_mg_dl, gluStatus);
+}
+
+function tile(vid, sid, v, fn) {
+  document.getElementById(vid).textContent = v != null ? Math.round(v) : '—';
+  if (v != null) {
+    const s = fn(v);
+    const el = document.getElementById(sid);
+    el.textContent = s.label; el.style.color = s.color;
+  }
+}
+const sysStatus = v => v<120?{label:'Normal',color:'var(--good)'}:v<130?{label:'Meninggi',color:'var(--warn)'}:v<140?{label:'Hipertensi Tkt 1',color:'var(--serious)'}:{label:'Hipertensi Tkt 2',color:'var(--critical)'};
+const diaStatus = v => v<80?{label:'Normal',color:'var(--good)'}:v<90?{label:'Meninggi',color:'var(--warn)'}:{label:'Hipertensi',color:'var(--critical)'};
+const gluStatus = v => v<100?{label:'Normal',color:'var(--good)'}:v<126?{label:'Prediabetes',color:'var(--warn)'}:{label:'Diabetes',color:'var(--critical)'};
+
+// ── XGBoost ──
+function renderXgb(x) {
+  const el = document.getElementById('xgbWrap');
+  if (!x.available) {
+    el.innerHTML = `<div class="empty"><h3>${x.message||'Belum ada prediksi'}</h3><p>Data akan muncul setelah model memprediksi setidaknya satu batch.</p></div>`;
+    return;
+  }
+
+  const pct   = (x.probability * 100).toFixed(2);
+  const thPct = (x.threshold   * 100).toFixed(1);
+  const rl    = (x.risk_level||'').toLowerCase();
+  const cls   = rl==='high'?'hi':rl==='medium'?'med':'low';
+  const fillCls = rl==='high'?'c':rl==='medium'?'w':'';
+  const lbl   = rl==='high'?'🔴 RISIKO TINGGI':rl==='medium'?'🟡 RISIKO SEDANG':'🟢 RISIKO RENDAH';
+  const ts    = x.predicted_at ? new Date(x.predicted_at).toLocaleString('id') : '—';
+
+  // Clamp fill width
+  const fillW = Math.min(100, Math.max(0, parseFloat(pct)));
+
+  el.innerHTML = `
+    <div style="margin-bottom:6px;display:flex;justify-content:space-between;font-size:12px;color:var(--muted)">
+      <span>Probabilitas</span>
+      <span style="color:var(--text);font-weight:700;font-size:22px;font-variant-numeric:tabular-nums">${pct}%</span>
+    </div>
+    <div class="gbar">
+      <div class="gfill ${fillCls}" style="width:${fillW}%"></div>
+    </div>
+    <div class="glbl">
+      <span>0%</span>
+      <span style="color:var(--warn)">▲ Threshold ${thPct}%</span>
+      <span>100%</span>
+    </div>
+    <div class="badge ${cls}">${lbl}</div>
+    <table class="ftbl" style="margin-top:4px">
+      <tr><td>Model</td><td>${x.model_name||'XGBoost'}</td></tr>
+      <tr><td>Threshold</td><td>${thPct}%</td></tr>
+      <tr><td>Diprediksi</td><td>${ts}</td></tr>
+    </table>`;
+}
+
+// ═══════════════════════════════════════════════
+//  TAB SWITCHING
+// ═══════════════════════════════════════════════
+function tab(name, btn) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('on'));
+  document.querySelectorAll('.pane').forEach(p => p.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('p-' + name).classList.add('on');
+  Object.values(charts).forEach(c => { try { c.resize(); } catch {} });
+}
+
+// ═══════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════
+loadDevices();
+setInterval(loadDevices, 5000);
+
+// Auto-connect if there's only one device after first load
+setTimeout(async () => {
+  await loadDevices();
+  const sel = document.getElementById('devSel');
+  if (sel.options.length === 2 && !devId) { // only 1 device
+    sel.selectedIndex = 1;
+    document.getElementById('devIn').value = sel.value;
+    connect();
+  }
+}, 1500);
+</script>
+</body>
+</html>
