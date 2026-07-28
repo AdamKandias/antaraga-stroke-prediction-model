@@ -1,0 +1,23 @@
+services:
+  antaraga-api:
+    build: .
+    image: antaraga-api
+    container_name: antaraga-api-1
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8089:8000"   # expose ke localhost saja, nginx yang forward ke publik
+    volumes:
+      - antaraga-db:/app/data                  # SQLite persists di sini
+      - antaraga-models:/app/model/artifacts   # model joblib persists di sini
+    env_file:
+      - .env.production
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  antaraga-db:
+  antaraga-models:

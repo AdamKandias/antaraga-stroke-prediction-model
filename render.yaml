@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: antaraga-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DEV_MODE
+        value: "false"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DEVICE_INGEST_KEY
+        value: antaraga-hw-2026-01
+      - key: DATABASE_URL
+        fromDatabase:
+          name: antaraga-db
+          property: connectionString
+
+databases:
+  - name: antaraga-db
+    databaseName: antaraga
+    user: antaraga
+    plan: free

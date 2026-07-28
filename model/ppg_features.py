@@ -9,15 +9,23 @@ any real calibration data from the ANTARAGA prototype.
 
 Expected input: a few seconds (recommend >= 8s) of one or more PPG channels
 (green from SON1303, red/infrared from MAX30102) sampled at a constant rate.
+
+BPM estimation uses Welch spectral method (same approach as the firmware
+reference scripts) rather than peak-counting — it is more robust on short
+or noisy windows and has no hard BPM ceiling from the min-distance constraint.
 """
 
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.signal import butter, filtfilt, find_peaks
+from scipy.signal import butter, filtfilt, find_peaks, welch
 
 MIN_HEART_RATE_BPM = 40
-MAX_HEART_RATE_BPM = 180
+MAX_HEART_RATE_BPM = 200
+
+# HR frequency band: 40–200 BPM = 0.67–3.33 Hz
+_HR_BAND_LO = 0.67
+_HR_BAND_HI = 3.33
 
 
 @dataclass
@@ -29,18 +37,44 @@ class PulseEvent:
     pulse_width_50_s: float
 
 
-def bandpass_filter(signal: np.ndarray, fs: float, low_hz: float = 0.5, high_hz: float = 8.0, order: int = 3) -> np.ndarray:
-    """Keeps the cardiac pulse band, removes baseline drift and high-freq noise."""
+def bandpass_filter(signal: np.ndarray, fs: float, low_hz: float = 0.5, high_hz: float = 12.0, order: int = 4) -> np.ndarray:
+    """Keeps the cardiac pulse band, removes baseline drift and high-freq noise.
+    Cutoff 12 Hz (matches firmware reference scripts) preserves dicrotic notch."""
     nyquist = fs / 2
+    high_hz = min(high_hz, nyquist * 0.95)  # guard against fs too low
     b, a = butter(order, [low_hz / nyquist, high_hz / nyquist], btype="band")
     return filtfilt(b, a, signal)
 
 
-def detect_pulses(filtered: np.ndarray, fs: float) -> list[PulseEvent]:
+def bpm_from_spectrum(filtered: np.ndarray, fs: float) -> float | None:
+    """Welch-based heart rate — mirrors firmware reference scripts (plot_ppg_*.py).
+
+    Uses power spectral density instead of peak-counting so it is robust to
+    noise and short windows.  Returns None when the signal is too short or the
+    dominant frequency outside the physiological HR band."""
+    min_samples = int(fs * 4)  # need >= 4 s for reliable spectral resolution
+    if len(filtered) < min_samples:
+        return None
+    nperseg = min(len(filtered), int(fs * 8))
+    freqs, psd = welch(filtered, fs=fs, nperseg=nperseg)
+    band = (freqs >= _HR_BAND_LO) & (freqs <= _HR_BAND_HI)
+    if not band.any():
+        return None
+    dominant_hz = freqs[band][np.argmax(psd[band])]
+    return float(dominant_hz * 60.0)
+
+
+def detect_pulses(filtered: np.ndarray, fs: float, invert: bool = False) -> list[PulseEvent]:
     """Finds systolic peaks, then the pulse onset (the preceding local minimum)
-    for each one, and computes basic per-pulse morphology features."""
+    for each one, and computes basic per-pulse morphology features.
+
+    invert=True flips the signal before peak detection — required for reflective
+    PPG channels (RED / IR from MAX30102) where systole causes a dip, not a peak.
+    Prominence threshold (0.4 × std) matches the firmware reference scripts."""
+    sig = -filtered if invert else filtered
     min_distance = int(fs * 60 / MAX_HEART_RATE_BPM)
-    peaks, _ = find_peaks(filtered, distance=max(min_distance, 1))
+    prominence = float(np.std(sig) * 0.4)
+    peaks, _ = find_peaks(sig, distance=max(min_distance, 1), prominence=prominence)
 
     events: list[PulseEvent] = []
     for i, peak_idx in enumerate(peaks):
@@ -88,18 +122,23 @@ def _half_amplitude_width(filtered: np.ndarray, onset_idx: int, peak_idx: int, h
     return (falling - rising) / fs
 
 
-def _channel_features(raw: np.ndarray, fs: float, prefix: str) -> dict:
+def _channel_features(raw: np.ndarray, fs: float, prefix: str, invert: bool = False) -> dict:
     raw = np.asarray(raw, dtype=float)
     filtered = bandpass_filter(raw, fs)
-    pulses = detect_pulses(filtered, fs)
+    pulses = detect_pulses(filtered, fs, invert=invert)
+
+    # Primary BPM: Welch spectrum (robust, mirrors firmware approach).
+    # Fall back to inter-peak interval only when spectral method fails.
+    heart_rate_bpm = bpm_from_spectrum(filtered, fs)
+    if heart_rate_bpm is None and len(pulses) >= 2:
+        intervals_s = np.diff([p.peak_idx for p in pulses]) / fs
+        heart_rate_bpm = 60.0 / float(np.mean(intervals_s))
 
     if len(pulses) < 2:
-        # Not enough clean pulses in this window -- caller should treat the
-        # whole reading as unreliable rather than trust noisy aggregates.
-        return {f"{prefix}_n_pulses": len(pulses)}
-
-    intervals_s = np.diff([p.peak_idx for p in pulses]) / fs
-    heart_rate_bpm = 60.0 / np.mean(intervals_s)
+        result = {f"{prefix}_n_pulses": len(pulses)}
+        if heart_rate_bpm is not None:
+            result[f"{prefix}_heart_rate_bpm"] = float(heart_rate_bpm)
+        return result
 
     amplitudes = np.array([p.amplitude for p in pulses])
     crest_times = np.array([p.crest_time_s for p in pulses])
@@ -124,13 +163,22 @@ def extract_pwa_features(
 ) -> dict:
     """Combines per-channel morphology features with cross-channel ratios
     (same idea as SpO2's R-ratio) that take advantage of ANTARAGA's
-    multi-wavelength fusion (SON1303 green + MAX30102 red/infrared)."""
+    multi-wavelength fusion (SON1303 green + MAX30102 red/infrared).
+
+    RED and IR from MAX30102 are reflective sensors where systole causes a
+    dip (not a peak), so invert=True is passed for those channels."""
     features: dict = {}
 
-    channels = {"green": green, "red": red, "infrared": infrared}
-    for name, signal in channels.items():
+    # SON1303 green: transmissive — peaks are real peaks, no inversion needed.
+    # MAX30102 red/IR: reflective — systole = dip → must invert before peak detection.
+    channel_config = [
+        ("green", green, False),
+        ("red", red, True),
+        ("infrared", infrared, True),
+    ]
+    for name, signal, invert in channel_config:
         if signal is not None and len(signal) > 0:
-            features.update(_channel_features(np.array(signal), fs, name))
+            features.update(_channel_features(np.array(signal), fs, name, invert=invert))
 
     if "green_amplitude_mean" in features and "red_amplitude_mean" in features:
         features["green_red_amplitude_ratio"] = (

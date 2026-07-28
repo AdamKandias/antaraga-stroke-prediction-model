@@ -1,0 +1,44 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # Hanya trigger kalau file yang relevan berubah
+      - 'api/**'
+      - 'model/**'
+      - 'requirements.txt'
+      - 'Dockerfile'
+      - 'docker-compose.prod.yml'
+      - '.github/workflows/deploy.yml'
+    # Firmware, notebooks, journals TIDAK trigger deploy
+
+jobs:
+  deploy:
+    name: SSH Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy ke VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            cd ${{ secrets.VPS_DEPLOY_PATH }}
+
+            echo "--- Pull kode terbaru ---"
+            git pull origin main
+
+            echo "--- Build & restart container ---"
+            docker compose -f docker-compose.prod.yml build --no-cache
+            docker compose -f docker-compose.prod.yml up -d
+
+            echo "--- Hapus image lama ---"
+            docker image prune -f
+
+            echo "--- Status ---"
+            docker compose -f docker-compose.prod.yml ps

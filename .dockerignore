@@ -1,0 +1,53 @@
+# Firmware & hardware — tidak dibutuhkan di server
+Firmware/
+
+# Data training, notebooks, jurnal
+data/
+notebooks/
+journals/
+*.ipynb
+*.csv
+*.xlsx
+
+# Model artifacts (di-mount via Docker volume, bukan di-bake ke image)
+model/artifacts/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Git & editor
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Venv lokal
+.venv/
+venv/
+env/
+
+# Database lokal (VPS punya sendiri via volume)
+*.db
+*.sqlite
+
+# File dev-only
+scripts/dev.sh
+scripts/sensor_monitor.py
+scripts/record_calibration.py
+render.yaml
+logbook.md
+alur.md
+alur_model.md
+logs/

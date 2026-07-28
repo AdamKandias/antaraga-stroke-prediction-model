@@ -727,7 +727,7 @@ def ingest_latest_dashboard(device_id: str, db: Session = Depends(get_db)) -> di
 
 
 def _compute_pwa(ppg: list, red: list, ir: list, fs_ppg: int, fs_max: int) -> dict:
-    from model.ppg_features import bandpass_filter, detect_pulses, extract_pwa_features
+    from model.ppg_features import bandpass_filter, bpm_from_spectrum, extract_pwa_features
 
     result: dict = {
         "filtered_ppg": [], "peaks_ppg": [],
@@ -737,20 +737,34 @@ def _compute_pwa(ppg: list, red: list, ir: list, fs_ppg: int, fs_max: int) -> di
     }
     min_samples = int(fs_ppg * 2)  # 2 detik minimum
 
-    def _process(signal: list, fs: int, key: str) -> None:
+    def _process(signal: list, fs: int, key: str, invert: bool = False) -> None:
         if len(signal) < min_samples:
             return
         arr = np.array(signal, dtype=float)
         filt = bandpass_filter(arr, float(fs))
-        result[f"filtered_{key}"] = [float(v) for v in filt]   # np.float64 → float
-        pulses = detect_pulses(filt, float(fs))
-        result[f"peaks_{key}"] = [int(p.peak_idx) for p in pulses]  # np.int64 → int
-        if len(pulses) >= 2 and key == "ppg":
-            intervals = np.diff([p.peak_idx for p in pulses]) / float(fs)
-            result["bpm"] = round(float(60.0 / float(np.mean(intervals))), 1)
+        result[f"filtered_{key}"] = [float(v) for v in filt]
+        # For peak markers on the dashboard: detect on potentially inverted signal
+        sig_for_peaks = -filt if invert else filt
+        import numpy as _np
+        from scipy.signal import find_peaks as _fp
+        _min_dist = max(int(float(fs) * 60 / 200), 1)
+        _prom = float(_np.std(sig_for_peaks) * 0.4)
+        _pk, _ = _fp(sig_for_peaks, distance=_min_dist, prominence=_prom)
+        result[f"peaks_{key}"] = [int(p) for p in _pk]
+        # BPM via Welch spectrum (primary method — matches firmware scripts)
+        if key == "ppg" and result["bpm"] is None:
+            bpm = bpm_from_spectrum(filt, float(fs))
+            if bpm is not None:
+                result["bpm"] = round(bpm, 1)
+        # Use RED/IR Welch BPM as fallback if green PPG unavailable
+        if key in ("red", "ir") and result["bpm"] is None:
+            bpm = bpm_from_spectrum(filt, float(fs))
+            if bpm is not None:
+                result["bpm"] = round(bpm, 1)
 
-    if ppg: _process(ppg, fs_ppg, "ppg")
-    if red: _process(red, fs_max, "red")
+    if ppg: _process(ppg, fs_ppg, "ppg", invert=False)
+    if red: _process(red, fs_max, "red", invert=True)
+    if ir:  _process(ir,  fs_max, "ir",  invert=True)
 
     if len(ppg) < min_samples and len(red) < min_samples:
         result["note"] = (
