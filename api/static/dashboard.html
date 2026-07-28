@@ -131,6 +131,29 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 .btn-sec:hover{border-color:rgba(255,255,255,.25);color:var(--text)}
 .btn-ok{background:#199e70}
 .btn-ok:hover{background:#128059}
+.btn-sm{padding:4px 10px;font-size:12px;border-radius:5px}
+.btn-del{background:transparent;color:var(--muted);border:1px solid transparent;padding:4px 8px;border-radius:5px;cursor:pointer;font-size:13px}
+.btn-del:hover{border-color:rgba(208,59,59,.4);color:var(--critical);background:rgba(208,59,59,.08)}
+
+/* ── Firmware library cards ── */
+.fw-item{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--border)}
+.fw-item:last-child{border-bottom:none}
+.fw-icon{font-size:22px;flex-shrink:0;margin-top:2px}
+.fw-body{flex:1;min-width:0}
+.fw-name{font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px;word-break:break-word}
+.fw-desc{font-size:12px;color:var(--text2);margin-bottom:4px}
+.fw-meta{font-size:11px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.fw-badge{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:600}
+.fw-badge.pending{background:rgba(250,178,25,.15);color:var(--warn)}
+.fw-badge.installed{background:rgba(25,158,112,.15);color:var(--c1)}
+.fw-btns{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;align-items:center}
+
+/* ── Upload form row ── */
+.up-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+@media(max-width:600px){.up-grid{grid-template-columns:1fr}}
+.up-label{font-size:11px;color:var(--muted);display:block;margin-bottom:4px}
+.up-input{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 9px;border-radius:5px;font-size:13px;outline:none;width:100%}
+.up-input:focus{border-color:rgba(57,135,229,.5)}
 </style>
 </head>
 <body>
@@ -259,25 +282,97 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 
 <!-- ── TAB 5: Firmware Manager ── -->
 <div id="p-fw" class="pane">
-  <div id="fwUnavail" class="note" style="display:none">
-    ⚠️ Folder <code>Firmware/</code> tidak ditemukan di mesin ini atau PlatformIO belum terinstall.
-    Fitur ini hanya aktif saat server berjalan lokal dengan folder firmware tersedia.
-  </div>
-  <div id="fwAvail">
-    <div class="card">
-      <div class="card-ttl">Program Tersedia</div>
-      <div id="fwProgramList"><div class="empty"><h3>Memuat…</h3></div></div>
+
+  <!-- Firmware Library -->
+  <div class="card">
+    <div class="card-ttl" style="display:flex;justify-content:space-between;align-items:center">
+      <span>Firmware Library</span>
+      <button class="btn-sec btn-sm" onclick="fwLoadLibrary()">↺ Refresh</button>
     </div>
-    <div class="card">
-      <div class="card-ttl">Konfigurasi Firmware — <code style="font-size:11px">Firmware/include/config.h</code></div>
+    <div id="fwLibrary"><div class="empty"><h3>Memuat…</h3></div></div>
+  </div>
+
+  <!-- Upload firmware baru -->
+  <div class="card">
+    <div class="card-ttl">Upload Firmware Baru</div>
+    <div class="up-grid">
+      <div>
+        <label class="up-label">Nama firmware</label>
+        <input id="fwUpName" type="text" class="up-input" placeholder="mis. Main Firmware v1.3">
+      </div>
+      <div>
+        <label class="up-label">File .bin (hasil <code>pio run</code>)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label for="fwUpFile" class="btn btn-sm" style="cursor:pointer">📂 Pilih</label>
+          <input id="fwUpFile" type="file" accept=".bin" style="display:none" onchange="fwFileChosen(this)">
+          <span id="fwUpFileName" style="font-size:12px;color:var(--muted)">belum dipilih</span>
+        </div>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <label class="up-label">Deskripsi (opsional — tulis config utama, apa yang berubah)</label>
+      <input id="fwUpDesc" type="text" class="up-input" placeholder="mis. OTA aktif, CLOUD_HOST=api.antaraga.web.id, fix sensor settle">
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <button class="btn" onclick="fwUpload()">⬆️ Upload</button>
+      <span id="fwUpMsg" style="display:none;font-size:12px;color:var(--c1)"></span>
+    </div>
+  </div>
+
+  <!-- Deploy panel (muncul saat klik Deploy) -->
+  <div id="fwDeployPanel" class="card" style="display:none;border-color:rgba(25,158,112,.3)">
+    <div class="card-ttl" style="color:var(--c1)">Deploy ke Perangkat</div>
+    <p style="font-size:13px;margin-bottom:12px">
+      Firmware <strong id="fwDeployName"></strong> akan dikirim ke perangkat saat cek OTA berikutnya (~60 detik).
+    </p>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <select id="fwDeployDevice" class="up-input" style="max-width:220px">
+        <option value="">Pilih perangkat…</option>
+      </select>
+      <button class="btn btn-ok" onclick="fwDoDeploy()">⚡ Deploy ke perangkat ini</button>
+      <button class="btn-sec" onclick="fwHideDeploy()">✕ Batal</button>
+    </div>
+    <div id="fwDeployMsg" style="display:none;margin-top:10px;font-size:12px;color:var(--c1)"></div>
+  </div>
+
+  <!-- Edit panel (muncul saat klik Edit) -->
+  <div id="fwEditPanel" class="card" style="display:none;border-color:rgba(57,135,229,.3)">
+    <div class="card-ttl" style="color:#3987e5">Edit Firmware</div>
+    <div class="up-grid" style="margin-bottom:10px">
+      <div>
+        <label class="up-label">Nama</label>
+        <input id="fwEditName" type="text" class="up-input">
+      </div>
+      <div>
+        <label class="up-label">Deskripsi</label>
+        <input id="fwEditDesc" type="text" class="up-input">
+      </div>
+    </div>
+    <input type="hidden" id="fwEditId">
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="fwDoEdit()">💾 Simpan</button>
+      <button class="btn-sec" onclick="fwHideEdit()">✕ Batal</button>
+      <span id="fwEditMsg" style="display:none;font-size:12px;color:var(--c1);align-self:center"></span>
+    </div>
+  </div>
+
+  <!-- Build & Flash lokal (hanya tampil kalau folder Firmware/ ada) -->
+  <details id="fwLocalSection" style="display:none;margin-top:4px">
+    <summary style="cursor:pointer;padding:10px 0;font-size:12px;color:var(--muted);list-style:none;display:flex;align-items:center;gap:6px">
+      <span>▶</span> <span>Build &amp; Flash Lokal (butuh kabel USB + folder <code>Firmware/</code>)</span>
+    </summary>
+
+    <div class="card" style="margin-top:8px">
+      <div class="card-ttl">Konfigurasi Firmware — <code style="font-size:11px">include/config.h</code></div>
       <div id="fwConfigForm"><div class="empty"><h3>Memuat konfigurasi…</h3></div></div>
       <div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <button class="btn" onclick="fwSaveConfig()">💾 Simpan config.h</button>
         <span id="fwSaveMsg" style="display:none;font-size:12px;color:var(--c1)">✓ Tersimpan</span>
       </div>
     </div>
-    <div class="card">
-      <div class="card-ttl">Build &amp; Flash via PlatformIO (lokal, butuh kabel USB)</div>
+
+    <div class="card" style="margin-top:8px">
+      <div class="card-ttl">Build &amp; Flash via PlatformIO</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
         <span style="font-size:12px;color:var(--muted)">Port serial:</span>
         <select id="fwPort" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;font-size:12px">
@@ -289,30 +384,8 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
       </div>
       <div id="fwTerm" class="term">Klik Build atau Flash untuk memulai…</div>
     </div>
+  </details>
 
-    <div class="card">
-      <div class="card-ttl">OTA — Update Firmware Tanpa Kabel (via WiFi)</div>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
-        Build lokal dulu: <code style="font-size:11px">pio run</code> →
-        upload file <code style="font-size:11px">.pio/build/seeed_xiao_esp32s3/firmware.bin</code>.
-        Perangkat akan mendeteksi dan menginstall otomatis dalam ≤60 detik, lalu restart sendiri.
-      </p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-        <span style="font-size:12px;color:var(--muted)">Device ID:</span>
-        <input id="otaDevId" type="text" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:12px;width:160px" placeholder="antaraga-001">
-        <label for="otaBin" class="btn" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
-          📂 Pilih .bin
-        </label>
-        <input id="otaBin" type="file" accept=".bin" style="display:none" onchange="otaFileChosen(this)">
-        <button class="btn btn-ok" onclick="otaUpload()">📡 Upload &amp; Deploy</button>
-        <button class="btn-sec" onclick="otaRefreshStatus()">↺ Status</button>
-      </div>
-      <div id="otaFileInfo" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
-      <div id="otaStatus" style="font-size:13px;padding:10px 12px;border-radius:7px;background:var(--surface2);color:var(--text2)">
-        Belum ada firmware yang di-upload untuk device ini.
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- ── TAB 6: PWA Settings ── -->
@@ -657,38 +730,223 @@ function tab(name, btn) {
 // ═══════════════════════════════════════════════
 //  FIRMWARE MANAGER
 // ═══════════════════════════════════════════════
-let fwInited = false, fwEsrc = null;
+let fwInited = false, fwEsrc = null, fwDeployTarget = null, fwLibCache = [];
+
+function escH(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
 async function fwInit() {
   if (fwInited) return;
   fwInited = true;
-
-  let available = false;
+  await fwLoadLibrary();
+  // Populate deploy device list on first load
+  try {
+    const r = await fetch('/v1/devices');
+    const devs = await r.json();
+    const sel = document.getElementById('fwDeployDevice');
+    devs.forEach(d => {
+      const o = document.createElement('option');
+      o.value = d; o.textContent = d;
+      sel.appendChild(o);
+    });
+  } catch {}
+  // Check if local firmware folder available → show local build section
   try {
     const r = await fetch('/firmware/available');
     const info = await r.json();
-    available = info.path_exists && info.config_exists;
+    if (info.path_exists && info.config_exists) {
+      document.getElementById('fwLocalSection').style.display = '';
+      fwLoadLocal();
+    }
   } catch {}
+}
 
-  if (!available) {
-    document.getElementById('fwUnavail').style.display = '';
-    document.getElementById('fwAvail').style.display = 'none';
+async function fwLoadLibrary() {
+  const el = document.getElementById('fwLibrary');
+  try {
+    const r = await fetch('/v1/ota/bins');
+    fwLibCache = await r.json();
+    renderFwLibrary(fwLibCache);
+  } catch {
+    el.innerHTML = '<div class="note">Gagal memuat daftar firmware — cek koneksi server.</div>';
+  }
+}
+
+function renderFwLibrary(bins) {
+  const el = document.getElementById('fwLibrary');
+  if (!bins.length) {
+    el.innerHTML = `<div class="empty">
+      <h3>Belum ada firmware yang diupload</h3>
+      <p>Build lokal dengan <code>pio run</code>, lalu upload file .bin di bawah.</p>
+    </div>`;
     return;
   }
+  el.innerHTML = bins.map(fw => {
+    const date = new Date(fw.uploaded_at).toLocaleString('id', {dateStyle:'short',timeStyle:'short'});
+    const sizeKB = (fw.size / 1024).toFixed(1);
+    const pendingBadges = fw.devices_pending.map(d =>
+      `<span class="fw-badge pending">⏳ ${escH(d)}</span>`).join('');
+    const installedBadges = fw.devices_installed.map(d =>
+      `<span class="fw-badge installed">✅ ${escH(d)}</span>`).join('');
+    const missingWarn = !fw.bin_exists
+      ? '<span style="color:var(--critical);font-size:10px">⚠ file .bin hilang</span>' : '';
+    return `<div class="fw-item">
+      <div class="fw-icon">💾</div>
+      <div class="fw-body">
+        <div class="fw-name">${escH(fw.name)}</div>
+        ${fw.description ? `<div class="fw-desc">${escH(fw.description)}</div>` : ''}
+        <div class="fw-meta">
+          <span>${sizeKB} KB</span>
+          <span>${date}</span>
+          <span style="font-family:monospace;font-size:10px">${fw.sha256}</span>
+          ${pendingBadges}${installedBadges}${missingWarn}
+        </div>
+      </div>
+      <div class="fw-btns">
+        <button class="btn btn-ok btn-sm" onclick="fwShowDeploy('${fw.id}','${escH(fw.name)}')"
+          ${!fw.bin_exists?'disabled':''}>⚡ Deploy</button>
+        <button class="btn-sec btn-sm" onclick="fwShowEdit('${fw.id}','${escH(fw.name)}','${escH(fw.description||'')}')">✎</button>
+        <button class="btn-del" onclick="fwDelete('${fw.id}','${escH(fw.name)}')">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+}
 
-  // Programs
+// ── Upload ──────────────────────────────────────────────────────────
+function fwFileChosen(inp) {
+  const span = document.getElementById('fwUpFileName');
+  if (!inp.files.length) { span.textContent = 'belum dipilih'; return; }
+  const f = inp.files[0];
+  span.textContent = `${f.name}  (${(f.size/1024).toFixed(0)} KB)`;
+  // Auto-fill nama dari filename jika kosong
+  const nameInput = document.getElementById('fwUpName');
+  if (!nameInput.value) nameInput.value = f.name.replace('.bin','');
+}
+
+async function fwUpload() {
+  const name = document.getElementById('fwUpName').value.trim();
+  const desc = document.getElementById('fwUpDesc').value.trim();
+  const fileInp = document.getElementById('fwUpFile');
+  const msgEl = document.getElementById('fwUpMsg');
+  if (!fileInp.files.length) { alert('Pilih file .bin terlebih dahulu'); return; }
+
+  const fd = new FormData();
+  fd.append('file', fileInp.files[0]);
+
+  msgEl.style.display = 'inline';
+  msgEl.style.color = 'var(--muted)';
+  msgEl.textContent = 'Mengupload…';
+
   try {
-    const r = await fetch('/firmware/programs');
-    renderFwPrograms((await r.json()).programs);
-  } catch {}
+    const r = await fetch(
+      `/v1/ota/bins?name=${encodeURIComponent(name)}&description=${encodeURIComponent(desc)}`,
+      { method: 'POST', body: fd }
+    );
+    const d = await r.json();
+    if (r.ok) {
+      msgEl.style.color = 'var(--c1)';
+      msgEl.textContent = `✓ Upload berhasil — ${(d.size/1024).toFixed(0)} KB`;
+      document.getElementById('fwUpName').value = '';
+      document.getElementById('fwUpDesc').value = '';
+      document.getElementById('fwUpFileName').textContent = 'belum dipilih';
+      fileInp.value = '';
+      setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
+      fwLoadLibrary();
+    } else {
+      msgEl.style.color = 'var(--critical)';
+      msgEl.textContent = `Error: ${d.detail || r.status}`;
+    }
+  } catch (e) {
+    msgEl.style.color = 'var(--critical)';
+    msgEl.textContent = `Error: ${e}`;
+  }
+}
 
+// ── Deploy ──────────────────────────────────────────────────────────
+function fwShowDeploy(id, name) {
+  fwDeployTarget = id;
+  document.getElementById('fwDeployName').textContent = name;
+  document.getElementById('fwDeployMsg').style.display = 'none';
+  document.getElementById('fwDeployPanel').style.display = '';
+  document.getElementById('fwDeployPanel').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function fwHideDeploy() {
+  document.getElementById('fwDeployPanel').style.display = 'none';
+  fwDeployTarget = null;
+}
+
+async function fwDoDeploy() {
+  const deviceId = document.getElementById('fwDeployDevice').value;
+  if (!deviceId) { alert('Pilih perangkat tujuan dulu'); return; }
+  const msgEl = document.getElementById('fwDeployMsg');
+  msgEl.style.display = 'none';
+  try {
+    const r = await fetch(
+      `/v1/ota/deploy?firmware_id=${encodeURIComponent(fwDeployTarget)}&device_id=${encodeURIComponent(deviceId)}`,
+      { method: 'POST' }
+    );
+    if (r.ok) {
+      msgEl.style.display = 'inline';
+      msgEl.textContent = `✓ Deploy terjadwal untuk "${deviceId}" — perangkat akan update dalam ≤60 detik`;
+      fwLoadLibrary();
+      setTimeout(fwHideDeploy, 3000);
+    }
+  } catch {}
+}
+
+// ── Edit ────────────────────────────────────────────────────────────
+function fwShowEdit(id, name, desc) {
+  document.getElementById('fwEditId').value = id;
+  document.getElementById('fwEditName').value = name;
+  document.getElementById('fwEditDesc').value = desc;
+  document.getElementById('fwEditMsg').style.display = 'none';
+  document.getElementById('fwEditPanel').style.display = '';
+  document.getElementById('fwEditPanel').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function fwHideEdit() { document.getElementById('fwEditPanel').style.display = 'none'; }
+
+async function fwDoEdit() {
+  const id = document.getElementById('fwEditId').value;
+  const name = document.getElementById('fwEditName').value.trim();
+  const desc = document.getElementById('fwEditDesc').value.trim();
+  const msgEl = document.getElementById('fwEditMsg');
+  try {
+    const r = await fetch(
+      `/v1/ota/bins/${id}?name=${encodeURIComponent(name)}&description=${encodeURIComponent(desc)}`,
+      { method: 'PATCH' }
+    );
+    if (r.ok) {
+      msgEl.style.display = 'inline';
+      msgEl.style.color = 'var(--c1)';
+      msgEl.textContent = '✓ Tersimpan';
+      fwLoadLibrary();
+      setTimeout(fwHideEdit, 1500);
+    }
+  } catch {}
+}
+
+// ── Delete ──────────────────────────────────────────────────────────
+async function fwDelete(id, name) {
+  if (!confirm(`Hapus firmware "${name}"?\n\nTidak bisa dibatalkan.`)) return;
+  try {
+    const r = await fetch(`/v1/ota/bins/${id}`, { method: 'DELETE' });
+    const d = await r.json();
+    if (!r.ok) { alert(d.detail || 'Gagal hapus'); return; }
+    fwLoadLibrary();
+  } catch {}
+}
+
+// ── Local Build (hanya kalau folder Firmware tersedia) ───────────────
+async function fwLoadLocal() {
   // Config
   try {
     const r = await fetch('/firmware/config');
     const d = await r.json();
     renderFwConfig(d.config, d.groups);
   } catch {}
-
   // Serial ports
   try {
     const r = await fetch('/serial/ports');
@@ -701,31 +959,6 @@ async function fwInit() {
       sel.appendChild(o);
     });
   } catch {}
-
-  // Pre-fill OTA device ID dari perangkat yang sedang terhubung
-  if (devId) document.getElementById('otaDevId').value = devId;
-  otaRefreshStatus();
-}
-
-function renderFwPrograms(programs) {
-  const el = document.getElementById('fwProgramList');
-  if (!programs.length) {
-    el.innerHTML = '<div class="empty"><h3>Tidak ada program ditemukan</h3></div>';
-    return;
-  }
-  el.innerHTML = programs.map(p => `
-    <div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
-      <div style="font-size:20px;flex-shrink:0">${p.type === 'pio' ? '⚡' : '📄'}</div>
-      <div>
-        <div style="font-weight:600;font-size:13px">${p.name}</div>
-        <div style="font-size:11px;color:var(--muted);font-family:monospace;margin-top:2px">${p.path}</div>
-        ${p.note ? `<div style="font-size:11px;color:var(--warn);margin-top:3px">${p.note}</div>` : ''}
-      </div>
-    </div>`).join('');
-}
-
-function escH(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function renderFwConfig(config, groups) {
@@ -733,7 +966,6 @@ function renderFwConfig(config, groups) {
   const groupedKeys = new Set(Object.values(groups).flat());
   const otherKeys = Object.keys(config).filter(k => !groupedKeys.has(k));
   const allGroups = otherKeys.length ? {...groups, 'Lainnya': otherKeys} : {...groups};
-
   el.innerHTML = Object.entries(allGroups).map(([name, keys]) => {
     const rows = keys.filter(k => k in config).map(k =>
       `<div class="cfg-row">
@@ -778,12 +1010,8 @@ function _fwRun(mode) {
   const url = mode === 'flash'
     ? `/firmware/flash-stream${port ? '?port=' + encodeURIComponent(port) : ''}`
     : '/firmware/build-stream';
-
   fwEsrc = new EventSource(url);
-  fwEsrc.onmessage = e => {
-    term.textContent += e.data + '\n';
-    term.scrollTop = term.scrollHeight;
-  };
+  fwEsrc.onmessage = e => { term.textContent += e.data + '\n'; term.scrollTop = term.scrollHeight; };
   fwEsrc.addEventListener('done', () => { if (fwEsrc) { fwEsrc.close(); fwEsrc = null; } });
   fwEsrc.onerror = () => {
     term.textContent += '\n[ANTARAGA] Koneksi SSE terputus\n';
@@ -851,72 +1079,6 @@ function pwaReset() {
   if (Object.keys(pwaDefaultValues).length) renderPwaSettings(pwaDefaultValues);
 }
 
-// ═══════════════════════════════════════════════
-//  OTA — Over-The-Air firmware update
-// ═══════════════════════════════════════════════
-function otaFileChosen(inp) {
-  const info = document.getElementById('otaFileInfo');
-  if (!inp.files.length) { info.textContent = ''; return; }
-  const f = inp.files[0];
-  info.textContent = `File: ${f.name}  (${(f.size / 1024).toFixed(0)} KB)`;
-}
-
-async function otaUpload() {
-  const devId = document.getElementById('otaDevId').value.trim();
-  const fileInp = document.getElementById('otaBin');
-  const statusEl = document.getElementById('otaStatus');
-
-  if (!devId) { alert('Masukkan Device ID terlebih dahulu'); return; }
-  if (!fileInp.files.length) { alert('Pilih file .bin terlebih dahulu (klik 📂 Pilih .bin)'); return; }
-
-  statusEl.style.color = 'var(--muted)';
-  statusEl.textContent = 'Mengupload…';
-
-  const fd = new FormData();
-  fd.append('file', fileInp.files[0]);
-
-  try {
-    const r = await fetch(`/v1/ota/upload?device_id=${encodeURIComponent(devId)}`, {
-      method: 'POST',
-      body: fd,
-    });
-    const d = await r.json();
-    if (r.ok) {
-      statusEl.style.color = 'var(--c1)';
-      statusEl.innerHTML =
-        `✅ <strong>${(d.size / 1024).toFixed(0)} KB</strong> tersimpan di server — ` +
-        `perangkat <strong>${escH(devId)}</strong> akan update dalam ≤60 detik lalu restart otomatis.`;
-    } else {
-      statusEl.style.color = 'var(--critical)';
-      statusEl.textContent = `Error: ${d.detail || r.status}`;
-    }
-  } catch (e) {
-    statusEl.style.color = 'var(--critical)';
-    statusEl.textContent = `Error: ${e}`;
-  }
-}
-
-async function otaRefreshStatus() {
-  const devId = document.getElementById('otaDevId').value.trim();
-  if (!devId) return;
-  const statusEl = document.getElementById('otaStatus');
-  try {
-    const r = await fetch(`/v1/ota/status?device_id=${encodeURIComponent(devId)}`);
-    const d = await r.json();
-    if (d.pending) {
-      statusEl.style.color = 'var(--warn)';
-      statusEl.textContent =
-        `⏳ Menunggu perangkat — ${(d.bin_size / 1024).toFixed(0)} KB firmware tersimpan, belum di-ack oleh ${devId}`;
-    } else if (d.done) {
-      statusEl.style.color = 'var(--c1)';
-      statusEl.textContent =
-        `✅ OTA berhasil — perangkat ${devId} sudah menginstall firmware (${(d.bin_size / 1024).toFixed(0)} KB)`;
-    } else {
-      statusEl.style.color = 'var(--text2)';
-      statusEl.textContent = `Belum ada firmware yang di-upload untuk "${devId}".`;
-    }
-  } catch {}
-}
 
 // ═══════════════════════════════════════════════
 //  BOOT
