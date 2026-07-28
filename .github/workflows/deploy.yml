@@ -10,6 +10,7 @@ on:
       - 'requirements.txt'
       - 'Dockerfile'
       - 'docker-compose.prod.yml'
+      - 'scripts/nginx_antaraga.conf'
       - '.github/workflows/deploy.yml'
     # Firmware, notebooks, journals TIDAK trigger deploy
 

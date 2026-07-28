@@ -10,7 +10,7 @@ import os
 import numpy as np
 from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse
 from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session
 
@@ -92,8 +92,8 @@ def _resolve_profile_for_request(
 
 
 @app.get("/", include_in_schema=False)
-def root() -> RedirectResponse:
-    return RedirectResponse(url="/docs")
+def root() -> FileResponse:
+    return FileResponse(_HOME_HTML, media_type="text/html")
 
 
 @app.get("/health")
@@ -663,6 +663,7 @@ def ingest_firmware_batch(
 # ---------------------------------------------------------------------------
 
 _DASHBOARD_HTML = os.path.join(os.path.dirname(__file__), "static", "dashboard.html")
+_HOME_HTML = os.path.join(os.path.dirname(__file__), "static", "index.html")
 
 
 @app.get("/dashboard", include_in_schema=False)
