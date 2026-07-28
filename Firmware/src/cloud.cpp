@@ -19,6 +19,7 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <Update.h>
 #include <sys/time.h>
 #include <time.h>
 
@@ -142,18 +143,118 @@ static void ntpSync() {
 }
 
 // =====================================================================
-// HTTPS
+// HTTPS — streaming batch sensor
 // =====================================================================
 static WiFiClientSecure s_tls;
 static HTTPClient       s_http;
 
+// =====================================================================
+// OTA — client terpisah supaya tidak ada konflik state dengan s_http
+// =====================================================================
+static WiFiClientSecure s_otaTls;
+static HTTPClient       s_otaHttp;
+
 static void tlsInit() {
 #if CLOUD_INSECURE_TLS
-  s_tls.setInsecure();     // dev: sertifikat tidak diverifikasi
+  s_tls.setInsecure();
+  s_otaTls.setInsecure();
   Serial.println(F("[TLS] MODE INSECURE — sertifikat server TIDAK diverifikasi."));
 #else
   s_tls.setCACert(CLOUD_ROOT_CA);
+  s_otaTls.setCACert(CLOUD_ROOT_CA);
 #endif
+}
+
+// =====================================================================
+// OTA
+// =====================================================================
+
+// Tanya server: ada firmware baru untuk device ini?
+// Mengembalikan true kalau server punya .bin yang belum diinstall.
+static bool otaCheckPending() {
+#if OTA_CHECK_INTERVAL_MS == 0
+  return false;
+#endif
+  char url[256];
+  snprintf(url, sizeof(url),
+    "https://%s:%d/v1/ota/check?device_id=%s", CLOUD_HOST, CLOUD_PORT, DEVICE_ID);
+
+  if (!s_otaHttp.begin(s_otaTls, url)) return false;
+  if (strlen(CLOUD_API_KEY) > 0)
+    s_otaHttp.addHeader("Authorization", "Bearer " CLOUD_API_KEY);
+  s_otaHttp.setTimeout(HTTP_TIMEOUT_MS);
+
+  const int code = s_otaHttp.GET();
+  bool pending = false;
+  if (code == 200) {
+    // Cukup cari string "true" di JSON {"pending":true}
+    pending = s_otaHttp.getString().indexOf("true") >= 0;
+  }
+  s_otaHttp.end();
+  Serial.printf("[OTA] check -> code=%d pending=%s\n", code, pending ? "YA" : "tidak");
+  return pending;
+}
+
+// Download firmware dari server dan flash ke partisi OTA.
+// Kalau berhasil: kirim ACK ke server lalu restart.
+static void otaPerform() {
+  char url[256];
+  snprintf(url, sizeof(url),
+    "https://%s:%d/v1/ota/firmware?device_id=%s", CLOUD_HOST, CLOUD_PORT, DEVICE_ID);
+
+  Serial.println(F("[OTA] mulai download firmware..."));
+
+  if (!s_otaHttp.begin(s_otaTls, url)) {
+    Serial.println(F("[OTA] begin() gagal"));
+    return;
+  }
+  if (strlen(CLOUD_API_KEY) > 0)
+    s_otaHttp.addHeader("Authorization", "Bearer " CLOUD_API_KEY);
+  s_otaHttp.setTimeout(30000);  // download ~500 KB via WiFi, beri 30 dtk
+
+  const int code = s_otaHttp.GET();
+  if (code != 200) {
+    Serial.printf("[OTA] download gagal code=%d\n", code);
+    s_otaHttp.end();
+    return;
+  }
+
+  const int binSize = s_otaHttp.getSize();
+  Serial.printf("[OTA] ukuran: %d byte — memulai flash...\n", binSize);
+
+  if (!Update.begin(binSize < 0 ? UPDATE_SIZE_UNKNOWN : (size_t)binSize)) {
+    Serial.printf("[OTA] Update.begin gagal: %s\n", Update.errorString());
+    s_otaHttp.end();
+    return;
+  }
+
+  WiFiClient* stream = s_otaHttp.getStreamPtr();
+  const size_t written = Update.writeStream(*stream);
+  s_otaHttp.end();
+
+  Serial.printf("[OTA] ditulis %u byte\n", (unsigned)written);
+
+  if (!Update.end() || !Update.isFinished()) {
+    Serial.printf("[OTA] flash gagal: %s\n", Update.errorString());
+    return;
+  }
+
+  Serial.println(F("[OTA] flash BERHASIL — mengirim ACK ke server..."));
+
+  // Beri tahu server supaya .bin dihapus (best-effort, tidak fatal kalau gagal)
+  char ackUrl[256];
+  snprintf(ackUrl, sizeof(ackUrl),
+    "https://%s:%d/v1/ota/ack?device_id=%s", CLOUD_HOST, CLOUD_PORT, DEVICE_ID);
+  if (s_otaHttp.begin(s_otaTls, ackUrl)) {
+    if (strlen(CLOUD_API_KEY) > 0)
+      s_otaHttp.addHeader("Authorization", "Bearer " CLOUD_API_KEY);
+    s_otaHttp.POST(nullptr, 0);
+    s_otaHttp.end();
+  }
+
+  Serial.println(F("[OTA] restart dalam 1 detik..."));
+  vTaskDelay(pdMS_TO_TICKS(1000));
+  esp_restart();
 }
 
 // true = HTTP 2xx
@@ -212,6 +313,8 @@ void netTask(void* arg) {
   xEventGroupSetBits(g_events, EV_WIFI_OK);
 
   // --- Langkah 2: pompa batch ke cloud --------------------------------
+  static uint32_t lastOtaMs = 0;
+
   for (;;) {
     if (WiFi.status() != WL_CONNECTED) {
       /* Batch TIDAK diambil selama jaringan mati — biar menumpuk di qFilled
@@ -224,8 +327,23 @@ void netTask(void* arg) {
       wifiWaitConnected();
       if (!(xEventGroupGetBits(g_events) & EV_NTP_OK)) ntpSync();
       if (g_state == ST_NET_LOST) setState(ST_STREAMING);
+      lastOtaMs = millis();  // reset timer supaya tidak langsung cek OTA setelah reconnect
       continue;
     }
+
+    // --- OTA check (setiap OTA_CHECK_INTERVAL_MS, di antara batch) --------
+#if OTA_CHECK_INTERVAL_MS > 0
+    if (millis() - lastOtaMs >= OTA_CHECK_INTERVAL_MS) {
+      lastOtaMs = millis();
+      if (otaCheckPending()) {
+        // Tutup koneksi streaming sebelum download (kurangi tekanan RAM/SSL)
+        s_http.end();
+        s_tls.stop();
+        otaPerform();   // kalau berhasil: esp_restart() — tidak pernah kembali ke sini
+        // Kalau gagal: lanjut streaming seperti biasa
+      }
+    }
+#endif
 
     Batch* b = nullptr;
     if (xQueueReceive(g_qFilled, &b, pdMS_TO_TICKS(1000)) != pdTRUE) continue;

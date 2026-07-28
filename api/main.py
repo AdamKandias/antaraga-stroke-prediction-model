@@ -17,6 +17,9 @@ from sqlalchemy.orm import Session
 from api import ingest_buffer, models_db, schemas
 from api.auth import create_access_token, get_current_user_id, get_ingest_user_id
 from api.config import DEV_MODE
+from api.firmware import router as firmware_router
+from api.ota import router as ota_router
+from api.pwa_config import get_pwa_config, router as pwa_router
 from api.database import Base, engine, get_db
 from api.logging_utils import log_prediction, logger
 from api.ml import predict_stroke_risk
@@ -53,6 +56,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(firmware_router)
+app.include_router(ota_router)
+app.include_router(pwa_router)
 
 
 def _profile_to_response(profile: models_db.Profile) -> schemas.ProfileResponse:
@@ -730,6 +737,8 @@ def ingest_latest_dashboard(device_id: str, db: Session = Depends(get_db)) -> di
 def _compute_pwa(ppg: list, red: list, ir: list, fs_ppg: int, fs_max: int) -> dict:
     from model.ppg_features import bandpass_filter, bpm_from_spectrum, extract_pwa_features
 
+    cfg = get_pwa_config()
+
     result: dict = {
         "filtered_ppg": [], "peaks_ppg": [],
         "filtered_red": [], "peaks_red": [],
@@ -742,14 +751,19 @@ def _compute_pwa(ppg: list, red: list, ir: list, fs_ppg: int, fs_max: int) -> di
         if len(signal) < min_samples:
             return
         arr = np.array(signal, dtype=float)
-        filt = bandpass_filter(arr, float(fs))
+        filt = bandpass_filter(
+            arr, float(fs),
+            low_hz=cfg["bandpass_low_hz"],
+            high_hz=cfg["bandpass_high_hz"],
+            order=int(cfg["filter_order"]),
+        )
         result[f"filtered_{key}"] = [float(v) for v in filt]
         # For peak markers on the dashboard: detect on potentially inverted signal
         sig_for_peaks = -filt if invert else filt
         import numpy as _np
         from scipy.signal import find_peaks as _fp
-        _min_dist = max(int(float(fs) * 60 / 200), 1)
-        _prom = float(_np.std(sig_for_peaks) * 0.4)
+        _min_dist = max(int(float(fs) * 60 / cfg["bpm_max"]), 1)
+        _prom = float(_np.std(sig_for_peaks) * cfg["prominence_multiplier"])
         _pk, _ = _fp(sig_for_peaks, distance=_min_dist, prominence=_prom)
         result[f"peaks_{key}"] = [int(p) for p in _pk]
         # BPM via Welch spectrum (primary method — matches firmware scripts)
