@@ -7,7 +7,7 @@
  *   3. Ambil batch dari qFilled -> serialisasi JSON -> POST HTTPS -> qFree
  *
  * Kenapa batch, bukan per-sampel?
- *   Aliran datanya 400 Hz x 2 kanal (MAX30102) + 200 Hz (SEN0203) = 1000
+ *   Aliran datanya 400 Hz x 2 kanal (MAX30102) + 200 Hz (SON1303) = 1000
  *   nilai/detik. Satu POST HTTPS per sampel mustahil: handshake + header
  *   saja sudah ratusan byte dan puluhan milidetik. Jadi data dikemas per
  *   BATCH_MS (default 500 ms) dan dikirim lewat SATU koneksi TLS yang
@@ -20,6 +20,8 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <Update.h>
+#include <Preferences.h>
+#include <esp_ota_ops.h>
 #include <sys/time.h>
 #include <time.h>
 
@@ -28,7 +30,7 @@
 //   PPG  : maks 4 digit + koma      -> 6 byte/nilai (aman)
 //   RED/IR: maks 6 digit + koma     -> 8 byte/nilai (aman)
 // =====================================================================
-#define JSON_BUF_SIZE  (384 + PPG_PER_BATCH * 6 + MAX_CAP * 2 * 8)
+#define JSON_BUF_SIZE  (512 + PPG_PER_BATCH * 6 + MAX_CAP * 2 * 8)
 static char s_json[JSON_BUF_SIZE];
 
 // Penulis JSON tanpa heap: String/ArduinoJson akan memfragmentasi heap kalau
@@ -56,7 +58,7 @@ struct JsonWriter {
 };
 static JsonWriter s_jw = { s_json, JSON_BUF_SIZE, 0, false };
 
-static size_t buildJson(const Batch* b) {
+static size_t buildJson(const Batch* b, const Sqi* q) {
   JsonWriter& w = s_jw;
   w.reset();
   w.chr('{');
@@ -70,7 +72,23 @@ static size_t buildJson(const Batch* b) {
   w.key("batt_pct");  w.u32(b->batt_pct);                        w.chr(',');
   w.key("ovf");       w.u32(b->max_ovf);                         w.chr(',');
 
-  // SEN0203 — ADC mentah 0..4095
+  /* Metrik SQI ikut dikirim supaya keputusan gerbang di firmware bisa diaudit
+   * dari sisi cloud — package yang sampai ke sini pasti sqi_flags = 0. */
+  w.key("sqi");        w.u32(q->score);                          w.chr(',');
+  w.key("sqi_flags");  w.u32(q->flags);                          w.chr(',');
+  w.key("ir_dc");      w.u32(q->ir_dc);                          w.chr(',');
+  w.key("ir_p2p");     w.u32(q->ir_p2p);                         w.chr(',');
+  w.key("ir_pi");      w.u32(q->ir_pi);                          w.chr(',');
+  w.key("ir_jump");    w.u32(q->ir_jump);                        w.chr(',');
+  w.key("ir_jump_n");  w.u32(q->ir_jump_n);                      w.chr(',');
+  w.key("ir_tort10");  w.u32(q->ir_tort10);                      w.chr(',');
+  w.key("ppg_dc");     w.u32(q->ppg_dc);                         w.chr(',');
+  w.key("ppg_p2p");    w.u32(q->ppg_p2p);                        w.chr(',');
+  w.key("ppg_jump_n"); w.u32(q->ppg_jump_n);                     w.chr(',');
+  w.key("ppg_tort10"); w.u32(q->ppg_tort10);                     w.chr(',');
+  w.key("clip_n");     w.u32(q->clip_n);                         w.chr(',');
+
+  // SON1303 — ADC mentah 0..4095
   w.key("ppg"); w.chr('[');
   for (uint16_t i = 0; i < b->ppg_n; i++) { if (i) w.chr(','); w.u32(b->ppg[i]); }
   w.chr(']'); w.chr(',');
@@ -143,22 +161,30 @@ static void ntpSync() {
 }
 
 // =====================================================================
-// HTTPS — streaming batch sensor
+// HTTPS
 // =====================================================================
 static WiFiClientSecure s_tls;
 static HTTPClient       s_http;
 
-// =====================================================================
-// OTA — client terpisah supaya tidak ada konflik state dengan s_http
-// =====================================================================
+/* Klien TERPISAH untuk OTA. Memakai s_http yang sama akan mengacaukan sesi
+ * keep-alive streaming: unduhan firmware itu transaksi panjang dengan header
+ * dan timeout yang berbeda, dan kalau gagal di tengah, state HTTPClient-nya
+ * ikut kotor untuk POST batch berikutnya. */
 static WiFiClientSecure s_otaTls;
 static HTTPClient       s_otaHttp;
 
 static void tlsInit() {
 #if CLOUD_INSECURE_TLS
-  s_tls.setInsecure();
+  s_tls.setInsecure();     // dev: sertifikat tidak diverifikasi
   s_otaTls.setInsecure();
+  /* PERINGATAN KEAMANAN: dengan sertifikat tidak diverifikasi, siapa pun yang
+   * bisa menyisip di koneksi ini dapat memasang firmware apa pun ke alat yang
+   * menempel di tubuh orang. Sebelum OTA dipakai di lapangan, set
+   * CLOUD_INSECURE_TLS 0 dan isi CLOUD_ROOT_CA. */
   Serial.println(F("[TLS] MODE INSECURE — sertifikat server TIDAK diverifikasi."));
+#if OTA_ENABLE
+  Serial.println(F("[TLS] OTA aktif di atas kanal tanpa verifikasi — JANGAN dipakai produksi."));
+#endif
 #else
   s_tls.setCACert(CLOUD_ROOT_CA);
   s_otaTls.setCACert(CLOUD_ROOT_CA);
@@ -166,63 +192,216 @@ static void tlsInit() {
 }
 
 // =====================================================================
-// OTA
+// OTA — pengurai JSON minimal
+// ---------------------------------------------------------------------
+// Respons OTA cuma beberapa puluh byte, jadi ArduinoJson tidak sepadan —
+// library itu justru memfragmentasi heap yang sedang kita jaga untuk TLS.
 // =====================================================================
+#if OTA_ENABLE
+static bool jsonFindBool(const String& s, const char* key, bool* out) {
+  String pat = String('"') + key + '"';
+  int i = s.indexOf(pat);
+  if (i < 0) return false;
+  i = s.indexOf(':', i + pat.length());
+  if (i < 0) return false;
+  while (++i < (int)s.length() && (s[i] == ' ' || s[i] == '\t')) {}
+  *out = s.startsWith("true", i);
+  return true;
+}
 
-// Tanya server: ada firmware baru untuk device ini?
-// Mengembalikan true kalau server punya .bin yang belum diinstall.
-static bool otaCheckPending() {
-#if OTA_CHECK_INTERVAL_MS == 0
-  return false;
-#endif
+static bool jsonFindStr(const String& s, const char* key, char* out, size_t cap) {
+  String pat = String('"') + key + '"';
+  int i = s.indexOf(pat);
+  if (i < 0) return false;
+  i = s.indexOf(':', i + pat.length());
+  if (i < 0) return false;
+  i = s.indexOf('"', i);
+  if (i < 0) return false;
+  const int j = s.indexOf('"', i + 1);
+  if (j < 0) return false;
+  size_t n = (size_t)(j - i - 1);
+  if (n >= cap) n = cap - 1;
+  memcpy(out, s.c_str() + i + 1, n);
+  out[n] = '\0';
+  return true;
+}
+
+// =====================================================================
+// OTA — pengaman percobaan (anti-brick)
+// ---------------------------------------------------------------------
+// Firmware yang baru dipasang berstatus PERCOBAAN sampai membuktikan diri
+// lewat OTA_TRIAL_POSTS kali POST berhasil. Gagal sampai batas waktu ->
+// boot dialihkan kembali ke partisi yang terakhir terbukti jalan.
+//
+// Kita TIDAK pernah mengalihkan ke slot yang belum pernah terbukti berjalan:
+// "good_part" hanya ditulis setelah firmware di slot itu sukses POST. Tanpa
+// syarat ini, revert pada OTA pertama justru melompat ke slot kosong.
+// =====================================================================
+static Preferences s_nvs;
+static bool     s_inTrial    = false;
+static uint32_t s_trialStart = 0;
+static uint32_t s_trialOk    = 0;
+
+static const char* runningLabel() {
+  const esp_partition_t* p = esp_ota_get_running_partition();
+  return p ? p->label : "?";
+}
+
+static void otaTrialInit() {
+  s_nvs.begin("antaraga", false);
+  s_inTrial    = s_nvs.getBool("ota_trial", false);
+  s_trialStart = millis();
+  s_trialOk    = 0;
+  if (s_inTrial) {
+    Serial.printf("[OTA] firmware %s di %s berstatus PERCOBAAN — butuh %d POST sukses\n",
+                  FW_VERSION, runningLabel(), OTA_TRIAL_POSTS);
+  }
+}
+
+static void otaTrialRevert() {
+  char good[16] = {0};
+  s_nvs.getString("good_part", good, sizeof(good));
+
+  if (good[0] == '\0' || strcmp(good, runningLabel()) == 0) {
+    // Tidak ada cadangan yang terbukti. Membalik boot ke slot yang belum pernah
+    // jalan justru menjamin brick, jadi lebih baik tetap di sini dan mencoba.
+    Serial.println(F("[OTA] percobaan gagal, tapi tidak ada partisi cadangan "
+                     "terbukti — tetap berjalan."));
+    s_nvs.putBool("ota_trial", false);
+    s_inTrial = false;
+    return;
+  }
+
+  const esp_partition_t* prev = esp_partition_find_first(
+      ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, good);
+  if (!prev) {
+    Serial.printf("[OTA] partisi cadangan \"%s\" tidak ditemukan — tetap berjalan.\n", good);
+    s_nvs.putBool("ota_trial", false);
+    s_inTrial = false;
+    return;
+  }
+
+  Serial.printf("[OTA] PERCOBAAN GAGAL — kembali ke %s lalu restart.\n", good);
+  s_nvs.putBool("ota_trial", false);
+  s_nvs.end();
+  esp_ota_set_boot_partition(prev);
+  vTaskDelay(pdMS_TO_TICKS(200));
+  esp_restart();
+}
+
+// Dipanggil setiap selesai POST batch.
+static void otaTrialOnPost(bool ok) {
+  if (!s_inTrial) {
+    // Bukan percobaan: catat slot ini sebagai "terbukti" sekali saja, supaya
+    // OTA berikutnya punya sasaran revert yang sah.
+    static bool recorded = false;
+    if (ok && !recorded) {
+      recorded = true;
+      char good[16] = {0};
+      s_nvs.getString("good_part", good, sizeof(good));
+      if (strcmp(good, runningLabel()) != 0) s_nvs.putString("good_part", runningLabel());
+    }
+    return;
+  }
+
+  if (ok && ++s_trialOk >= OTA_TRIAL_POSTS) {
+    s_nvs.putBool("ota_trial", false);
+    s_nvs.putString("good_part", runningLabel());
+    s_inTrial = false;
+    Serial.printf("[OTA] firmware %s TERBUKTI jalan — dikunci di %s.\n",
+                  FW_VERSION, runningLabel());
+    return;
+  }
+  if (millis() - s_trialStart > OTA_TRIAL_TIMEOUT_MS) otaTrialRevert();
+}
+
+// =====================================================================
+// OTA — cek, unduh, pasang
+// =====================================================================
+static void otaSendAck() {
   char url[256];
-  snprintf(url, sizeof(url),
-    "https://%s:%d/v1/ota/check?device_id=%s", CLOUD_HOST, CLOUD_PORT, DEVICE_ID);
+  snprintf(url, sizeof(url), "https://%s:%d%s?device_id=%s&fw=%s",
+           CLOUD_HOST, CLOUD_PORT, OTA_PATH_ACK, DEVICE_ID, FW_VERSION);
+  if (!s_otaHttp.begin(s_otaTls, url)) return;
+  if (strlen(CLOUD_API_KEY) > 0) s_otaHttp.addHeader("Authorization", "Bearer " CLOUD_API_KEY);
+  s_otaHttp.setTimeout(HTTP_TIMEOUT_MS);
+  s_otaHttp.POST((uint8_t*)nullptr, 0);
+  s_otaHttp.end();
+}
+
+/* true = ada firmware baru yang BERBEDA versinya dan perlu diunduh.
+ * Kalau server bilang pending tapi versinya sama dengan yang sedang berjalan,
+ * berarti ACK sebelumnya tidak sampai — kita kirim ulang ACK dan TIDAK
+ * mengunduh apa pun. Ini yang memutus loop reflash. */
+static bool otaCheckPending() {
+  char url[256];
+  snprintf(url, sizeof(url), "https://%s:%d%s?device_id=%s&fw=%s",
+           CLOUD_HOST, CLOUD_PORT, OTA_PATH_CHECK, DEVICE_ID, FW_VERSION);
 
   if (!s_otaHttp.begin(s_otaTls, url)) return false;
-  if (strlen(CLOUD_API_KEY) > 0)
-    s_otaHttp.addHeader("Authorization", "Bearer " CLOUD_API_KEY);
+  if (strlen(CLOUD_API_KEY) > 0) s_otaHttp.addHeader("Authorization", "Bearer " CLOUD_API_KEY);
   s_otaHttp.setTimeout(HTTP_TIMEOUT_MS);
 
   const int code = s_otaHttp.GET();
-  bool pending = false;
-  if (code == 200) {
-    // Cukup cari string "true" di JSON {"pending":true}
-    pending = s_otaHttp.getString().indexOf("true") >= 0;
-  }
+  String body;
+  if (code == 200) body = s_otaHttp.getString();
   s_otaHttp.end();
-  Serial.printf("[OTA] check -> code=%d pending=%s\n", code, pending ? "YA" : "tidak");
-  return pending;
+
+  if (code != 200) {
+    Serial.printf("[OTA] cek gagal code=%d\n", code);
+    return false;
+  }
+
+  bool pending = false;
+  if (!jsonFindBool(body, "pending", &pending) || !pending) return false;
+
+  char newFw[32] = {0};
+  if (jsonFindStr(body, "fw", newFw, sizeof(newFw)) && strcmp(newFw, FW_VERSION) == 0) {
+    Serial.printf("[OTA] server menawarkan %s — sama dengan yang berjalan. "
+                  "Kirim ulang ACK, tidak mengunduh.\n", newFw);
+    otaSendAck();
+    return false;
+  }
+
+  Serial.printf("[OTA] firmware baru tersedia: %s (sekarang %s)\n",
+                newFw[0] ? newFw : "(versi tidak disebut)", FW_VERSION);
+  return true;
 }
 
-// Download firmware dari server dan flash ke partisi OTA.
-// Kalau berhasil: kirim ACK ke server lalu restart.
+// Unduh .bin lalu tulis ke partisi OTA yang tidak sedang berjalan.
+// Kalau berhasil: tandai percobaan, ACK, restart. Tidak pernah kembali.
 static void otaPerform() {
   char url[256];
-  snprintf(url, sizeof(url),
-    "https://%s:%d/v1/ota/firmware?device_id=%s", CLOUD_HOST, CLOUD_PORT, DEVICE_ID);
+  snprintf(url, sizeof(url), "https://%s:%d%s?device_id=%s",
+           CLOUD_HOST, CLOUD_PORT, OTA_PATH_FIRMWARE, DEVICE_ID);
 
-  Serial.println(F("[OTA] mulai download firmware..."));
-
+  Serial.println(F("[OTA] mengunduh firmware..."));
   if (!s_otaHttp.begin(s_otaTls, url)) {
     Serial.println(F("[OTA] begin() gagal"));
     return;
   }
-  if (strlen(CLOUD_API_KEY) > 0)
-    s_otaHttp.addHeader("Authorization", "Bearer " CLOUD_API_KEY);
-  s_otaHttp.setTimeout(30000);  // download ~500 KB via WiFi, beri 30 dtk
+  if (strlen(CLOUD_API_KEY) > 0) s_otaHttp.addHeader("Authorization", "Bearer " CLOUD_API_KEY);
+  s_otaHttp.setTimeout(OTA_DOWNLOAD_TIMEOUT_MS);
 
   const int code = s_otaHttp.GET();
   if (code != 200) {
-    Serial.printf("[OTA] download gagal code=%d\n", code);
+    Serial.printf("[OTA] unduh gagal code=%d\n", code);
     s_otaHttp.end();
     return;
   }
 
   const int binSize = s_otaHttp.getSize();
-  Serial.printf("[OTA] ukuran: %d byte — memulai flash...\n", binSize);
+  /* Content-Length WAJIB. Dengan UPDATE_SIZE_UNKNOWN, Update tidak bisa
+   * memeriksa kelengkapan, sehingga unduhan yang terpotong di tengah bisa
+   * lolos sebagai "berhasil" dan mem-boot image cacat. */
+  if (binSize <= 0) {
+    Serial.println(F("[OTA] server tidak mengirim Content-Length — dibatalkan."));
+    s_otaHttp.end();
+    return;
+  }
+  Serial.printf("[OTA] ukuran %d byte -> menulis ke partisi cadangan...\n", binSize);
 
-  if (!Update.begin(binSize < 0 ? UPDATE_SIZE_UNKNOWN : (size_t)binSize)) {
+  if (!Update.begin((size_t)binSize)) {
     Serial.printf("[OTA] Update.begin gagal: %s\n", Update.errorString());
     s_otaHttp.end();
     return;
@@ -232,30 +411,23 @@ static void otaPerform() {
   const size_t written = Update.writeStream(*stream);
   s_otaHttp.end();
 
-  Serial.printf("[OTA] ditulis %u byte\n", (unsigned)written);
-
-  if (!Update.end() || !Update.isFinished()) {
-    Serial.printf("[OTA] flash gagal: %s\n", Update.errorString());
+  if (written != (size_t)binSize || !Update.end() || !Update.isFinished()) {
+    Serial.printf("[OTA] flash GAGAL (%u/%d byte): %s\n",
+                  (unsigned)written, binSize, Update.errorString());
+    Update.abort();
+    /* Firmware lama tetap utuh dan tetap jadi partisi boot — tidak ada yang
+     * rusak, siklus berikutnya boleh mencoba lagi. */
     return;
   }
 
-  Serial.println(F("[OTA] flash BERHASIL — mengirim ACK ke server..."));
-
-  // Beri tahu server supaya .bin dihapus (best-effort, tidak fatal kalau gagal)
-  char ackUrl[256];
-  snprintf(ackUrl, sizeof(ackUrl),
-    "https://%s:%d/v1/ota/ack?device_id=%s", CLOUD_HOST, CLOUD_PORT, DEVICE_ID);
-  if (s_otaHttp.begin(s_otaTls, ackUrl)) {
-    if (strlen(CLOUD_API_KEY) > 0)
-      s_otaHttp.addHeader("Authorization", "Bearer " CLOUD_API_KEY);
-    s_otaHttp.POST(nullptr, 0);
-    s_otaHttp.end();
-  }
-
-  Serial.println(F("[OTA] restart dalam 1 detik..."));
-  vTaskDelay(pdMS_TO_TICKS(1000));
+  Serial.println(F("[OTA] flash BERHASIL. Menandai status percobaan lalu restart."));
+  s_nvs.putBool("ota_trial", true);
+  otaSendAck();
+  s_nvs.end();
+  vTaskDelay(pdMS_TO_TICKS(500));
   esp_restart();
 }
+#endif  // OTA_ENABLE
 
 // true = HTTP 2xx
 static bool cloudPost(const char* body, size_t len) {
@@ -308,12 +480,18 @@ void netTask(void* arg) {
 
   ntpSync();
   tlsInit();
+#if OTA_ENABLE
+  otaTrialInit();
+  Serial.printf("[OTA] versi %s, berjalan di partisi %s\n", FW_VERSION, runningLabel());
+#endif
 
   // Ini yang membangunkan sensorTask di core 1.
   xEventGroupSetBits(g_events, EV_WIFI_OK);
 
   // --- Langkah 2: pompa batch ke cloud --------------------------------
-  static uint32_t lastOtaMs = 0;
+#if OTA_ENABLE && OTA_CHECK_INTERVAL_MS > 0
+  uint32_t lastOtaMs = millis();
+#endif
 
   for (;;) {
     if (WiFi.status() != WL_CONNECTED) {
@@ -327,20 +505,28 @@ void netTask(void* arg) {
       wifiWaitConnected();
       if (!(xEventGroupGetBits(g_events) & EV_NTP_OK)) ntpSync();
       if (g_state == ST_NET_LOST) setState(ST_STREAMING);
-      lastOtaMs = millis();  // reset timer supaya tidak langsung cek OTA setelah reconnect
+#if OTA_ENABLE && OTA_CHECK_INTERVAL_MS > 0
+      lastOtaMs = millis();   // jangan langsung cek OTA sesaat setelah reconnect
+#endif
       continue;
     }
 
-    // --- OTA check (setiap OTA_CHECK_INTERVAL_MS, di antara batch) --------
-#if OTA_CHECK_INTERVAL_MS > 0
+#if OTA_ENABLE && OTA_CHECK_INTERVAL_MS > 0
+    /* Cek OTA dilakukan DI ANTARA batch, bukan di tengah pengiriman, supaya
+     * tidak ada dua transaksi TLS yang tumpang tindih.
+     *
+     * Selama unduhan (belasan detik), netTask tidak menguras qFilled. sensorTask
+     * tetap mencuplik dan pool akan penuh, jadi batch selama jendela itu memang
+     * hilang — terlihat sebagai lonjakan "drop" di [STAT]. Itu disengaja: satu
+     * kali kehilangan beberapa detik data jauh lebih murah daripada menghentikan
+     * akuisisi atau menunda update. */
     if (millis() - lastOtaMs >= OTA_CHECK_INTERVAL_MS) {
       lastOtaMs = millis();
       if (otaCheckPending()) {
-        // Tutup koneksi streaming sebelum download (kurangi tekanan RAM/SSL)
-        s_http.end();
-        s_tls.stop();
-        otaPerform();   // kalau berhasil: esp_restart() — tidak pernah kembali ke sini
-        // Kalau gagal: lanjut streaming seperti biasa
+        s_http.end();          // lepaskan sesi streaming dulu: unduhan butuh
+        s_tls.stop();          // heap untuk buffer TLS-nya sendiri
+        otaPerform();          // berhasil -> esp_restart(), tidak kembali ke sini
+        lastOtaMs = millis();  // gagal -> jangan langsung ulang, beri jeda penuh
       }
     }
 #endif
@@ -348,7 +534,32 @@ void netTask(void* arg) {
     Batch* b = nullptr;
     if (xQueueReceive(g_qFilled, &b, pdMS_TO_TICKS(1000)) != pdTRUE) continue;
 
-    const size_t n = buildJson(b);
+    /* GERBANG SQI — dijalankan sebelum apa pun yang menyentuh jaringan, jadi
+     * package sampah tidak pernah memakan bandwidth maupun kuota. Hitungannya
+     * hanya jalan-lurus atas ~500 sampel (puluhan mikrodetik), dan ini core 0
+     * yang memang sedang menunggu, bukan core sensor. */
+    Sqi q;
+    const bool layak = sqiEvaluate(b, &q);
+    g_stats.sqi_last_score = q.score;
+    g_stats.sqi_last_flags = q.flags;
+    if (!layak) {
+      g_stats.sqi_reject++;
+#if VERBOSE_SQI
+      char why[SQI_FLAGS_TEXT_CAP];
+      sqiFlagsText(q.flags, why, sizeof(why));
+      Serial.printf("[SQI ] buang seq=%lu skor=%u (%s) ir_dc=%lu pi=%u permil"
+                    " jump=%lu n=%u tort=%u.%u\n",
+                    (unsigned long)b->seq, (unsigned)q.score, why,
+                    (unsigned long)q.ir_dc, (unsigned)q.ir_pi,
+                    (unsigned long)q.ir_jump, (unsigned)q.ir_jump_n,
+                    (unsigned)(q.ir_tort10 / 10), (unsigned)(q.ir_tort10 % 10));
+#endif
+      xQueueSend(g_qFree, &b, 0);      // buffer langsung kembali ke pool
+      continue;
+    }
+    g_stats.sqi_pass++;
+
+    const size_t n = buildJson(b, &q);
     bool ok = false;
     if (n == 0) {
       Serial.println(F("[HTTP] JSON overflow — naikkan JSON_BUF_SIZE / turunkan BATCH_MS"));
@@ -370,5 +581,12 @@ void netTask(void* arg) {
     } else {
       g_stats.http_fail++;
     }
+
+#if OTA_ENABLE
+    /* POST yang berhasil = bukti hidup paling kuat yang kita punya: WiFi jalan,
+     * TLS jalan, sensor menghasilkan data, dan cloud menerimanya. Itulah yang
+     * dipakai untuk mengesahkan firmware hasil OTA. */
+    otaTrialOnPost(ok);
+#endif
   }
 }

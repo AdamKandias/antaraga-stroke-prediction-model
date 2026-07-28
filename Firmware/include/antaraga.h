@@ -3,8 +3,8 @@
  * =====================================================================
  * Pembagian kerja (sesuai algoritma):
  *
- *   CORE 0  "core WiFi"    : netTask()    — connect WiFi, NTP, POST HTTPS.
- *   CORE 1  "core sensor"  : sensorTask() — MAX30102 (FIFO) + SEN0203 + baterai.
+ *   CORE 0  "core WiFi"    : netTask()    — connect WiFi, NTP, SQI, POST HTTPS.
+ *   CORE 1  "core sensor"  : sensorTask() — MAX30102 (FIFO) + SON1303 + baterai.
  *   CORE 1  loop()         : LED indikator D10 + cetak statistik.
  *
  * Aliran data: sensorTask mengisi Batch -> qFilled -> netTask kirim -> qFree.
@@ -24,7 +24,7 @@
 // Pin — XIAO ESP32-S3 (nama silkscreen -> GPIO), sesuai skematik ANTARAGA
 // ---------------------------------------------------------------------
 #define PIN_VSENS        1    // D0 / A0  <- pembagi tegangan baterai (R1/R2 100k)
-#define PIN_SIG_PPG      2    // D1 / A1  <- keluaran analog SEN0203
+#define PIN_SIG_PPG      2    // D1 / A1  <- keluaran analog SON1303
 #define PIN_SEN_EN       3    // D2       -> gate Q2 (DMP2130L, P-MOS): LOW = sensor ON
 #define PIN_SDA          5    // D4       <-> MAX30102 SDA
 #define PIN_SCL          6    // D5       <-> MAX30102 SCL
@@ -36,10 +36,14 @@
 // ---------------------------------------------------------------------
 // Turunan laju sampel
 // ---------------------------------------------------------------------
+/* Kedua profil memakai SR=400 Hz di chip (batas mode SpO2 pada PW 411 us);
+ * yang membedakan hanya SMP_AVE. Lihat CFG_SPO2/CFG_FIFO di src/sensors.cpp —
+ * angka di bawah HARUS ikut kalau CFG_FIFO diubah, karena nilai ini yang
+ * dikirim ke cloud sebagai "fs_max". */
 #if MAX_PROFILE_PWA
-  #define MAX_FS_HZ      400
+  #define MAX_FS_HZ      400    // SMP_AVE=1
 #else
-  #define MAX_FS_HZ      250
+  #define MAX_FS_HZ      200    // SMP_AVE=2
 #endif
 
 #define PPG_PERIOD_MS    (1000 / PPG_FS_HZ)
@@ -62,7 +66,7 @@ struct Batch {
 
   uint16_t ppg_n;
   uint16_t max_n;
-  uint16_t ppg[PPG_PER_BATCH];   // ADC mentah SEN0203 (0..4095, hasil oversample)
+  uint16_t ppg[PPG_PER_BATCH];   // ADC mentah SON1303 (0..4095, hasil oversample)
   uint32_t red[MAX_CAP];         // ADC mentah MAX30102 kanal RED (18-bit)
   uint32_t ir [MAX_CAP];         // ADC mentah MAX30102 kanal IR  (18-bit)
 
@@ -70,6 +74,49 @@ struct Batch {
   uint8_t  batt_pct;         // 0..100
   uint8_t  max_ovf;          // overflow FIFO MAX30102 selama batch ini
 };
+
+// ---------------------------------------------------------------------
+// SQI — penilaian kelayakan SATU package (dihitung di core 0, sqi.cpp)
+// ---------------------------------------------------------------------
+// Alasan tolak. Flag apa pun yang menyala = package langsung dibuang,
+// berapa pun skornya. Dikirim ke cloud sebagai "sqi_flags" supaya keputusan
+// firmware bisa diaudit dari sisi server.
+#define SQI_F_NO_FINGER  (1 << 0)   // DC IR terlalu rendah — sensor tidak menempel
+#define SQI_F_SATURATED  (1 << 1)   // DC kelewat tinggi / sampel mentok rel ADC
+#define SQI_F_FLAT       (1 << 2)   // nyaris tanpa riak — sensor macet / tidak ada denyut
+#define SQI_F_MOTION     (1 << 3)   // lompatan antar sampel berurutan tidak wajar
+#define SQI_F_PPG_BAD    (1 << 4)   // kanal SON1303 di luar batas wajar
+#define SQI_F_SHORT      (1 << 5)   // jumlah sampel kurang dari yang seharusnya
+
+struct Sqi {
+  uint8_t  score;       // 0..100 — MINIMUM sub-skor, bukan rata-ratanya
+  uint8_t  flags;       // 0 = bersih
+
+  uint32_t ir_dc;       // rerata IR (hanya penyebut normalisasi & telemetri)
+  uint32_t ir_p2p;      // puncak-ke-puncak IR
+  uint32_t ir_jump;     // lompatan TERBESAR antar dua sampel berurutan
+  uint16_t ir_jump_n;   // cacah sampel yang melompat >= ambang LUNAK
+  uint16_t ir_tort10;   // panjang lintasan / p2p, x10
+  uint16_t ir_pi;       // perfusi p2p/DC dalam per-mil
+
+  uint16_t ppg_dc;
+  uint16_t ppg_p2p;
+  uint16_t ppg_jump;
+  uint16_t ppg_jump_n;
+  uint16_t ppg_tort10;
+
+  uint16_t clip_n;      // cacah sampel yang mentok rel (IR + RED + PPG)
+};
+
+// true = package layak kirim. Tidak mengubah isi Batch sama sekali —
+// data yang dikirim tetap 100% mentah.
+bool sqiEvaluate(const Batch* b, Sqi* out);
+
+/* Alasan tolak jadi teks. Buffer WAJIB disediakan pemanggil (bukan statis di
+ * dalam fungsi): ini dipanggil dari loop() di core 1 DAN dari netTask di core 0,
+ * jadi buffer bersama akan saling menimpa. Kapasitas aman: 48 byte. */
+#define SQI_FLAGS_TEXT_CAP 48
+void sqiFlagsText(uint8_t flags, char* buf, size_t cap);
 
 // ---------------------------------------------------------------------
 // Status perangkat (menentukan pola kedip LED D10)
@@ -98,6 +145,12 @@ struct Stats {
   volatile uint32_t last_post_ms;     // durasi 1x POST; kalau > BATCH_MS, jaringan kalah cepat
   volatile uint32_t ppg_samples;
   volatile uint32_t max_samples;
+
+  // Gerbang SQI — package yang dibuang di sini TIDAK pernah menyentuh jaringan
+  volatile uint32_t sqi_pass;
+  volatile uint32_t sqi_reject;
+  volatile uint8_t  sqi_last_score;
+  volatile uint8_t  sqi_last_flags;
 };
 
 // ---------------------------------------------------------------------

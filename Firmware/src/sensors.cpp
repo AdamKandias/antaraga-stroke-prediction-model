@@ -3,7 +3,7 @@
  * =====================================================================
  * Isi file ini:
  *   1. Driver bare-metal MAX30102 (I2C, dibaca lewat FIFO)
- *   2. Lapisan ADC (SEN0203 + sensor tegangan baterai) dengan shim supaya
+ *   2. Lapisan ADC (SON1303 + sensor tegangan baterai) dengan shim supaya
  *      ikut ter-compile di Arduino core 2.x maupun 3.x
  *   3. sensorTask(): menunggu WiFi -> nyalakan sensor -> settle -> streaming
  *
@@ -120,14 +120,31 @@ static uint16_t adcOversample(AdcChan ch, uint8_t n) {
 #define MODE_RESET        0x40
 #define MODE_SPO2         0x03   // RED + IR
 
+/* BATAS KERAS CHIP: di mode SpO2 (2 LED) dengan pulse width 411 us, MAX30102
+ * hanya melayani SPO2_SR sampai 400 Hz. Meminta 800/1000 Hz tidak menghasilkan
+ * error — chip diam-diam meng-clamp ke 400 Hz, dan hasilnya laju keluaran nyata
+ * jadi separuh/seperempat dari yang tertulis di config (terlihat sebagai
+ * fs_max_ukur yang meleset jauh di baris [STAT]).
+ *
+ * Karena SR sudah mentok, SATU-SATUNYA tuas yang benar-benar bekerja di sini
+ * adalah SMP_AVE. Jadi CFG_SPO2 identik di kedua profil; yang berbeda hanya
+ * kedalaman averaging hardware-nya.
+ *
+ * Kalau PW diturunkan (misal ke 118 us) barulah SR > 400 Hz dilayani, tapi
+ * integrasi cahaya ikut anjlok dan arus LED harus dinaikkan besar-besaran —
+ * mahal untuk perangkat baterai, jadi PW sengaja dipertahankan 411 us. */
+#define CFG_SPO2          0x4F   // ADC_RGE=8192nA | SR=400Hz | PW=411us (18-bit)
+
 #if MAX_PROFILE_PWA
-  // ADC_RGE=8192nA | SR=800Hz | PW=411us, SMP_AVE=2 -> keluaran 400 Hz
-  #define CFG_SPO2        0x53
-  #define CFG_FIFO        0x30   // SMP_AVE=2 + ROLLOVER_EN
+  // Tanpa averaging: tiap sampel = satu pasang pulsa -> keluaran 400 Hz.
+  // Noise per sampel ~sqrt(2) lebih tinggi, tapi averaging hardware adalah
+  // low-pass di domain waktu yang menumpulkan upstroke & dicrotic notch —
+  // persis fitur yang dikejar PWA. Tekan noise di cloud, bukan di chip.
+  #define CFG_FIFO        0x10   // SMP_AVE=1 + ROLLOVER_EN
 #else
-  // ADC_RGE=8192nA | SR=1000Hz | PW=411us, SMP_AVE=4 -> keluaran 250 Hz
-  #define CFG_SPO2        0x57
-  #define CFG_FIFO        0x50   // SMP_AVE=4 + ROLLOVER_EN
+  // Averaging 2x di chip -> keluaran 200 Hz. Separuh bandwidth, SNR lebih baik,
+  // dan laju-nya sama dengan SON1303 sehingga kedua kanal sejajar.
+  #define CFG_FIFO        0x30   // SMP_AVE=2 + ROLLOVER_EN
 #endif
 
 static void maxWrite(uint8_t reg, uint8_t val) {
@@ -184,6 +201,23 @@ static bool maxBegin() {
 
 static void maxStart() { maxWrite(REG_MODE_CONFIG, MODE_SPO2); maxClearFifo(); }
 
+/* Diagnostik I2C: baca balik register konfigurasi dari chip. Dipanggil sekali
+ * saat start — murah, dan langsung memisahkan "salah setel" dari "salah kabel"
+ * kalau suatu saat data terlihat aneh. rev/part yang benar = 0x03 / 0x15. */
+static void maxDumpRegs(const char* tag) {
+  Serial.printf("[MAX] %-6s mode=0x%02X spo2=0x%02X fifo=0x%02X led1=0x%02X led2=0x%02X"
+                " | rev=0x%02X part=0x%02X\n",
+                tag, maxRead(REG_MODE_CONFIG), maxRead(REG_SPO2_CONFIG),
+                maxRead(REG_FIFO_CONFIG), maxRead(REG_LED1_PA), maxRead(REG_LED2_PA),
+                maxRead(0xFE), maxRead(REG_PART_ID));
+}
+
+/* 1 = cetak histogram isi FIFO + probe register 0x05 tiap detik. Dipakai untuk
+ * membuktikan bahwa OVF_COUNTER chip ini macet di 1 (lihat catatan di sekitar
+ * pemakaian max_ovf di bawah). JANGAN dinyalakan saat merekam data: blok ini
+ * menulis ke register dan mencetak dari task sensor. */
+#define DEBUG_FIFO 0
+
 /* Baca n sampel sekaligus. Tiap sampel 6 byte (RED 3 + IR 3). Dipecah per 16
  * sampel (96 byte) supaya muat di buffer Wire ESP32 (128 byte). */
 static uint8_t maxReadFifo(uint8_t n, uint32_t* red, uint32_t* ir) {
@@ -210,13 +244,14 @@ static uint8_t maxReadFifo(uint8_t n, uint32_t* red, uint32_t* ir) {
 // =====================================================================
 // 3. BATERAI — Vsens (A0) -> mV -> persen
 // =====================================================================
-/* Kurva pelepasan Li-Po 1S. Konversi linear 3,0-4,2 V salah besar karena
- * kurva Li-Po datar di tengah: 3,85 V itu ~50%, bukan ~71% seperti hasil
- * hitungan linear. Tabel ini diinterpolasi linear per segmen. */
+/* Kurva pelepasan Li-Po 1S untuk rentang kerja 3,3-4,2 V. Konversi linear
+ * salah besar karena kurva Li-Po datar di tengah: 3,85 V itu ~50%, bukan ~71%
+ * seperti hasil hitungan linear. Tabel ini diinterpolasi linear per segmen.
+ * Titik 0% dipatok 3300 mV sesuai batas bawah rentang yang dipakai. */
 static const struct { uint16_t mv; uint8_t pct; } kLipoCurve[] = {
   {4200,100},{4150, 95},{4110, 90},{4080, 85},{4020, 80},{3980, 75},{3950, 70},
   {3910, 65},{3870, 60},{3850, 55},{3840, 50},{3820, 45},{3800, 40},{3790, 35},
-  {3770, 30},{3750, 25},{3730, 20},{3710, 15},{3690, 10},{3610,  5},{3270,  0}
+  {3770, 30},{3750, 25},{3730, 20},{3710, 15},{3690, 10},{3610,  5},{3300,  0}
 };
 static const uint8_t kLipoN = sizeof(kLipoCurve) / sizeof(kLipoCurve[0]);
 
@@ -277,7 +312,7 @@ void sensorTask(void* arg) {
   Serial.println(F("[SENSOR] WiFi siap -> menyalakan sensor"));
 
   // --- Langkah 2: nyalakan sensor --------------------------------------
-  digitalWrite(PIN_SEN_EN, SEN_POWER_ON);      // D2 LOW -> P-MOS Q2 ON -> SEN0203 dapat 3V3
+  digitalWrite(PIN_SEN_EN, SEN_POWER_ON);      // D2 LOW -> P-MOS Q2 ON -> SON1303 dapat 3V3
 
   if (!adcInit()) {
     Serial.println(F("[SENSOR] FATAL: ADC1 gagal init."));
@@ -298,9 +333,10 @@ void sensorTask(void* arg) {
     vTaskDelete(nullptr);
   }
   maxStart();                                   // keluar dari shutdown, LED menyala
+  maxDumpRegs("start");
   setState(ST_SENSOR_WARMUP);
 
-  Serial.printf("[SENSOR] MAX30102 %d Hz, SEN0203 %d Hz (oversample %dx). Settle %d ms...\n",
+  Serial.printf("[SENSOR] MAX30102 %d Hz, SON1303 %d Hz (oversample %dx). Settle %d ms...\n",
                 MAX_FS_HZ, PPG_FS_HZ, PPG_OVERSAMPLE, SENSOR_SETTLE_MS);
 
   // --- Langkah 3: settle — sampel dibuang, bukan dikirim ----------------
@@ -342,7 +378,7 @@ void sensorTask(void* arg) {
       b->t0_unix_ms = unixMillis();
     }
 
-    // 4a. SEN0203 — satu titik PPG mentah
+    // 4a. SON1303 — satu titik PPG mentah
     b->ppg[b->ppg_n++] = adcOversample((AdcChan)ADC_CH_PPG, PPG_OVERSAMPLE);
     g_stats.ppg_samples++;
 
@@ -355,6 +391,44 @@ void sensorTask(void* arg) {
         g_stats.max_ovf_total += ovf;
       }
       uint8_t avail = (uint8_t)((wr - rd) & 0x1F);
+#if DEBUG_FIFO
+      /* Hipotesis yang diuji: kalau ovf nyata, produksi chip = terbaca + hilang.
+       * Histogram avail memberi tahu berapa sampel benar-benar menunggu tiap
+       * tick 5 ms — 1 = chip di 200 Hz, 2 = chip di 400 Hz. */
+      {
+        static uint32_t dT = 0, dTicks = 0, dOvfHit = 0, dOvfSum = 0, dGot = 0;
+        static uint32_t dHist[6] = {0};
+        static uint8_t  dOvfMax = 0, dWrLast = 0, dRdLast = 0, dOvfLast = 0;
+        dTicks++;
+        dHist[avail > 5 ? 5 : avail]++;
+        if (ovf) { dOvfHit++; dOvfSum += ovf; if (ovf > dOvfMax) dOvfMax = ovf; }
+        dWrLast = wr; dRdLast = rd; dOvfLast = ovf;
+        const uint32_t nowMs = millis();
+        if (dT == 0) dT = nowMs;
+        if (nowMs - dT >= 1000) {
+          Serial.printf("[FIFO] tick=%lu got=%lu | avail 0:%lu 1:%lu 2:%lu 3:%lu 4:%lu 5+:%lu"
+                        " | ovf hit=%lu sum=%lu max=%u | wr=%u rd=%u ovf=%u\n",
+                        (unsigned long)dTicks, (unsigned long)dGot,
+                        (unsigned long)dHist[0], (unsigned long)dHist[1],
+                        (unsigned long)dHist[2], (unsigned long)dHist[3],
+                        (unsigned long)dHist[4], (unsigned long)dHist[5],
+                        (unsigned long)dOvfHit, (unsigned long)dOvfSum, (unsigned)dOvfMax,
+                        (unsigned)dWrLast, (unsigned)dRdLast, (unsigned)dOvfLast);
+          /* Uji dekisif: baca 0x05 sebagai transaksi I2C TERPISAH (bukan bagian
+           * burst 0x04-0x06), lalu tulis 0 dan baca lagi. Kalau burst=1 tapi
+           * solo=0, artinya nilai itu artefak burst-read, bukan overflow. */
+          const uint8_t solo1 = maxRead(REG_OVF_COUNTER);
+          maxWrite(REG_OVF_COUNTER, 0);
+          const uint8_t solo2 = maxRead(REG_OVF_COUNTER);
+          maxDumpRegs("cek");
+          Serial.printf("[OVF ] burst=%u solo=%u setelah-clear=%u\n",
+                        (unsigned)dOvfLast, (unsigned)solo1, (unsigned)solo2);
+          dT = nowMs; dTicks = dGot = dOvfHit = dOvfSum = 0; dOvfMax = 0;
+          for (uint8_t k = 0; k < 6; k++) dHist[k] = 0;
+        }
+        dGot += (avail > 32 ? 32 : avail);
+      }
+#endif
       if (avail) {
         uint8_t got = maxReadFifo(avail > 32 ? 32 : avail, scratchRed, scratchIr);
         for (uint8_t i = 0; i < got; i++) {

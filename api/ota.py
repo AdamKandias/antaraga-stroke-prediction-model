@@ -91,9 +91,13 @@ def list_firmware() -> list:
 async def upload_firmware(
     name: str = Query(default=""),
     description: str = Query(default=""),
+    version: str = Query(default=""),
     file: UploadFile = ...,
 ) -> dict:
-    """Upload file .bin hasil pio run. Belum langsung di-deploy — pilih dulu device-nya."""
+    """Upload file .bin hasil pio run. Belum langsung di-deploy — pilih dulu device-nya.
+
+    `version` harus sama persis dengan FW_VERSION di config.h agar anti-loop reflash bekerja.
+    """
     if not (file.filename or "").endswith(".bin"):
         raise HTTPException(400, "File harus berekstensi .bin")
     content = await file.read()
@@ -103,9 +107,11 @@ async def upload_firmware(
     fw_id = uuid.uuid4().hex[:12]
     (_OTA_DIR / f"{fw_id}.bin").write_bytes(content)
 
+    resolved_name = name.strip() or file.filename or fw_id
     meta = _load_meta()
     meta[fw_id] = {
-        "name": name.strip() or file.filename or fw_id,
+        "name": resolved_name,
+        "version": version.strip() or resolved_name,
         "description": description.strip(),
         "original_filename": file.filename or "",
         "size": len(content),
@@ -121,6 +127,7 @@ def update_firmware(
     fw_id: str,
     name: str = Query(default=None),
     description: str = Query(default=None),
+    version: str = Query(default=None),
 ) -> dict:
     meta = _load_meta()
     if fw_id not in meta:
@@ -129,6 +136,8 @@ def update_firmware(
         meta[fw_id]["name"] = name.strip()
     if description is not None:
         meta[fw_id]["description"] = description.strip()
+    if version is not None:
+        meta[fw_id]["version"] = version.strip()
     _save_meta(meta)
     return {"ok": True, **meta[fw_id]}
 
@@ -204,18 +213,26 @@ def device_ota_status(device_id: str = Query(...)) -> dict:
 @router.get("/v1/ota/check")
 def ota_check(
     device_id: str = Query(...),
+    fw: str = Query(default=""),  # versi firmware yang sedang berjalan di device (dikirim firmware)
     authorization: str = Header(default=""),
 ) -> dict:
-    """Dipanggil firmware setiap OTA_CHECK_INTERVAL_MS: ada update yang menunggu?"""
+    """Dipanggil firmware setiap OTA_CHECK_INTERVAL_MS: ada update yang menunggu?
+
+    Mengembalikan {"pending": true, "fw": "1.1.0"} supaya firmware bisa membandingkan
+    dengan FW_VERSION-nya sendiri dan tidak reflash versi yang sama berulang kali.
+    """
     _verify_key(authorization)
     state = _load_state()
+    meta = _load_meta()
     fw_id = state.get(device_id, {}).get("pending")
     if fw_id and not (_OTA_DIR / f"{fw_id}.bin").exists():
-        # File hilang — bersihkan state
         state[device_id].pop("pending", None)
         _save_state(state)
         fw_id = None
-    return {"pending": fw_id is not None}
+    if not fw_id:
+        return {"pending": False}
+    pending_version = meta.get(fw_id, {}).get("version", "")
+    return {"pending": True, "fw": pending_version}
 
 
 @router.get("/v1/ota/firmware")
@@ -242,6 +259,7 @@ def ota_firmware_download(
 @router.post("/v1/ota/ack")
 def ota_ack(
     device_id: str = Query(...),
+    fw: str = Query(default=""),  # FW_VERSION yang baru saja dipasang (dikirim firmware)
     authorization: str = Header(default=""),
 ) -> dict:
     """Dipanggil firmware setelah flash berhasil: tandai installed, clear pending."""

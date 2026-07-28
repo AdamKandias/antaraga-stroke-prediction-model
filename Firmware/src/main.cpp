@@ -2,7 +2,7 @@
  * ANTARAGA Smartband — FIRMWARE UTAMA (streaming ke cloud)
  * =====================================================================
  * Board   : Seeed XIAO ESP32-S3
- * Sensor  : MAX30102 (I2C, FIFO)  +  SEN0203 (PPG analog)
+ * Sensor  : MAX30102 (I2C, FIFO)  +  SON1303 (PPG analog)
  * Metode  : streaming — data MENTAH dikirim terus-menerus via HTTPS
  *
  * ALGORITMA
@@ -10,7 +10,7 @@
  *   1. CORE 0 (netTask)   : nyalakan WiFi, cari & sambung AP, sinkron NTP.
  *   2. CORE 1 (sensorTask): menunggu sinyal "WiFi OK", lalu menyalakan
  *                           MAX30102 (keluar shutdown, baca via FIFO) dan
- *                           SEN0203 (D2 di-LOW-kan -> P-MOSFET Q2 nyambung).
+ *                           SON1303 (D2 di-LOW-kan -> P-MOSFET Q2 nyambung).
  *   3. Tunggu SENSOR_SETTLE_MS (1 dtk): sampel dibuang, jadi noise transien
  *      power-on tidak ikut terkirim.
  *   4. Streaming: sensorTask mengisi Batch -> netTask POST HTTPS ke cloud.
@@ -21,7 +21,7 @@
  * PETA PIN (skematik ANTARAGA -> XIAO ESP32-S3)
  * ---------------------------------------------------------------------
  *   D0 / A0  GPIO1  Vsens     <- R1/R2 100k dari Vbatt (Vsens = Vbatt/2)
- *   D1 / A1  GPIO2  SIG_PPG   <- keluaran analog SEN0203 (J2 SON1303)
+ *   D1 / A1  GPIO2  SIG_PPG   <- keluaran analog SON1303 (J2)
  *   D2       GPIO3  SEN_EN    -> gate Q2 DMP2130L (P-MOS). LOW = sensor ON
  *   D4       GPIO5  SDA       <-> MAX30102 (J3)
  *   D5       GPIO6  SCL       <-> MAX30102 (J3)
@@ -38,6 +38,7 @@
 
 #include "antaraga.h"
 #include <WiFi.h>     // hanya untuk WiFi.RSSI() di baris [STAT]
+#include <esp_ota_ops.h>   // hanya untuk menampilkan partisi aktif di banner
 
 // =====================================================================
 // Objek global
@@ -137,6 +138,17 @@ static void printStats() {
     (unsigned long)g_stats.max_ovf_total, (unsigned long)g_stats.ppg_overrun,
     (unsigned long)g_stats.max_trunc);
 
+  /* Gerbang SQI. lolos+tolak = package yang sempat dinilai; sisanya terhadap
+   * batch made adalah yang keburu dibuang di pool karena jaringan tertinggal. */
+  const uint32_t sqiTot = g_stats.sqi_pass + g_stats.sqi_reject;
+  char sqiWhy[SQI_FLAGS_TEXT_CAP];
+  sqiFlagsText(g_stats.sqi_last_flags, sqiWhy, sizeof(sqiWhy));
+  Serial.printf(
+    "       sqi lolos=%lu tolak=%lu (%lu%%) | skor terakhir=%u alasan=%s\n",
+    (unsigned long)g_stats.sqi_pass, (unsigned long)g_stats.sqi_reject,
+    (unsigned long)(sqiTot ? g_stats.sqi_pass * 100UL / sqiTot : 0),
+    (unsigned)g_stats.sqi_last_score, sqiWhy);
+
   Serial.printf(
     "       batt=%u mV (%u%%) | rssi=%d dBm | heap=%lu\n",
     (unsigned)g_battMv, (unsigned)g_battPct,
@@ -150,8 +162,8 @@ void setup() {
   /* LED & power-gate sensor: amankan dulu sebelum apa pun.
    * digitalWrite DULU baru pinMode — kalau dibalik, pin sempat menggerakkan
    * LOW (level default output) beberapa mikrodetik, dan LOW di D2 = MOSFET
-   * nyambung, alias SEN0203 sempat berkedut hidup. */
-  digitalWrite(PIN_SEN_EN, SEN_POWER_OFF);   // SEN0203 tetap mati sampai WiFi siap
+   * nyambung, alias SON1303 sempat berkedut hidup. */
+  digitalWrite(PIN_SEN_EN, SEN_POWER_OFF);   // SON1303 tetap mati sampai WiFi siap
   pinMode(PIN_SEN_EN, OUTPUT);
   digitalWrite(PIN_SEN_EN, SEN_POWER_OFF);
   digitalWrite(PIN_LED, LOW);
@@ -164,10 +176,12 @@ void setup() {
   Serial.println(F("\n\n======================================"));
   Serial.println(F("  ANTARAGA Smartband — mode STREAMING"));
   Serial.println(F("======================================"));
+  Serial.printf("Firmware : %s  (partisi %s)\n", FW_VERSION,
+                esp_ota_get_running_partition() ? esp_ota_get_running_partition()->label : "?");
   Serial.printf("Device   : %s\n", DEVICE_ID);
   Serial.printf("Endpoint : https://%s:%d%s\n", CLOUD_HOST, CLOUD_PORT, CLOUD_PATH);
   Serial.printf("MAX30102 : %d Hz (RED+IR, FIFO)\n", MAX_FS_HZ);
-  Serial.printf("SEN0203  : %d Hz (oversample %dx, pin A1/GPIO2)\n",
+  Serial.printf("SON1303  : %d Hz (oversample %dx, pin A1/GPIO2)\n",
                 PPG_FS_HZ, PPG_OVERSAMPLE);
   Serial.printf("Batch    : %d ms -> %d ppg + ~%d max/kanal, pool %d (~%d ms buffer)\n",
                 BATCH_MS, PPG_PER_BATCH, MAX_PER_BATCH, BATCH_POOL,

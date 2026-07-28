@@ -309,9 +309,15 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
         </div>
       </div>
     </div>
-    <div style="margin-bottom:12px">
-      <label class="up-label">Deskripsi (opsional — tulis config utama, apa yang berubah)</label>
-      <input id="fwUpDesc" type="text" class="up-input" placeholder="mis. OTA aktif, CLOUD_HOST=api.antaraga.web.id, fix sensor settle">
+    <div class="up-grid" style="margin-bottom:10px">
+      <div>
+        <label class="up-label">Versi <span style="font-size:10px;color:var(--muted)">(harus sama dengan FW_VERSION di config.h)</span></label>
+        <input id="fwUpVersion" type="text" class="up-input" placeholder="mis. 1.1.0">
+      </div>
+      <div>
+        <label class="up-label">Deskripsi (opsional)</label>
+        <input id="fwUpDesc" type="text" class="up-input" placeholder="mis. tambah SQI, fix sensor settle">
+      </div>
     </div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <button class="btn" onclick="fwUpload()">⬆️ Upload</button>
@@ -344,9 +350,13 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
         <input id="fwEditName" type="text" class="up-input">
       </div>
       <div>
-        <label class="up-label">Deskripsi</label>
-        <input id="fwEditDesc" type="text" class="up-input">
+        <label class="up-label">Versi <span style="font-size:10px;color:var(--muted)">(sama dengan FW_VERSION di config.h)</span></label>
+        <input id="fwEditVersion" type="text" class="up-input" placeholder="mis. 1.1.0">
       </div>
+    </div>
+    <div style="margin-bottom:10px">
+      <label class="up-label">Deskripsi</label>
+      <input id="fwEditDesc" type="text" class="up-input">
     </div>
     <input type="hidden" id="fwEditId">
     <div style="display:flex;gap:8px">
@@ -794,7 +804,7 @@ function renderFwLibrary(bins) {
     return `<div class="fw-item">
       <div class="fw-icon">💾</div>
       <div class="fw-body">
-        <div class="fw-name">${escH(fw.name)}</div>
+        <div class="fw-name">${escH(fw.name)}${fw.version ? ` <span style="font-size:11px;color:var(--muted);font-weight:normal">v${escH(fw.version)}</span>` : ''}</div>
         ${fw.description ? `<div class="fw-desc">${escH(fw.description)}</div>` : ''}
         <div class="fw-meta">
           <span>${sizeKB} KB</span>
@@ -806,7 +816,7 @@ function renderFwLibrary(bins) {
       <div class="fw-btns">
         <button class="btn btn-ok btn-sm" onclick="fwShowDeploy('${fw.id}','${escH(fw.name)}')"
           ${!fw.bin_exists?'disabled':''}>⚡ Deploy</button>
-        <button class="btn-sec btn-sm" onclick="fwShowEdit('${fw.id}','${escH(fw.name)}','${escH(fw.description||'')}')">✎</button>
+        <button class="btn-sec btn-sm" onclick="fwShowEdit('${fw.id}','${escH(fw.name)}','${escH(fw.version||'')}','${escH(fw.description||'')}')">✎</button>
         <button class="btn-del" onclick="fwDelete('${fw.id}','${escH(fw.name)}')">🗑</button>
       </div>
     </div>`;
@@ -827,6 +837,7 @@ function fwFileChosen(inp) {
 async function fwUpload() {
   const name = document.getElementById('fwUpName').value.trim();
   const desc = document.getElementById('fwUpDesc').value.trim();
+  const version = document.getElementById('fwUpVersion').value.trim();
   const fileInp = document.getElementById('fwUpFile');
   const msgEl = document.getElementById('fwUpMsg');
   if (!fileInp.files.length) { alert('Pilih file .bin terlebih dahulu'); return; }
@@ -839,15 +850,14 @@ async function fwUpload() {
   msgEl.textContent = 'Mengupload…';
 
   try {
-    const r = await fetch(
-      `/v1/ota/bins?name=${encodeURIComponent(name)}&description=${encodeURIComponent(desc)}`,
-      { method: 'POST', body: fd }
-    );
+    const params = new URLSearchParams({ name, description: desc, version });
+    const r = await fetch(`/v1/ota/bins?${params}`, { method: 'POST', body: fd });
     const d = await r.json();
     if (r.ok) {
       msgEl.style.color = 'var(--c1)';
       msgEl.textContent = `✓ Upload berhasil — ${(d.size/1024).toFixed(0)} KB`;
       document.getElementById('fwUpName').value = '';
+      document.getElementById('fwUpVersion').value = '';
       document.getElementById('fwUpDesc').value = '';
       document.getElementById('fwUpFileName').textContent = 'belum dipilih';
       fileInp.value = '';
@@ -897,9 +907,10 @@ async function fwDoDeploy() {
 }
 
 // ── Edit ────────────────────────────────────────────────────────────
-function fwShowEdit(id, name, desc) {
+function fwShowEdit(id, name, version, desc) {
   document.getElementById('fwEditId').value = id;
   document.getElementById('fwEditName').value = name;
+  document.getElementById('fwEditVersion').value = version;
   document.getElementById('fwEditDesc').value = desc;
   document.getElementById('fwEditMsg').style.display = 'none';
   document.getElementById('fwEditPanel').style.display = '';
@@ -911,13 +922,12 @@ function fwHideEdit() { document.getElementById('fwEditPanel').style.display = '
 async function fwDoEdit() {
   const id = document.getElementById('fwEditId').value;
   const name = document.getElementById('fwEditName').value.trim();
+  const version = document.getElementById('fwEditVersion').value.trim();
   const desc = document.getElementById('fwEditDesc').value.trim();
   const msgEl = document.getElementById('fwEditMsg');
   try {
-    const r = await fetch(
-      `/v1/ota/bins/${id}?name=${encodeURIComponent(name)}&description=${encodeURIComponent(desc)}`,
-      { method: 'PATCH' }
-    );
+    const params = new URLSearchParams({ name, version, description: desc });
+    const r = await fetch(`/v1/ota/bins/${id}?${params}`, { method: 'PATCH' });
     if (r.ok) {
       msgEl.style.display = 'inline';
       msgEl.style.color = 'var(--c1)';
