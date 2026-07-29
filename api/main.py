@@ -795,6 +795,9 @@ def ingest_latest_dashboard(device_id: str, db: Session = Depends(get_db)) -> di
     # --- Stage 4: XGBoost (ambil dari DB) ---
     stage_xgb = _compute_xgboost(device_id, db)
 
+    # --- BPM Engine: port algoritma firmware (peak detection + median IBI) ---
+    stage_bpm = _compute_bpm_engine(all_ppg, fs_ppg)
+
     return {
         "device_id": device_id,
         "seq": latest.get("seq", 0),
@@ -805,6 +808,7 @@ def ingest_latest_dashboard(device_id: str, db: Session = Depends(get_db)) -> di
         "pwa": stage_pwa,
         "mlp": stage_mlp,
         "xgboost": stage_xgb,
+        "bpm_engine": stage_bpm,
     }
 
 
@@ -875,6 +879,21 @@ def _compute_pwa(ppg: list, red: list, ir: list, fs_ppg: int, fs_max: int) -> di
             result["note"] = f"Ekstraksi fitur gagal: {exc}"
 
     return result
+
+
+def _compute_bpm_engine(ppg: list, fs: int) -> dict:
+    """Port algoritma bpm.cpp: peak detection + median IBI → BPM + HRV kasar."""
+    if not ppg:
+        return {"bpm": None, "conf": 0, "status": "TIDAK_ADA_DATA",
+                "ibi_list": [], "ibi_med_ms": None, "sdnn_ms": None,
+                "beats": 0, "rejects": 0, "peaks": [], "filtered": []}
+    try:
+        from api.bpm_engine import compute_bpm
+        return compute_bpm(ppg, float(fs or 200))
+    except Exception as exc:
+        return {"bpm": None, "conf": 0, "status": f"ERROR: {exc}",
+                "ibi_list": [], "ibi_med_ms": None, "sdnn_ms": None,
+                "beats": 0, "rejects": 0, "peaks": [], "filtered": []}
 
 
 def _compute_mlp(ppg: list, red: list, ir: list, fs_ppg: int) -> dict:

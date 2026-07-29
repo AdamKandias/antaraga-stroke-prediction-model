@@ -169,7 +169,6 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 .al-device.al-nodev{color:var(--muted)}
 .al-ip{color:var(--muted);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .al-lat{color:var(--muted);font-size:10px;text-align:right}
-.al-f-btn{opacity:.55}.al-f-btn.on{opacity:1;border-color:var(--c1);color:var(--c1)}
 </style>
 </head>
 <body>
@@ -215,18 +214,33 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 
 <!-- ── TAB 1: Raw ── -->
 <div id="p-raw" class="pane on">
+  <div id="rawBpm"></div>
   <div class="card">
-    <div class="card-ttl">PPG — SEN0203 (Green Photodiode, ADC 12-bit 0–4095)</div>
+    <div class="card-ttl">PPG Terfilter — Bandpass 0.5–5 Hz · Algoritma Firmware (Puncak: ●)</div>
+    <div class="cw"><canvas id="cPpgFilt"></canvas></div>
+    <div class="leg">
+      <div class="li"><div class="ld" style="background:var(--c1)"></div>PPG Terfilter</div>
+      <div class="li"><div class="lp" style="background:var(--c4)"></div>Puncak sistol</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-ttl">PPG Mentah — SEN0203 (Green Photodiode, ADC 12-bit 0–4095)</div>
     <div class="cw"><canvas id="cPpg"></canvas></div>
     <div class="leg">
       <div class="li"><div class="ld" style="background:var(--c1)"></div>PPG (SEN0203)</div>
     </div>
   </div>
   <div class="card">
-    <div class="card-ttl">MAX30102 — RED &amp; IR (ADC 18-bit 0–262143)</div>
-    <div class="cw"><canvas id="cMax"></canvas></div>
+    <div class="card-ttl">MAX30102 — RED (ADC 18-bit 0–262143)</div>
+    <div class="cw"><canvas id="cMaxRed"></canvas></div>
     <div class="leg">
       <div class="li"><div class="ld" style="background:var(--c2)"></div>RED</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-ttl">MAX30102 — IR (ADC 18-bit 0–262143)</div>
+    <div class="cw"><canvas id="cMaxIr"></canvas></div>
+    <div class="leg">
       <div class="li"><div class="ld" style="background:var(--c3)"></div>IR</div>
     </div>
   </div>
@@ -435,15 +449,38 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 <div id="p-access-log" class="pane">
   <div class="card">
     <!-- Header bar -->
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
       <span class="card-ttl" style="margin:0">Log Akses Real-time</span>
       <span id="alDot" style="font-size:11px;padding:2px 8px;border-radius:10px;
         background:var(--surface2);color:var(--muted)">⏸ Tidak aktif</span>
-      <div style="margin-left:auto;display:flex;gap:6px">
-        <button class="btn-sec btn-sm al-f-btn on" onclick="alSetFilter('all',this)">Semua</button>
-        <button class="btn-sec btn-sm al-f-btn"    onclick="alSetFilter('device',this)">Device</button>
-        <button class="btn-sec btn-sm al-f-btn"    onclick="alSetFilter('error',this)">Error 4xx/5xx</button>
-      </div>
+    </div>
+    <!-- Filter row -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <span style="font-size:11px;color:var(--muted)">Filter:</span>
+      <!-- Method -->
+      <select id="alFMethod" class="up-input" style="width:auto;font-size:11px;padding:3px 6px"
+        onchange="alRerender()">
+        <option value="">Semua Method</option>
+        <option value="GET">GET</option>
+        <option value="POST">POST</option>
+        <option value="PATCH">PATCH</option>
+        <option value="DELETE">DELETE</option>
+      </select>
+      <!-- Status -->
+      <select id="alFStatus" class="up-input" style="width:auto;font-size:11px;padding:3px 6px"
+        onchange="alRerender()">
+        <option value="">Semua Status</option>
+        <option value="2">2xx Sukses</option>
+        <option value="4">4xx Client Error</option>
+        <option value="5">5xx Server Error</option>
+      </select>
+      <!-- Device ID -->
+      <select id="alFDevice" class="up-input" style="width:auto;font-size:11px;padding:3px 6px"
+        onchange="alRerender()">
+        <option value="">Semua Device</option>
+        <option value="__no_device__">Tanpa Device ID</option>
+      </select>
+      <button class="btn-sec btn-sm" style="font-size:11px" onclick="alClearFilter()">✕ Reset</button>
     </div>
     <!-- Stats strip -->
     <div style="display:flex;gap:18px;margin-bottom:10px;font-size:12px;font-family:monospace">
@@ -514,6 +551,18 @@ function initCharts() {
   if (ready) return;
   ready = true;
 
+  // PPG Terfilter (algoritma firmware) — line + scatter puncak
+  charts.ppgFilt = new Chart(document.getElementById('cPpgFilt'), {
+    type: 'line',
+    data: {
+      datasets: [
+        { type: 'line',    label: 'PPG Terfilter', data: [], borderColor: '#199e70', borderWidth: 1.5, pointRadius: 0, tension: 0 },
+        { type: 'scatter', label: 'Puncak',         data: [], backgroundColor: '#fab219', pointRadius: 5, pointHoverRadius: 7 }
+      ]
+    },
+    options: deepOpt()
+  });
+
   // Raw PPG
   charts.ppg = new Chart(document.getElementById('cPpg'), {
     type: 'line',
@@ -521,15 +570,15 @@ function initCharts() {
     options: deepOpt()
   });
 
-  // Raw MAX30102 (2 series — adjacent pair, slots 2&3 in order are safe)
-  charts.max = new Chart(document.getElementById('cMax'), {
+  charts.maxRed = new Chart(document.getElementById('cMaxRed'), {
     type: 'line',
-    data: {
-      datasets: [
-        { label: 'RED', data: [], borderColor: '#e66767', borderWidth: 1.5, pointRadius: 0, tension: 0 },
-        { label: 'IR',  data: [], borderColor: '#9085e9', borderWidth: 1.5, pointRadius: 0, tension: 0 }
-      ]
-    },
+    data: { datasets: [{ label: 'RED', data: [], borderColor: '#e66767', borderWidth: 1.5, pointRadius: 0, tension: 0 }] },
+    options: deepOpt()
+  });
+
+  charts.maxIr = new Chart(document.getElementById('cMaxIr'), {
+    type: 'line',
+    data: { datasets: [{ label: 'IR', data: [], borderColor: '#9085e9', borderWidth: 1.5, pointRadius: 0, tension: 0 }] },
     options: deepOpt()
   });
 
@@ -624,7 +673,7 @@ function updateAll(d) {
   document.getElementById('nppg').textContent = `${d.raw.n_ppg} sp · ${d.raw.fs_ppg} Hz`;
   document.getElementById('nmax').textContent = `${d.raw.n_max} sp · ${d.raw.fs_max} Hz`;
 
-  renderRaw(d.raw);
+  renderRaw(d.raw, d.bpm_engine || {});
   renderPwa(d.pwa);
   renderMlp(d.mlp);
   renderXgb(d.xgboost);
@@ -636,10 +685,63 @@ function setStatus(state, msg) {
 }
 
 // ── Raw ──
-function renderRaw(r) {
-  if (r.ppg.length) upd(charts.ppg, makeXY(r.ppg));
-  if (r.red.length) upd(charts.max, makeXY(r.red), makeXY(r.ir));
+function renderRaw(r, bpm_engine) {
+  const be = bpm_engine || {};
 
+  // ── Grafik PPG terfilter + puncak (dari algoritma firmware) ─────────────
+  if (be.filtered && be.filtered.length) {
+    const line   = makeXY(be.filtered);
+    const peaks  = (be.peaks || []).map(i => ({ x: i, y: be.filtered[i] }));
+    upd(charts.ppgFilt, line, peaks);
+  }
+
+  // ── Grafik PPG mentah ─────────────────────────────────────────────────
+  if (r.ppg.length) upd(charts.ppg, makeXY(r.ppg));
+  if (r.red.length) upd(charts.maxRed, makeXY(r.red));
+  if (r.ir.length)  upd(charts.maxIr,  makeXY(r.ir));
+
+  // ── Tile BPM + metrik ─────────────────────────────────────────────────
+  const bpmEl = document.getElementById('rawBpm');
+  if (bpmEl) {
+    const bpm    = be.bpm;
+    const conf   = be.conf ?? 0;
+    const status = be.status ?? '—';
+    const sdnn   = be.sdnn_ms;
+    const beats  = be.beats ?? 0;
+    const ibi    = be.ibi_med_ms;
+
+    const statusColor = status === 'LOCKED'   ? 'var(--c1)'
+                      : status === 'NOISY'    ? '#e0a020'
+                      : status === 'SEARCHING'? '#888'
+                      : '#aaa';
+    const confBar = `<div style="height:4px;border-radius:2px;background:linear-gradient(90deg,${statusColor} ${conf}%,rgba(128,128,128,.2) ${conf}%);margin-top:6px"></div>`;
+
+    bpmEl.innerHTML = `<div class="tiles" style="margin-bottom:12px">
+      <div class="tile" style="border-color:rgba(25,158,112,.3)">
+        <div class="lbl">BPM · Algoritma Firmware</div>
+        <div class="val" style="font-size:40px;color:${statusColor}">${bpm != null ? bpm.toFixed(1) : '—'}</div>
+        <div class="unit">denyut / menit</div>
+        ${confBar}
+      </div>
+      <div class="tile">
+        <div class="lbl">Keyakinan</div>
+        <div class="val" style="font-size:32px">${conf}<span style="font-size:16px;opacity:.6">/100</span></div>
+        <div class="unit" style="color:${statusColor}">${status}</div>
+      </div>
+      <div class="tile">
+        <div class="lbl">SDNN (HRV)</div>
+        <div class="val" style="font-size:32px">${sdnn != null ? sdnn.toFixed(1) : '—'}</div>
+        <div class="unit">ms · ${beats} denyut</div>
+      </div>
+      <div class="tile">
+        <div class="lbl">IBI Median</div>
+        <div class="val" style="font-size:32px">${ibi != null ? ibi.toFixed(0) : '—'}</div>
+        <div class="unit">ms</div>
+      </div>
+    </div>`;
+  }
+
+  // ── Metadata batch ────────────────────────────────────────────────────
   const ovf = r.ovf > 0 ? `<b style="color:var(--critical)">${r.ovf}</b>` : '0';
   document.getElementById('rawMeta').innerHTML = `
     <tr><td>PPG (SEN0203)</td><td>${r.n_ppg} sampel @ ${r.fs_ppg} Hz · resolusi 12-bit</td></tr>
@@ -1162,9 +1264,10 @@ setTimeout(async () => {
 // ═══════════════════════════════════════════════
 //  ACCESS LOG — real-time via SSE
 // ═══════════════════════════════════════════════
-let _alEsrc = null, _alFilter = 'all', _alAutoScroll = true;
+let _alEsrc = null, _alAutoScroll = true;
 const _alStat = {tot:0, s2:0, s4:0, s5:0, dev:0};
 const _alBuf  = [];   // semua baris untuk re-filter
+const _alDevices = new Set();  // device ID unik yang pernah muncul
 
 function alParse(raw) {
   // format: "2026-07-30 14:23:01,452 103.24.58.36 "POST /v1/ingest" 200 87ms[ device=antaraga-001]"
@@ -1190,25 +1293,62 @@ function alRowHtml(p) {
   </div>`;
 }
 
+function alGetFilters() {
+  return {
+    method: document.getElementById('alFMethod')?.value || '',
+    status: document.getElementById('alFStatus')?.value || '',
+    device: document.getElementById('alFDevice')?.value || '',
+  };
+}
+
 function alVisible(p) {
   if (!p) return false;
-  if (_alFilter === 'device') return /\/v1\/ingest|\/v1\/ota/.test(p.path);
-  if (_alFilter === 'error')  return p.status >= 400;
+  const f = alGetFilters();
+  if (f.method && p.method !== f.method) return false;
+  if (f.status && !String(p.status).startsWith(f.status)) return false;
+  if (f.device === '__no_device__' && p.device) return false;
+  if (f.device && f.device !== '__no_device__' && p.device !== f.device) return false;
   return true;
+}
+
+function alAddDeviceOption(id) {
+  if (!id || _alDevices.has(id)) return;
+  _alDevices.add(id);
+  const sel = document.getElementById('alFDevice');
+  const opt = document.createElement('option');
+  opt.value = id; opt.textContent = id;
+  sel.appendChild(opt);
+}
+
+function alRerender() {
+  const feed = document.getElementById('alFeed');
+  feed.innerHTML = '';
+  _alBuf.forEach(({raw, p}) => {
+    if (!alVisible(p)) return;
+    feed.insertAdjacentHTML('beforeend', p ? alRowHtml(p)
+      : `<div style="color:var(--muted);font-size:10px;padding:2px 6px">${escH(raw)}</div>`);
+  });
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function alClearFilter() {
+  document.getElementById('alFMethod').value = '';
+  document.getElementById('alFStatus').value = '';
+  document.getElementById('alFDevice').value = '';
+  alRerender();
 }
 
 function alAppend(raw, prepend) {
   const p = alParse(raw);
   _alBuf.push({raw, p});
 
-  // stats (count tapi jangan double-count history saat re-filter)
   if (!prepend) {
     _alStat.tot++;
     if (p) {
       if (p.status < 300) _alStat.s2++;
       else if (p.status < 500) _alStat.s4++;
       else _alStat.s5++;
-      if (p.device) _alStat.dev++;
+      if (p.device) { _alStat.dev++; alAddDeviceOption(p.device); }
     }
     document.getElementById('alTot').textContent = _alStat.tot;
     document.getElementById('al2x').textContent  = _alStat.s2;
@@ -1227,17 +1367,6 @@ function alAppend(raw, prepend) {
   }
 }
 
-function alSetFilter(f, btn) {
-  _alFilter = f;
-  document.querySelectorAll('.al-f-btn').forEach(b => b.classList.remove('on'));
-  btn.classList.add('on');
-  // re-render
-  const feed = document.getElementById('alFeed');
-  feed.innerHTML = '';
-  _alBuf.forEach(({raw, p}) => { if (alVisible(p)) feed.insertAdjacentHTML('beforeend',
-    p ? alRowHtml(p) : `<div style="color:var(--muted);font-size:10px;padding:2px 6px">${escH(raw)}</div>`); });
-  feed.scrollTop = feed.scrollHeight;
-}
 
 function alConnect() {
   if (_alEsrc) return;

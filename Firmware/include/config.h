@@ -1,247 +1,231 @@
 /**
- * ANTARAGA Smartband — KONFIGURASI
+ * ANTARAGA BPM — KONFIGURASI
  * =====================================================================
- * SATU-SATUNYA file yang perlu kamu edit untuk operasional harian.
- * Isi bagian [WAJIB DIISI] sebelum flash.
+ * Program ini menghitung BPM DI PERANGKAT dari SON1303 saja. MAX30102,
+ * WiFi, dan cloud tidak dipakai.
+ *
+ * Bagian [AKUISISI] SENGAJA identik dengan ../Firmware/include/config.h.
+ * Itu inti programnya: BPM di sini dihitung dari deretan angka yang PERSIS
+ * sama dengan yang dikirim firmware streaming ke cloud (pin, laju sampel,
+ * kedalaman oversample, atenuasi & lebar ADC). Jadi kalau angka di sini
+ * meleset dari hasil analisis cloud, penyebabnya algoritma — bukan beda
+ * cara mencuplik.
+ *
+ * Kalau kamu mengubah PPG_FS_HZ / PPG_OVERSAMPLE di ../Firmware, ubah juga
+ * di sini. Koefisien filter dihitung ulang otomatis dari PPG_FS_HZ, jadi
+ * band-pass-nya tidak akan bergeser diam-diam (lihat src/bpm.cpp).
  */
 #pragma once
 
 // =====================================================================
-// [WAJIB DIISI]  WiFi
+// Pin — XIAO ESP32-S3 (nama silkscreen -> GPIO), sesuai skematik ANTARAGA
 // =====================================================================
-#define WIFI_SSID "miaw"
-#define WIFI_PASS "keputihtegaltimur1"
-#define WIFI_CONNECT_TIMEOUT_MS 20000 // batas 1x percobaan connect
-#define WIFI_RETRY_DELAY_MS 3000      // jeda antar percobaan
+#define PIN_SIG_PPG        2    // D1 / A1  <- keluaran analog SON1303 (J2)
+#define PIN_SEN_EN         3    // D2       -> gate Q2 (DMP2130L, P-MOS): LOW = sensor ON
+#define PIN_LED            9    // D10      -> LED via R6 10k (HIGH = nyala)
+
+#define SEN_POWER_ON       LOW  // Q2 P-channel: gate ditarik LOW -> tersambung
+#define SEN_POWER_OFF      HIGH // R5 100k pull-up ke 3V3 -> default mati saat boot
 
 // =====================================================================
-// [WAJIB DIISI]  Endpoint cloud (HTTPS)
+// [AKUISISI] SON1303 — sama persis dengan varian streaming
 // =====================================================================
-#define DEVICE_ID "antaraga-001"
-#define CLOUD_HOST "api.antaraga.web.id"
-#define CLOUD_PORT 443
-#define CLOUD_PATH "/v1/ingest"
+#define PPG_FS_HZ          200  // WAJIB pembagi bulat 1000 (200 -> 5 ms)
+#define PPG_PERIOD_MS      (1000 / PPG_FS_HZ)
 
-// Dikirim sebagai header  "Authorization: Bearer <key>".
-// Kosongkan ("") kalau endpoint tidak butuh auth.
-#define CLOUD_API_KEY "antaraga-hw-2026-01"
-
-// 1 = TLS tanpa verifikasi sertifikat (cepat, cocok untuk development).
-// 0 = verifikasi pakai CLOUD_ROOT_CA di bawah (WAJIB untuk produksi).
-#define CLOUD_INSECURE_TLS 1
-#define CLOUD_ROOT_CA nullptr // tempel PEM root CA di sini bila INSECURE=0
-
-#define HTTP_TIMEOUT_MS 8000
-
-// =====================================================================
-// Waktu (NTP) — supaya cloud punya timestamp absolut per batch
-// =====================================================================
-#define USE_NTP 1
-#define NTP_SERVER_1 "pool.ntp.org"
-#define NTP_SERVER_2 "time.google.com"
-#define NTP_WAIT_MS 6000
-
-// =====================================================================
-// Akuisisi — SON1303 (PPG analog, A1/GPIO2)
-// =====================================================================
-#define PPG_FS_HZ 200 // WAJIB pembagi bulat 1000 (200 -> 5 ms)
-
-/* PPG_OVERSAMPLE: rata-rata N bacaan ADC per titik waktu (tekan noise acak
- * tanpa merusak morfologi gelombang).
+/* Rata-rata N bacaan ADC per titik waktu. 16x = +2 bit resolusi efektif
+ * (12 -> 14 bit) tanpa menumpulkan upstroke, karena ke-16 bacaan diambil
+ * dalam hitungan mikrodetik — ini oversample, bukan filter waktu.
  *
- * Recorder validasimu memakai 64x, TAPI di situ MCU tidak mengerjakan apa pun
- * selain ADC. Di firmware ini core yang sama juga menguras FIFO I2C MAX30102
- * dan menyusun batch, sementara core lain memutar TLS/WiFi. Anggaran waktu per
- * tick = 5000 us; satu adc_oneshot_read ~30-60 us, jadi 64x (~3 ms) terlalu
- * mepet. Default 16x = +2 bit resolusi efektif (12 -> 14 bit).
- *
- * Naikkan ke 32 atau 64 kalau mau, LALU cek baris "[STAT]" di serial:
- * selama ppg_overrun tetap 0, timing masih aman.                          */
-#define PPG_OVERSAMPLE 16
+ * 16 dipilih supaya identik dengan ../Firmware. Di sana angka itu ditekan
+ * karena core yang sama juga menguras FIFO I2C MAX30102; program INI tidak
+ * mengerjakan apa pun selain ADC + filter, jadi 32 atau 64 (seperti recorder
+ * validasimu) sebenarnya masih muat di anggaran 5 ms. Naikkan kalau mau,
+ * LALU pastikan "overrun" di baris [STAT] tetap 0. */
+#define PPG_OVERSAMPLE     16
+
+// Jeda setelah power-gate dibuka. Baseline op-amp SON1303 (kopling DC) butuh
+// waktu settle; sampel selama jendela ini dibuang, tidak masuk detektor.
+#define SENSOR_SETTLE_MS   1000
+
+// Rel ADC 12-bit. Ambang "mentok" mengikuti SQI_PPG_SAT_LEVEL di ../Firmware.
+#define PPG_ADC_MAX        4095
+#define PPG_SAT_LEVEL      4090
+#define PPG_FLOOR_LEVEL    5
 
 // =====================================================================
-// Akuisisi — MAX30102 (I2C, dibaca via FIFO)
+// Band-pass — satu-satunya pemrosesan sinyal
 // =====================================================================
-// 1 = profil PWA  : 400 Hz (morfologi paling detail, throughput 2x lebih berat)
-// 0 = profil AMAN : 200 Hz (lebih ringan untuk WiFi lemah / kuota terbatas)
-//
-// Keduanya menjalankan chip di SR=400 Hz — batas mode SpO2 pada pulse width
-// 411 us. Bedanya cuma averaging hardware (SMP_AVE 1 vs 2). Jangan menaikkan
-// SR di CFG_SPO2 melewati 400: chip meng-clamp diam-diam dan laju keluaran
-// nyata malah turun.
-#define MAX_PROFILE_PWA 1
-
-// Arus LED — nilai dari hasil optimasimu (target DC ~120-180k, batas 262143).
-#define MAX_LED_RED 0x6F // ~22 mA
-#define MAX_LED_IR 0x5F  // ~19 mA
-
-// =====================================================================
-// Streaming
-// =====================================================================
-/* Jeda setelah sensor dinyalakan sebelum data mulai dikirim. Sampel selama
- * jendela ini DIBUANG, jadi noise transien power-on tidak ikut terkirim.
+/* Butterworth orde-2 bertingkat, HP lalu LP. Koefisien DIHITUNG SAAT RUNTIME
+ * dari PPG_FS_HZ (src/bpm.cpp), bukan ditempel sebagai angka mati — kalau
+ * laju sampel diubah tanpa mendesain ulang filter, pita lolosnya bergeser
+ * dan detektor jadi salah tanpa satu pun pesan error.
  *
- * CATATAN: recorder SON1303-mu memakai warmup 8 detik karena baseline op-amp
- * SON1303 (kopling DC) butuh waktu settle. 1000 ms sesuai permintaan, tapi
- * kalau batch-batch awal terlihat melayang/drift, naikkan nilai ini.        */
-#define SENSOR_SETTLE_MS 1000
+ * 0,5 Hz  : buang DC + baseline wander (napas, geseran kontak). SON1303
+ *           terkopel DC, jadi tanpa ini ambang adaptif akan mengejar
+ *           baseline yang melayang, bukan denyut.
+ * 5 Hz    : buang dengung jala-jala 50 Hz, kedip lampu 100 Hz, dan derau
+ *           ADC. Aman untuk BPM (denyut 0,5-3,7 Hz; upstroke ~2-4 Hz).
+ *
+ * CATATAN PENTING: pita ini dipilih untuk MENCARI PUNCAK, bukan untuk PWA.
+ * LP 5 Hz menumpulkan dicrotic notch — itu justru diinginkan di sini supaya
+ * notch tidak pernah ikut terhitung sebagai denyut. Karena itu firmware
+ * streaming TIDAK memfilter apa pun: analisis morfologi di cloud butuh
+ * mentahnya. Dua tujuan berbeda, dua perlakuan berbeda. */
+#define BPM_HP_HZ          0.5f
+#define BPM_LP_HZ          5.0f
 
-/* Durasi data per package (= per 1x POST).
- *
- * 1000 ms dipilih supaya jendela memuat SATU siklus jantung utuh pada >=60 bpm.
- * Itu yang membuat perfusi (p2p/DC) jadi metrik mutu yang sahih — di 500 ms,
- * package yang jatuh di fase diastol bisa tidak memuat upstroke sama sekali,
- * sehingga perfusi hanya bisa dipakai sebagai lantai anti-flatline.
- *
- * Bonusnya: overhead TLS/HTTP per byte turun dan anggaran waktu per POST
- * berlipat dua. Ongkosnya: latensi 1 detik, dan satu artefak membuang 1 detik.
- *
- * Kalau turun lagi ke 500, WAJIB turunkan SQI_IR_PI_MIN_PERMIL kembali ke ~1,
- * kalau tidak gerbang perfusi akan membuang data sehat secara sistematis. */
-#define BATCH_MS 1000
+// Baseline lambat (one-pole) untuk DC & indeks perfusi. 0,1 Hz: cukup lambat
+// untuk tidak ikut mengejar denyut, cukup cepat untuk mengikuti geseran kulit.
+#define BPM_DC_HZ          0.1f
 
-// Jumlah buffer package. (BATCH_POOL-1) x BATCH_MS = daya tahan saat WiFi
-// ngadat sebelum data terpaksa dibuang. 6 x 1000 ms = ~5 detik.
-#define BATCH_POOL 6
+/* Sampel yang dibuang sebelum keluaran dipercaya. HP 0,5 Hz punya transien
+ * step beberapa detik; tanpa jendela ini denyut "hantu" dari transien filter
+ * ikut terhitung dan BPM pertama melonjak. Ini DI ATAS SENSOR_SETTLE_MS. */
+#define BPM_SETTLE_MS      3000
 
 // =====================================================================
-// SQI — gerbang kelayakan per package (dihitung di core 0, src/sqi.cpp)
+// Detektor denyut
 // =====================================================================
-/* Satu package = satu keputusan: layak -> POST, tidak layak -> DIBUANG.
- * Tidak ada nilai yang dirata-rata antar package, dan skor akhir diambil dari
- * MINIMUM sub-skor. Rata-rata justru menyamarkan outlier — satu lompatan
- * gerakan akan tenggelam dan package sampah tetap lolos.
+/* Ambang adaptif dua tingkat (histeresis), sebagai fraksi amplitudo
+ * puncak-ke-palung yang sedang terpantau:
+ *   HI = mulai "eksursi" (kandidat denyut)
+ *   LO = eksursi berakhir
  *
- * 0 = semua package dikirim apa adanya (berguna saat kalibrasi ambang). */
-#define SQI_ENABLE 1
-
-// --- MAX30102 kanal IR (ADC 18-bit, 0..262143) -----------------------
-#define SQI_SAT_LEVEL 262100 // ambang "mentok rel"
-#define SQI_CLIP_MAX_N 2     // toleransi sampel mentok per package
-
-// Jendela DC. [DC_MIN..DC_MAX] = batas tolak. [DC_GOOD_LO..DC_GOOD_HI] = skor
-// penuh; di antaranya skor meluruh linear. Nilai GOOD mengacu target DC
-// 120-180k dari hasil optimasi arus LED-mu.
-#define SQI_IR_DC_MIN 30000
-#define SQI_IR_DC_GOOD_LO 80000
-#define SQI_IR_DC_GOOD_HI 220000
-#define SQI_IR_DC_MAX 255000
-
-/* Perfusi (p2p / DC) dalam per-mil. Di BATCH_MS 1000 ini gerbang mutu SUNGGUHAN,
- * bukan lagi sekadar lantai anti-flatline, karena jendelanya memuat denyut utuh.
+ * Histeresis-nya wajib: dengan SATU ambang, riak kecil di sekitar ambang
+ * memicu belasan eksursi per denyut. Jarak HI-LO membuat sinyal harus
+ * benar-benar turun dulu sebelum denyut berikutnya diakui.
  *
- * Nilai khas: jari ~5-30 per-mil (0,5-3%), pergelangan jauh lebih rendah.
- * MIN sengaja dipatok konservatif — kalau kelewat tinggi, gerbang membuang data
- * sehat dan kamu tidak punya apa pun untuk dikalibrasi. Naikkan SETELAH melihat
- * sebaran ir_p2p/ir_dc yang nyata dari sensormu (pakai SQI_ENABLE 0). */
-#define SQI_IR_PI_MIN_PERMIL 2   // 0,2%
-#define SQI_IR_PI_GOOD_LO 5      // 0,5%
-#define SQI_IR_PI_GOOD_HI 60     // 6%
-#define SQI_IR_PI_MAX_PERMIL 200 // 20% — di atas ini hampir pasti gerakan
+ * 0,60 relatif tinggi dan itu disengaja — dicrotic notch pada PPG sehat
+ * jarang melampaui ~50% amplitudo sistolik, jadi ambang di 60% membuatnya
+ * mustahil terhitung sebagai denyut kedua. */
+#define BPM_THR_HI_FRAC    0.60f
+#define BPM_THR_LO_FRAC    0.40f
 
-/* Outlier DUA TINGKAT, sebagai % dari p2p package.
- *   HARD  : ada SATU sampel melompat sejauh ini -> tolak, tanpa ampun.
- *   SOFT  : dihitung berapa BANYAK sampel yang melompat sejauh ini; ditolak
- *           kalau cacahnya melebihi SQI_JUMP_SOFT_PERMIL dari total sampel.
- *
- * Alasan dua tingkat: satu glitch I2C / bacaan ADC nyasar BUKAN artefak
- * fisiologis, dan membuang 1 detik data bersih karenanya itu mubazir. Gerakan
- * sungguhan menghasilkan banyak lompatan, bukan satu. */
-#define SQI_IR_JUMP_HARD_PCT 60
-#define SQI_IR_JUMP_MAX_PCT 35
-#define SQI_JUMP_SOFT_PERMIL 10 // 1% dari sampel
+/* Peluruhan pelacak amplitudo, dalam fraksi amplitudo per detik. Serangan
+ * (attack) selalu seketika: puncak/palung baru langsung diikuti. Yang
+ * diperlambat hanya pemulihannya, supaya ambang tidak merosot ke lantai
+ * derau di sela antar denyut. 0,6/detik ~ konstanta waktu 0,8 detik. */
+#define BPM_ENV_DECAY_PER_S 0.6f
 
-/* Tortuosity = panjang lintasan / p2p, disimpan x10 (jadi 35 = 3,5).
- *
- * Menangkap kelas noise yang TIDAK terlihat oleh max-jump: noise tersebar
- * beramplitudo sedang — tremor kontak, dan noise per-sampel MAX30102 yang naik
- * ~sqrt(2) sejak SMP_AVE=1. Juga kedip optik 100 Hz dari lampu ruangan, yang
- * tetap masuk lewat fotodioda meski perangkat bertenaga baterai.
- *
- * PPG bersih menempuh ~2x p2p per denyut, jadi di jendela 1 detik (1-1,7 denyut)
- * nilainya ~20-40. Noise membuatnya meledak. Ini BUKAN averaging: penjumlahan
- * selisih absolut justru makin peka terhadap noise, bukan menghaluskannya. */
-#define SQI_IR_TORT_GOOD_X10 60 // 6,0 — di bawah ini skor penuh
-#define SQI_IR_TORT_MAX_X10 150 // 15,0 — di atas ini tolak
+// Rentang fisiologis yang diterima. Di luar ini interval dibuang mentah.
+#define BPM_MIN            30.0f
+#define BPM_MAX            220.0f
 
-// --- SON1303 (ADC 12-bit, 0..4095) -----------------------------------
-#define SQI_PPG_SAT_LEVEL 4090
-#define SQI_PPG_P2P_MIN 15   // di bawah ini praktis garis datar
-#define SQI_PPG_P2P_MAX 3500 // hampir selebar rel = terpotong/gerakan
-#define SQI_PPG_JUMP_HARD_PCT 70
-#define SQI_PPG_JUMP_MAX_PCT 45
-#define SQI_PPG_TORT_GOOD_X10 80
-#define SQI_PPG_TORT_MAX_X10 200
+/* Blanking (refractory) setelah puncak terdeteksi. 260 ms = plafon 230 bpm,
+ * sedikit di atas BPM_MAX supaya gerbang interval — bukan blanking — yang
+ * memutuskan. Ini yang membunuh deteksi ganda pada satu upstroke. */
+#define BPM_REFRACT_MS     260
 
-// Skor minimum supaya package dikirim (0..100).
-#define SQI_MIN_SCORE 60
+/* Batas panjang satu eksursi. Sinyal yang bertahan di atas ambang lebih lama
+ * dari ini bukan denyut: itu geseran baseline atau gerakan. Eksursi seperti
+ * itu dibuang utuh (tidak ada puncak yang dilaporkan). 600 ms dipilih karena
+ * fase sistolik denyut normal < 400 ms bahkan pada bradikardia. */
+#define BPM_EXC_MAX_MS     600
 
 // =====================================================================
-// Baterai (Vsens di A0/GPIO1, pembagi R1=R2=100k -> Vbatt/2)
+// Gerbang interval (IBI) & penghalus
 // =====================================================================
-#define BATT_DIVIDER_GAIN 2.0f // (R1+R2)/R2 = 200k/100k
-#define BATT_CAL_TRIM 1.0f     // koreksi halus; ukur DMM lalu setel
-#define BATT_OVERSAMPLE 16
-#define BATT_PERIOD_MS 2000 // pembacaan tiap 2 s (di-EMA)
-#define BATT_EMA_ALPHA 0.20f
+#define BPM_IBI_HIST       8     // panjang riwayat -> median & SDNN
+#define BPM_MIN_BEATS      4     // interval valid minimum sebelum BPM diumumkan
+
+/* Simpangan maksimum satu interval dari MEDIAN riwayat, dalam persen.
+ * Median (bukan rerata) supaya satu interval sampah tidak menggeser acuan
+ * dan menyeret gerbangnya sendiri.
+ *
+ * 30% cukup longgar untuk aritmia sinus pernapasan (variasi normal
+ * 5-15%) tapi cukup ketat untuk menolak puncak yang terlewat/tergandakan. */
+#define BPM_IBI_DEV_PCT    30
+
+/* Perbaikan denyut TERLEWAT. Satu puncak yang gagal terdeteksi menghasilkan
+ * interval ~2x median — kalau dibiarkan, ia ditolak gerbang di atas dan
+ * BPM membeku sebentar. Kalau ibi/2 justru cocok dengan median (toleransi di
+ * bawah), interval itu dipecah jadi DUA dan keduanya masuk riwayat.
+ *
+ * Ini interpolasi, bukan pengukuran: cacahnya dilaporkan terpisah sebagai
+ * "interp" supaya bisa diaudit. Kalau angka itu tinggi, yang perlu dibetulkan
+ * adalah kontak sensor, bukan algoritmanya. 0 = matikan. */
+#define BPM_MISSED_FIX     1
+#define BPM_MISSED_TOL_PCT 20
+
+/* Berapa penolakan BERURUTAN sebelum riwayat dibuang dan detektor mencari
+ * kunci baru. Tanpa ini, laju jantung yang berubah cepat (mulai olahraga,
+ * berdiri tiba-tiba) akan ditolak terus-menerus oleh gerbang median yang
+ * masih memegang laju lama — detektor mengunci diri sendiri. */
+#define BPM_RESYNC_REJECTS 4
+
+// Penghalus tampilan. bpm_inst = 60000/median (sudah tahan outlier);
+// nilai yang dilaporkan di-EMA supaya angkanya tidak gemetar tiap denyut.
+#define BPM_EMA_ALPHA      0.30f
+
+/* Berapa lama BPM terakhir yang sahih tetap ditampilkan setelah sinyal
+ * memburuk. Menahan angka lebih berguna daripada mengosongkannya saat
+ * seseorang bergerak sebentar; lewat batas ini, nilainya dinolkan supaya
+ * tidak ada angka basi yang terlihat seperti pengukuran hidup. */
+#define BPM_HOLD_MS        5000
 
 // =====================================================================
-// OTA — ganti firmware lewat WiFi, .bin didorong dari dashboard
+// Gerbang kontak & mutu (0..100, semangatnya sama dengan SQI di ../Firmware:
+// skor akhir = MINIMUM sub-skor, bukan rata-rata)
 // =====================================================================
-/* Model PULL: perangkat yang bertanya ke server, bukan server yang mendorong.
- * Konsekuensinya perangkat bisa berada di jaringan mana pun — tidak perlu satu
- * LAN, tidak perlu port terbuka, tidak perlu tahu IP-nya.
+/* Jendela DC yang dianggap "sensor menempel". SON1303 mengeluarkan tegangan
+ * di sekitar tengah rel saat terpasang normal; menempel di rel atas/bawah
+ * berarti tidak ada jari, LED sensor mati, atau op-amp saturasi.
  *
- * Partisi sudah siap: default_8MB.csv punya app0 dan app1 masing-masing 3,34 MB
- * plus otadata. Firmware ini ~1,05 MB, jadi muat di sepertiga slot. Update
- * ditulis ke slot yang TIDAK sedang berjalan, lalu boot dialihkan ke sana —
- * firmware lama tetap utuh sebagai cadangan.
- *
- * KONTRAK SERVER (tiga endpoint):
- *
- *   GET  {OTA_PATH_CHECK}?device_id=<id>&fw=<versi>
- *        -> {"pending":true,"fw":"1.1.0"}      ada firmware baru
- *        -> {"pending":false}                  tidak ada
- *
- *   GET  {OTA_PATH_FIRMWARE}?device_id=<id>
- *        -> body = isi .bin mentah, Content-Length WAJIB benar
- *
- *   POST {OTA_PATH_ACK}?device_id=<id>&fw=<versi>
- *        -> dipanggil setelah flash berhasil, supaya dashboard menandai selesai
- */
-#define OTA_ENABLE 1
-#define OTA_CHECK_INTERVAL_MS 60000 // jeda antar pengecekan (0 = mati)
-#define OTA_PATH_CHECK "/v1/ota/check"
-#define OTA_PATH_FIRMWARE "/v1/ota/firmware"
-#define OTA_PATH_ACK "/v1/ota/ack"
-#define OTA_DOWNLOAD_TIMEOUT_MS 60000 // unduh ~1 MB lewat WiFi
+ * Ambang ini PALING PERLU dikalibrasi untuk unitmu: nyalakan
+ * BPM_STREAM_CSV 1, lihat kolom dc saat jari menempel dan saat dilepas. */
+#define BPM_DC_MIN         120
+#define BPM_DC_MAX         3900
 
-/* Versi yang tertanam di biner. WAJIB dinaikkan tiap kali kamu membuat .bin
- * baru untuk diunggah ke dashboard.
- *
- * Ini yang mencegah loop reflash: kalau ACK ke server gagal (jaringan putus
- * sedetik), server masih menganggap ada update pending. Tanpa perbandingan
- * versi, perangkat akan mengunduh dan mem-flash biner yang SAMA berulang kali
- * setiap OTA_CHECK_INTERVAL_MS dan tidak pernah sempat bekerja. Dengan versi,
- * perangkat mengenali "ini sudah saya pakai", melewatkannya, dan mengirim ulang
- * ACK-nya — jadi kegagalan ACK sembuh sendiri. */
-#define FW_VERSION "1.0.0"
+// Amplitudo AC minimum (LSB ADC 12-bit) untuk dianggap ada denyut.
+// Di bawah ini sinyal praktis garis datar. Bandingkan SQI_PPG_P2P_MIN = 15.
+#define BPM_AC_MIN_LSB     15
 
-/* Pengaman anti-brick. Firmware yang baru dipasang berstatus PERCOBAAN sampai
- * berhasil POST sebanyak ini. Kalau sampai OTA_TRIAL_TIMEOUT_MS belum tercapai,
- * perangkat mengalihkan boot kembali ke partisi lama lalu restart.
- *
- * CATATAN JUJUR: rollback otomatis di level bootloader ESP-IDF TIDAK aktif di
- * build Arduino/pioarduino standar. Pemulihan ini berjalan di level aplikasi,
- * jadi ia TIDAK menolong kalau firmware baru crash/boot-loop sebelum sempat
- * menilai dirinya sendiri. Tetap uji .bin lewat kabel sekali sebelum diunggah. */
-#define OTA_TRIAL_POSTS 3
-#define OTA_TRIAL_TIMEOUT_MS 120000
+/* Indeks perfusi (AC/DC) dalam per-mil, dipakai sebagai sub-skor mutu.
+ * MIN sengaja rendah — pergelangan jauh lebih lemah daripada ujung jari,
+ * dan gerbang yang kelewat tinggi membuang data sehat. */
+#define BPM_PI_MIN_PERMIL  3
+#define BPM_PI_GOOD_LO     10
+#define BPM_PI_GOOD_HI     400
+#define BPM_PI_MAX_PERMIL  800
+
+/* Sub-skor kestabilan: rerata |ibi - median| / median dalam per-mil.
+ * <=5% dianggap sempurna (variasi pernapasan normal), >=25% dianggap nol. */
+#define BPM_STAB_GOOD_PERMIL 50
+#define BPM_STAB_MAX_PERMIL  250
+
+// Toleransi sampel mentok rel per jendela 1 detik sebelum skor dijatuhkan.
+#define BPM_CLIP_MAX_N     2
+
+// Skor minimum supaya status jadi LOCKED (BPM dianggap sahih).
+#define BPM_MIN_CONF       50
+
+/* Berapa lama kondisi buruk harus BERTAHAN sebelum status jatuh ke
+ * NO_CONTACT dan riwayat dihapus. Tanpa penahan ini, satu kedipan artefak
+ * membuang kunci yang butuh 4 denyut untuk dibangun kembali. */
+#define BPM_CONTACT_HOLD_MS 700
 
 // =====================================================================
-// Debug
+// Keluaran & debug
 // =====================================================================
-#define SERIAL_BAUD 115200
-#define STAT_PERIOD_MS 5000 // baris "[STAT]" tiap 5 s
-#define VERBOSE_HTTP 1      // cetak status code tiap POST
-#define VERBOSE_SQI 1       // cetak alasan tiap package yang dibuang
+#define SERIAL_BAUD        115200
+#define BPM_REPORT_MS      1000   // baris [BPM ] tiap 1 detik
+#define STAT_PERIOD_MS     5000   // baris [STAT] tiap 5 detik
+
+/* 1 = cetak SATU BARIS CSV PER SAMPEL (200 baris/detik) untuk Serial Plotter:
+ *   t_ms,raw,ac,thr_hi,thr_lo,beat
+ * Inilah cara mengkalibrasi BPM_DC_MIN/MAX dan BPM_THR_*: lihat sinyalnya,
+ * jangan menduga. Baris [BPM ]/[STAT] otomatis dibungkam supaya CSV bersih.
+ *
+ * Ada ongkosnya: pencetakan terjadi di dalam task pencuplik, jadi timing 5 ms
+ * ikut terganggu sedikit (terlihat sebagai overrun > 0). Matikan saat
+ * mengukur sungguhan. */
+#define BPM_STREAM_CSV     0
+
+// 1 = LED D10 berkedip satu kali per denyut yang DITERIMA (kedip meluruh
+// seperti detak). Cara tercepat melihat detektor bekerja tanpa serial monitor.
+#define BPM_LED_BEAT       1
+#define BPM_LED_FLASH_MS   140
+#define LED_PWM_FREQ_HZ    4000
+#define LED_PWM_BITS       12
+#define LED_DUTY_MAX       ((1 << LED_PWM_BITS) - 1)
