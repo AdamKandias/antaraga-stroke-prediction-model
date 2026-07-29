@@ -4,11 +4,10 @@ Port Python dari algoritma BPM firmware ANTARAGA (Firmware/src/bpm.cpp).
 Masukan : deretan sampel ADC SON1303 mentah pada laju tetap fs Hz.
 Keluaran: dict berisi bpm, conf, status, ibi_list, sdnn_ms, peaks, dll.
 
-Perbedaan satu-satunya dari firmware:
-  - Filter pakai sosfiltfilt (zero-phase) alih-alih filter kausal real-time.
-    Untuk batch offline ini lebih akurat — tidak ada delay fase dan tidak perlu
-    settle period. Koefisien Butterworth identik dengan yang dihitung firmware.
-  - Tidak ada PPG_SAT/FLOOR_LEVEL check per-sampel (window sudah bersih dari SQI).
+Filter: sosfilt KAUSAL dengan semai DC (zi * sig[0]), identik perilakunya
+dengan firmware — tidak ada transien awal, tidak ada artefak edge.
+sosfiltfilt (zero-phase) SENGAJA dihindari karena transiennya membuat
+env_hi melonjak di awal dan menyebabkan banyak puncak terlewat.
 
 Semua konstanta numerik identik dengan Firmware/include/config.h.
 """
@@ -16,7 +15,7 @@ from __future__ import annotations
 
 import math
 import numpy as np
-from scipy.signal import butter, sosfiltfilt
+from scipy.signal import butter, sosfilt, sosfilt_zi
 
 # ── Konstanta (cermin config.h) ───────────────────────────────────────────
 _HP_HZ            = 0.5
@@ -94,10 +93,16 @@ def compute_bpm(raw: list, fs: float = 200.0) -> dict:
     sig = np.asarray(raw, dtype=float)
     ms  = 1000.0 / fs
 
-    # ── 1. Band-pass Butterworth 0.5–5 Hz (zero-phase offline) ───────────
+    # ── 1. Band-pass Butterworth 0.5–5 Hz (kausal, semai DC) ─────────────
+    # Pakai sosfilt kausal (bukan sosfiltfilt) dengan inisialisasi zi * sig[0]:
+    # filter dianggap sudah memproses DC = sig[0] selamanya → keluaran mulai
+    # dari nol tanpa transien. Ini persis perilaku firmware (causal, real-time).
+    # sosfiltfilt SENGAJA dihindari: transiennya melonjak env_hi sehingga
+    # thr_hi menjadi terlalu tinggi dan banyak puncak terlewat.
     sos_hp = butter(2, _HP_HZ / (fs / 2), btype="high", output="sos")
     sos_lp = butter(2, _LP_HZ / (fs / 2), btype="low",  output="sos")
-    filt   = sosfiltfilt(sos_lp, sosfiltfilt(sos_hp, sig))
+    hp, _  = sosfilt(sos_hp, sig, zi=sosfilt_zi(sos_hp) * sig[0])
+    filt, _ = sosfilt(sos_lp, hp,  zi=sosfilt_zi(sos_lp) * hp[0])
 
     # ── Baseline DC (one-pole, identik dengan firmware) ───────────────────
     alpha  = 1.0 - math.exp(-2.0 * math.pi * _DC_HZ / fs)
@@ -108,9 +113,13 @@ def compute_bpm(raw: list, fs: float = 200.0) -> dict:
         dc_arr[i] = dc_val
 
     # ── 2. Pelacak amplitudo (serangan seketika, peluruhan lambat) ────────
+    # Inisialisasi dari 1 detik pertama: analog dengan settle period firmware.
+    # Tanpa ini, env_lo = 0 (belum lihat nilai negatif) → thr_lo terlalu tinggi
+    # → eksursi pertama dianggap terlalu panjang dan dibuang.
     env_decay = _ENV_DECAY_S / fs
-    env_hi    = float(filt[0])
-    env_lo    = float(filt[0])
+    warmup_n  = min(int(fs), n)
+    env_hi    = float(np.max(filt[:warmup_n]))
+    env_lo    = float(np.min(filt[:warmup_n]))
 
     # ── 3+4. Eksursi berhisteresis + maks lokal + interpolasi parabola ───
     refract_n = int(_REFRACT_MS * fs / 1000.0)
@@ -141,11 +150,17 @@ def compute_bpm(raw: list, fs: float = 200.0) -> dict:
 
     for i, s in enumerate(filt.tolist()):
         # update pelacak amplitudo
+        # env_lo hanya diperbarui di LUAR eksursi (fase diastolik):
+        # selama sistol, sinyal selalu di atas env_lo sehingga env_lo merayap naik
+        # dan menggelembungkan thr_hi — puncak berikutnya jadi tak terjangkau.
+        # Firmware tidak punya masalah ini karena beroperasi menerus (menit/jam)
+        # dan env_lo selalu pulih saat diastol panjang antar batch.
         amp_p = env_hi - env_lo
         if s > env_hi:   env_hi  = s
         else:            env_hi -= amp_p * env_decay
-        if s < env_lo:   env_lo  = s
-        else:            env_lo += amp_p * env_decay
+        if not in_exc:   # env_lo hanya update saat diastol
+            if s < env_lo: env_lo  = s
+            else:          env_lo += amp_p * env_decay
         if env_hi < env_lo:
             mid = 0.5 * (env_hi + env_lo)
             env_hi = env_lo = mid
