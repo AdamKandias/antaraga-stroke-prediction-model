@@ -1,6 +1,6 @@
 import json
 import logging
-from logging.handlers import RotatingFileHandler
+from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -10,6 +10,7 @@ from api.models_db import PredictionLog
 LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
+# ── Logger utama (api.log, rotasi per ukuran) ─────────────────────────────────
 logger = logging.getLogger("antaraga")
 logger.setLevel(logging.INFO)
 
@@ -23,6 +24,27 @@ if not logger.handlers:
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
+
+# ── Access logger (access.log, rotasi tengah malam, simpan 1 hari) ────────────
+# backupCount=1 → simpan 1 backup (kemarin); file 2 hari lalu langsung dihapus.
+access_logger = logging.getLogger("antaraga.access")
+access_logger.setLevel(logging.INFO)
+access_logger.propagate = False   # jangan ikut masuk ke api.log
+
+if not access_logger.handlers:
+    _acc_handler = TimedRotatingFileHandler(
+        LOG_DIR / "access.log",
+        when="midnight",
+        backupCount=1,
+        encoding="utf-8",
+        utc=False,
+    )
+    _acc_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+    access_logger.addHandler(_acc_handler)
+
+    _acc_console = logging.StreamHandler()
+    _acc_console.setFormatter(logging.Formatter("%(asctime)s [ACCESS] %(message)s"))
+    access_logger.addHandler(_acc_console)
 
 
 def log_prediction(

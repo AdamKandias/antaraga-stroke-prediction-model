@@ -26,6 +26,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 
 from api.config import DEVICE_INGEST_KEY
+from api.logging_utils import logger
 
 router = APIRouter(tags=["ota"])
 
@@ -62,6 +63,8 @@ def _save_state(s: dict) -> None:
 
 def _verify_key(authorization: str) -> None:
     if authorization != f"Bearer {DEVICE_INGEST_KEY}":
+        got = authorization[:20] + "…" if len(authorization) > 20 else authorization
+        logger.warning("[OTA] 403 — kunci ditolak: %r", got)
         raise HTTPException(status_code=403, detail="Invalid device key")
 
 

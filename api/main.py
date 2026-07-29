@@ -10,7 +10,7 @@ import os
 import numpy as np
 from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session
 
@@ -21,7 +21,7 @@ from api.firmware import router as firmware_router
 from api.ota import router as ota_router
 from api.pwa_config import get_pwa_config, router as pwa_router
 from api.database import Base, engine, get_db
-from api.logging_utils import log_prediction, logger
+from api.logging_utils import access_logger, log_prediction, logger
 from api.ml import predict_stroke_risk
 from api.ml_vitals import is_model_available, predict_vitals_from_ppg
 from api.profile_utils import (
@@ -56,6 +56,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def access_log_middleware(request, call_next):
+    t0 = time.time()
+    response = await call_next(request)
+    ms = (time.time() - t0) * 1000
+    ip = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip() \
+         or (request.client.host if request.client else "-")
+    device_id = request.query_params.get("device_id", "")
+    extra = f" device={device_id}" if device_id else ""
+    access_logger.info(
+        "%s \"%s %s\" %d %.0fms%s",
+        ip, request.method, request.url.path, response.status_code, ms, extra,
+    )
+    return response
 
 app.include_router(firmware_router)
 app.include_router(ota_router)
@@ -486,6 +501,65 @@ def estimate_vitals_from_ppg(
         profile_id=profile.id,
     )
     return response
+
+
+@app.get("/v1/access-log")
+def access_log(lines: int = 500) -> list[str]:
+    """Baca N baris terakhir dari logs/access.log (fallback non-streaming)."""
+    from api.logging_utils import LOG_DIR
+    log_file = LOG_DIR / "access.log"
+    if not log_file.exists():
+        return []
+    with log_file.open(errors="replace") as f:
+        all_lines = f.readlines()
+    return [l.rstrip() for l in reversed(all_lines) if l.strip()][:lines]
+
+
+@app.get("/v1/access-log/stream")
+async def access_log_stream():
+    """SSE: kirim history access.log lalu tail untuk baris baru secara real-time.
+    Klien menerima '__READY__' setelah history selesai, lalu baris baru tiap detik."""
+    from api.logging_utils import LOG_DIR
+    log_file = LOG_DIR / "access.log"
+
+    async def _tail():
+        pos = 0
+        # History: 300 baris terakhir
+        if log_file.exists():
+            with log_file.open(errors="replace") as f:
+                history = f.readlines()
+                pos = f.tell()
+            for line in history[-300:]:
+                line = line.rstrip()
+                if line:
+                    yield f"data: {json.dumps(line)}\n\n"
+        yield "data: __READY__\n\n"
+
+        # Tail: poll tiap 1 detik untuk baris baru
+        while True:
+            await asyncio.sleep(1)
+            if not log_file.exists():
+                pos = 0
+                continue
+            try:
+                size = log_file.stat().st_size
+                if size < pos:
+                    pos = 0   # file dirotasi tengah malam
+                with log_file.open(errors="replace") as f:
+                    f.seek(pos)
+                    chunk = f.read()
+                    pos = f.tell()
+                for line in chunk.splitlines():
+                    if line.strip():
+                        yield f"data: {json.dumps(line.rstrip())}\n\n"
+            except Exception:
+                pos = 0
+
+    return StreamingResponse(
+        _tail(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/logs")

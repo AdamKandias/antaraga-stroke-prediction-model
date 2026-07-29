@@ -10,6 +10,7 @@ services:
       - antaraga-db:/app/data                  # SQLite persists di sini
       - antaraga-models:/app/model/artifacts   # model joblib persists di sini
       - antaraga-ota:/app/api/ota_bins         # firmware .bin untuk OTA persists di sini
+      - antaraga-logs:/app/logs                # access.log + api.log persists di sini
     env_file:
       - .env.production
     healthcheck:
@@ -23,3 +24,4 @@ volumes:
   antaraga-db:
   antaraga-models:
   antaraga-ota:
+  antaraga-logs:

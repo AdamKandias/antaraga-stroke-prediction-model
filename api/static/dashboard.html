@@ -154,6 +154,22 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 .up-label{font-size:11px;color:var(--muted);display:block;margin-bottom:4px}
 .up-input{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 9px;border-radius:5px;font-size:13px;outline:none;width:100%}
 .up-input:focus{border-color:rgba(57,135,229,.5)}
+/* Access log */
+.al-row{display:grid;grid-template-columns:68px 42px 52px 1fr 120px 110px 54px;
+  gap:0 8px;padding:3px 6px;border-radius:4px;align-items:center;transition:background .1s}
+.al-row:hover{background:var(--surface2)}
+.al-row.al-fw{background:rgba(25,158,112,.06)}
+.al-row.al-fw:hover{background:rgba(25,158,112,.12)}
+.al-ts{color:var(--muted);font-size:10.5px}
+.al-status{font-weight:700;text-align:center}
+.al-method{color:var(--muted)}
+.al-path{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.al-path.al-fw-path{color:var(--c1);font-weight:600}
+.al-device{color:#3987e5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.al-device.al-nodev{color:var(--muted)}
+.al-ip{color:var(--muted);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.al-lat{color:var(--muted);font-size:10px;text-align:right}
+.al-f-btn{opacity:.55}.al-f-btn.on{opacity:1;border-color:var(--c1);color:var(--c1)}
 </style>
 </head>
 <body>
@@ -194,6 +210,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
   <button class="tab"     onclick="tab('xgb',this)">🎯 Setelah XGBoost</button>
   <button class="tab"     onclick="tab('fw',this)">⚙️ Firmware</button>
   <button class="tab"     onclick="tab('pwa-cfg',this)">🔧 PWA</button>
+  <button class="tab"     onclick="tab('access-log',this)">🔍 Log Akses</button>
 </div>
 
 <!-- ── TAB 1: Raw ── -->
@@ -411,6 +428,40 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
       <button class="btn-sec" onclick="pwaReset()">↺ Default</button>
       <span id="pwaSaveMsg" style="display:none;font-size:12px;color:var(--c1)">✓ Tersimpan — berlaku pada ingest berikutnya</span>
     </div>
+  </div>
+</div>
+
+<!-- ── TAB 7: Access Log ── -->
+<div id="p-access-log" class="pane">
+  <div class="card">
+    <!-- Header bar -->
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <span class="card-ttl" style="margin:0">Log Akses Real-time</span>
+      <span id="alDot" style="font-size:11px;padding:2px 8px;border-radius:10px;
+        background:var(--surface2);color:var(--muted)">⏸ Tidak aktif</span>
+      <div style="margin-left:auto;display:flex;gap:6px">
+        <button class="btn-sec btn-sm al-f-btn on" onclick="alSetFilter('all',this)">Semua</button>
+        <button class="btn-sec btn-sm al-f-btn"    onclick="alSetFilter('device',this)">Device</button>
+        <button class="btn-sec btn-sm al-f-btn"    onclick="alSetFilter('error',this)">Error 4xx/5xx</button>
+      </div>
+    </div>
+    <!-- Stats strip -->
+    <div style="display:flex;gap:18px;margin-bottom:10px;font-size:12px;font-family:monospace">
+      <span>Total <b id="alTot">0</b></span>
+      <span style="color:var(--c1)">2xx <b id="al2x">0</b></span>
+      <span style="color:#e5a139">4xx <b id="al4x">0</b></span>
+      <span style="color:var(--critical)">5xx <b id="al5x">0</b></span>
+      <span style="color:var(--muted)">Device <b id="alDev">0</b></span>
+    </div>
+    <!-- Column headers -->
+    <div style="display:grid;grid-template-columns:68px 42px 52px 1fr 120px 110px 54px;
+      gap:0 8px;font-size:10px;color:var(--muted);padding:0 6px 4px;border-bottom:1px solid var(--border)">
+      <span>Waktu</span><span>Status</span><span>Method</span>
+      <span>Path</span><span>Device ID</span><span>IP</span><span>Latensi</span>
+    </div>
+    <!-- Feed -->
+    <div id="alFeed" style="font-size:11.5px;font-family:monospace;max-height:500px;
+      overflow-y:auto;padding-top:2px"></div>
   </div>
 </div>
 
@@ -733,8 +784,9 @@ function tab(name, btn) {
   btn.classList.add('on');
   document.getElementById('p-' + name).classList.add('on');
   Object.values(charts).forEach(c => { try { c.resize(); } catch {} });
-  if (name === 'fw')      fwInit();
-  if (name === 'pwa-cfg') pwaSettingsInit();
+  if (name === 'fw')         fwInit();
+  if (name === 'pwa-cfg')    pwaSettingsInit();
+  if (name === 'access-log') alConnect();
 }
 
 // ═══════════════════════════════════════════════
@@ -1106,6 +1158,128 @@ setTimeout(async () => {
     connect();
   }
 }, 1500);
+
+// ═══════════════════════════════════════════════
+//  ACCESS LOG — real-time via SSE
+// ═══════════════════════════════════════════════
+let _alEsrc = null, _alFilter = 'all', _alAutoScroll = true;
+const _alStat = {tot:0, s2:0, s4:0, s5:0, dev:0};
+const _alBuf  = [];   // semua baris untuk re-filter
+
+function alParse(raw) {
+  // format: "2026-07-30 14:23:01,452 103.24.58.36 "POST /v1/ingest" 200 87ms[ device=antaraga-001]"
+  const m = raw.match(
+    /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})[,.\d]* (\S+) "([A-Z]+) ([^"]+)" (\d+) ([\d.]+ms)(?: device=(\S+))?/
+  );
+  if (!m) return null;
+  return { ts: m[1].split(' ')[1], ip: m[2], method: m[3],
+           path: m[4], status: +m[5], lat: m[6], device: m[7] || null };
+}
+
+function alRowHtml(p) {
+  const isFw = /\/v1\/ingest|\/v1\/ota/.test(p.path);
+  const sColor = p.status < 300 ? 'var(--c1)' : p.status < 500 ? '#e5a139' : 'var(--critical)';
+  return `<div class="al-row${isFw?' al-fw':''}">
+    <span class="al-ts">${escH(p.ts)}</span>
+    <span class="al-status" style="color:${sColor}">${p.status}</span>
+    <span class="al-method">${escH(p.method)}</span>
+    <span class="al-path${isFw?' al-fw-path':''}" title="${escH(p.path)}">${escH(p.path)}</span>
+    <span class="al-device${p.device?'':' al-nodev'}">${p.device ? escH(p.device) : '—'}</span>
+    <span class="al-ip" title="${escH(p.ip)}">${escH(p.ip)}</span>
+    <span class="al-lat">${p.lat}</span>
+  </div>`;
+}
+
+function alVisible(p) {
+  if (!p) return false;
+  if (_alFilter === 'device') return /\/v1\/ingest|\/v1\/ota/.test(p.path);
+  if (_alFilter === 'error')  return p.status >= 400;
+  return true;
+}
+
+function alAppend(raw, prepend) {
+  const p = alParse(raw);
+  _alBuf.push({raw, p});
+
+  // stats (count tapi jangan double-count history saat re-filter)
+  if (!prepend) {
+    _alStat.tot++;
+    if (p) {
+      if (p.status < 300) _alStat.s2++;
+      else if (p.status < 500) _alStat.s4++;
+      else _alStat.s5++;
+      if (p.device) _alStat.dev++;
+    }
+    document.getElementById('alTot').textContent = _alStat.tot;
+    document.getElementById('al2x').textContent  = _alStat.s2;
+    document.getElementById('al4x').textContent  = _alStat.s4;
+    document.getElementById('al5x').textContent  = _alStat.s5;
+    document.getElementById('alDev').textContent = _alStat.dev;
+  }
+
+  if (!alVisible(p)) return;
+  const feed = document.getElementById('alFeed');
+  if (prepend) {
+    feed.insertAdjacentHTML('afterbegin', p ? alRowHtml(p) : `<div style="color:var(--muted);font-size:10px;padding:2px 6px">${escH(raw)}</div>`);
+  } else {
+    feed.insertAdjacentHTML('beforeend', p ? alRowHtml(p) : `<div style="color:var(--muted);font-size:10px;padding:2px 6px">${escH(raw)}</div>`);
+    if (_alAutoScroll) feed.scrollTop = feed.scrollHeight;
+  }
+}
+
+function alSetFilter(f, btn) {
+  _alFilter = f;
+  document.querySelectorAll('.al-f-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  // re-render
+  const feed = document.getElementById('alFeed');
+  feed.innerHTML = '';
+  _alBuf.forEach(({raw, p}) => { if (alVisible(p)) feed.insertAdjacentHTML('beforeend',
+    p ? alRowHtml(p) : `<div style="color:var(--muted);font-size:10px;padding:2px 6px">${escH(raw)}</div>`); });
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function alConnect() {
+  if (_alEsrc) return;
+  const dot = document.getElementById('alDot');
+  dot.textContent = '⏳ Menghubungkan…';
+  dot.style.color = '#e5a139';
+
+  _alEsrc = new EventSource('/v1/access-log/stream');
+  let historyDone = false;
+  const histBuf = [];   // tampung history sampai semua tiba
+
+  _alEsrc.onmessage = (e) => {
+    const raw = e.data;
+    if (raw === '__READY__') {
+      historyDone = true;
+      // Flush history ke atas (urutan kronologis: terlama dulu)
+      const feed = document.getElementById('alFeed');
+      feed.innerHTML = '';
+      histBuf.forEach(line => alAppend(line, false));
+      dot.textContent = '🟢 Live';
+      dot.style.color = 'var(--c1)';
+      feed.scrollTop = feed.scrollHeight;
+      return;
+    }
+    if (!historyDone) { histBuf.push(raw); return; }
+    alAppend(raw, false);
+  };
+
+  _alEsrc.onerror = () => {
+    dot.textContent = '🔴 Terputus — menyambung ulang…';
+    dot.style.color = 'var(--critical)';
+    _alEsrc.close();
+    _alEsrc = null;
+    setTimeout(alConnect, 3000);
+  };
+
+  // Deteksi kalau user scroll ke atas → matikan auto-scroll
+  document.getElementById('alFeed').addEventListener('scroll', function() {
+    const el = this;
+    _alAutoScroll = el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
+  }, { passive: true });
+}
 </script>
 </body>
 </html>
