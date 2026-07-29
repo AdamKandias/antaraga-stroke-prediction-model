@@ -1250,7 +1250,7 @@ function alConnect() {
   const histBuf = [];   // tampung history sampai semua tiba
 
   _alEsrc.onmessage = (e) => {
-    const raw = e.data;
+    let raw; try { raw = JSON.parse(e.data); } catch { raw = e.data; }
     if (raw === '__READY__') {
       historyDone = true;
       // Flush history ke atas (urutan kronologis: terlama dulu)
