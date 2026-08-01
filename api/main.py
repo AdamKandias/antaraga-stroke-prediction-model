@@ -798,6 +798,9 @@ def ingest_latest_dashboard(device_id: str, db: Session = Depends(get_db)) -> di
     # --- BPM Engine: port algoritma firmware (peak detection + median IBI) ---
     stage_bpm = _compute_bpm_engine(all_ppg, fs_ppg)
 
+    # --- Analisis plotter: buang baseline + BPM autokorelasi (ketiga kanal) ---
+    stage_analysis = _compute_ppg_analysis(all_ppg, all_red, all_ir, fs_ppg, fs_max)
+
     return {
         "device_id": device_id,
         "seq": latest.get("seq", 0),
@@ -809,6 +812,7 @@ def ingest_latest_dashboard(device_id: str, db: Session = Depends(get_db)) -> di
         "mlp": stage_mlp,
         "xgboost": stage_xgb,
         "bpm_engine": stage_bpm,
+        "analysis": stage_analysis,
     }
 
 
@@ -879,6 +883,37 @@ def _compute_pwa(ppg: list, red: list, ir: list, fs_ppg: int, fs_max: int) -> di
             result["note"] = f"Ekstraksi fitur gagal: {exc}"
 
     return result
+
+
+def _compute_ppg_analysis(
+    ppg: list, red: list, ir: list, fs_ppg: int, fs_max: int
+) -> dict:
+    """Analisis tiga kanal: buang baseline (ac_signal) + BPM autokorelasi.
+
+    Identik dengan algoritma di gui/plotter.py (movavg, detrend, ac_signal,
+    bpm_autocorr).  Dipakai untuk tampilan 'bandpass buang baseline' di
+    dashboard Tab 1 (hijau) dan Tab 2 (merah + inframerah untuk PWA).
+    """
+    try:
+        from api.ppg_analysis import analyze_channel
+        return {
+            "green": analyze_channel(ppg, float(fs_ppg or 200)) if ppg else _empty_ac(),
+            "red":   analyze_channel(red, float(fs_max or 200)) if red else _empty_ac(),
+            "ir":    analyze_channel(ir,  float(fs_max or 200)) if ir  else _empty_ac(),
+        }
+    except Exception as exc:
+        return {
+            "green": _empty_ac(str(exc)),
+            "red":   _empty_ac(),
+            "ir":    _empty_ac(),
+        }
+
+
+def _empty_ac(note: str | None = None) -> dict:
+    d: dict = {"ac": [], "bpm": None, "conf": 0.0, "peaks": []}
+    if note:
+        d["note"] = note
+    return d
 
 
 def _compute_bpm_engine(ppg: list, fs: int) -> dict:

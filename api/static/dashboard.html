@@ -216,10 +216,10 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 <div id="p-raw" class="pane on">
   <div id="rawBpm"></div>
   <div class="card">
-    <div class="card-ttl">PPG Terfilter — Bandpass 0.5–5 Hz · Algoritma Firmware (Puncak: ●)</div>
+    <div class="card-ttl">PPG Komponen AC — Buang Baseline (2× MA + LP 5 Hz · Algoritma Plotter · Puncak: ●)</div>
     <div class="cw"><canvas id="cPpgFilt"></canvas></div>
     <div class="leg">
-      <div class="li"><div class="ld" style="background:var(--c1)"></div>PPG Terfilter</div>
+      <div class="li"><div class="ld" style="background:var(--c1)"></div>PPG AC (Baseline Dibuang)</div>
       <div class="li"><div class="lp" style="background:var(--c4)"></div>Puncak sistol</div>
     </div>
   </div>
@@ -256,19 +256,20 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 <!-- ── TAB 2: PWA ── -->
 <div id="p-pwa" class="pane">
   <div id="pwaNote"></div>
+  <div id="pwaBpmTiles"></div>
   <div class="card">
-    <div class="card-ttl">PPG Terfilter — Bandpass 0.5–8 Hz (Deteksi Puncak: ●)</div>
-    <div class="cw"><canvas id="cPwaP"></canvas></div>
+    <div class="card-ttl">RED 660 nm — Komponen AC (Buang Baseline · Puncak Sistol: ●)</div>
+    <div class="cw"><canvas id="cPwaR"></canvas></div>
     <div class="leg">
-      <div class="li"><div class="ld" style="background:var(--c1)"></div>Filtered PPG</div>
+      <div class="li"><div class="ld" style="background:var(--c2)"></div>RED AC</div>
       <div class="li"><div class="lp" style="background:var(--c4)"></div>Puncak sistol</div>
     </div>
   </div>
   <div class="card">
-    <div class="card-ttl">RED Terfilter — Bandpass 0.5–8 Hz (Deteksi Puncak: ●)</div>
-    <div class="cw"><canvas id="cPwaR"></canvas></div>
+    <div class="card-ttl">IR 880 nm — Komponen AC (Buang Baseline · Puncak Sistol ●, Morfologi Sistolik/Diastolik)</div>
+    <div class="cw"><canvas id="cPwaIr"></canvas></div>
     <div class="leg">
-      <div class="li"><div class="ld" style="background:var(--c2)"></div>Filtered RED</div>
+      <div class="li"><div class="ld" style="background:var(--c3)"></div>IR AC</div>
       <div class="li"><div class="lp" style="background:var(--c4)"></div>Puncak sistol</div>
     </div>
   </div>
@@ -551,13 +552,13 @@ function initCharts() {
   if (ready) return;
   ready = true;
 
-  // PPG Terfilter (algoritma firmware) — line + scatter puncak
+  // PPG AC (buang baseline — algoritma plotter) — line + scatter puncak
   charts.ppgFilt = new Chart(document.getElementById('cPpgFilt'), {
     type: 'line',
     data: {
       datasets: [
-        { type: 'line',    label: 'PPG Terfilter', data: [], borderColor: '#199e70', borderWidth: 1.5, pointRadius: 0, tension: 0 },
-        { type: 'scatter', label: 'Puncak',         data: [], backgroundColor: '#fab219', pointRadius: 5, pointHoverRadius: 7 }
+        { type: 'line',    label: 'PPG AC', data: [], borderColor: '#199e70', borderWidth: 1.5, pointRadius: 0, tension: 0 },
+        { type: 'scatter', label: 'Puncak', data: [], backgroundColor: '#fab219', pointRadius: 5, pointHoverRadius: 7 }
       ]
     },
     options: deepOpt()
@@ -582,25 +583,25 @@ function initCharts() {
     options: deepOpt()
   });
 
-  // PWA PPG — mixed line + scatter
-  charts.pwaP = new Chart(document.getElementById('cPwaP'), {
+  // PWA RED AC — mixed line + scatter
+  charts.pwaR = new Chart(document.getElementById('cPwaR'), {
     type: 'line',
     data: {
       datasets: [
-        { type: 'line',    label: 'Filtered PPG', data: [], borderColor: '#199e70', borderWidth: 1.5, pointRadius: 0, tension: 0 },
-        { type: 'scatter', label: 'Puncak',       data: [], backgroundColor: '#fab219', pointRadius: 5, pointHoverRadius: 7 }
+        { type: 'line',    label: 'RED AC', data: [], borderColor: '#e66767', borderWidth: 1.5, pointRadius: 0, tension: 0 },
+        { type: 'scatter', label: 'Puncak', data: [], backgroundColor: '#fab219', pointRadius: 5, pointHoverRadius: 7 }
       ]
     },
     options: deepOpt()
   });
 
-  // PWA RED — mixed line + scatter
-  charts.pwaR = new Chart(document.getElementById('cPwaR'), {
+  // PWA IR AC — mixed line + scatter
+  charts.pwaIr = new Chart(document.getElementById('cPwaIr'), {
     type: 'line',
     data: {
       datasets: [
-        { type: 'line',    label: 'Filtered RED', data: [], borderColor: '#e66767', borderWidth: 1.5, pointRadius: 0, tension: 0 },
-        { type: 'scatter', label: 'Puncak',       data: [], backgroundColor: '#fab219', pointRadius: 5, pointHoverRadius: 7 }
+        { type: 'line',    label: 'IR AC',  data: [], borderColor: '#9085e9', borderWidth: 1.5, pointRadius: 0, tension: 0 },
+        { type: 'scatter', label: 'Puncak', data: [], backgroundColor: '#fab219', pointRadius: 5, pointHoverRadius: 7 }
       ]
     },
     options: deepOpt()
@@ -673,8 +674,8 @@ function updateAll(d) {
   document.getElementById('nppg').textContent = `${d.raw.n_ppg} sp · ${d.raw.fs_ppg} Hz`;
   document.getElementById('nmax').textContent = `${d.raw.n_max} sp · ${d.raw.fs_max} Hz`;
 
-  renderRaw(d.raw, d.bpm_engine || {});
-  renderPwa(d.pwa);
+  renderRaw(d.raw, d.analysis || {});
+  renderPwa(d.pwa, d.analysis || {});
   renderMlp(d.mlp);
   renderXgb(d.xgboost);
 }
@@ -685,58 +686,64 @@ function setStatus(state, msg) {
 }
 
 // ── Raw ──
-function renderRaw(r, bpm_engine) {
-  const be = bpm_engine || {};
+function renderRaw(r, analysis) {
+  const ag = (analysis.green) || {};
+  const ar = (analysis.red)   || {};
+  const ai = (analysis.ir)    || {};
 
-  // ── Grafik PPG terfilter + puncak (dari algoritma firmware) ─────────────
-  if (be.filtered && be.filtered.length) {
-    const line   = makeXY(be.filtered);
-    const peaks  = (be.peaks || []).map(i => ({ x: i, y: be.filtered[i] }));
+  // ── Grafik PPG AC (baseline dibuang — algoritma plotter) + puncak ────────
+  if (ag.ac && ag.ac.length) {
+    const line  = makeXY(ag.ac);
+    const peaks = (ag.peaks || []).map(i => ({ x: i, y: ag.ac[i] }));
     upd(charts.ppgFilt, line, peaks);
   }
 
-  // ── Grafik PPG mentah ─────────────────────────────────────────────────
-  if (r.ppg.length) upd(charts.ppg, makeXY(r.ppg));
+  // ── Grafik PPG / RED / IR mentah ─────────────────────────────────────────
+  if (r.ppg.length) upd(charts.ppg,    makeXY(r.ppg));
   if (r.red.length) upd(charts.maxRed, makeXY(r.red));
   if (r.ir.length)  upd(charts.maxIr,  makeXY(r.ir));
 
-  // ── Tile BPM + metrik ─────────────────────────────────────────────────
+  // ── Tile BPM ketiga kanal + periodisitas ──────────────────────────────────
   const bpmEl = document.getElementById('rawBpm');
   if (bpmEl) {
-    const bpm    = be.bpm;
-    const conf   = be.conf ?? 0;
-    const status = be.status ?? '—';
-    const sdnn   = be.sdnn_ms;
-    const beats  = be.beats ?? 0;
-    const ibi    = be.ibi_med_ms;
+    const bpmG  = ag.bpm;
+    const confG = ag.conf ?? 0;
+    const bpmR  = ar.bpm;
+    const confR = ar.conf ?? 0;
+    const bpmI  = ai.bpm;
+    const confI = ai.conf ?? 0;
 
-    const statusColor = status === 'LOCKED'   ? 'var(--c1)'
-                      : status === 'NOISY'    ? '#e0a020'
-                      : status === 'SEARCHING'? '#888'
-                      : '#aaa';
-    const confBar = `<div style="height:4px;border-radius:2px;background:linear-gradient(90deg,${statusColor} ${conf}%,rgba(128,128,128,.2) ${conf}%);margin-top:6px"></div>`;
+    const confColor = c => c >= 0.6 ? 'var(--c1)' : c >= 0.3 ? '#e0a020' : '#888';
+    const confLabel = c => c >= 0.6 ? 'Kuat' : c >= 0.3 ? 'Lemah' : 'Derau';
+    const confBar   = (c, col) =>
+      `<div style="height:4px;border-radius:2px;margin-top:6px;
+        background:linear-gradient(90deg,${col} ${Math.round(c*100)}%,rgba(128,128,128,.2) ${Math.round(c*100)}%)"></div>`;
+
+    const colorG = confColor(confG);
+    const colorR = confColor(confR);
+    const colorI = confColor(confI);
 
     bpmEl.innerHTML = `<div class="tiles" style="margin-bottom:12px">
       <div class="tile" style="border-color:rgba(25,158,112,.3)">
-        <div class="lbl">BPM · Algoritma Firmware</div>
-        <div class="val" style="font-size:40px;color:${statusColor}">${bpm != null ? bpm.toFixed(1) : '—'}</div>
+        <div class="lbl">BPM · Hijau (SEN0203)</div>
+        <div class="val" style="font-size:40px;color:${colorG}">${bpmG != null ? bpmG.toFixed(1) : '—'}</div>
         <div class="unit">denyut / menit</div>
-        ${confBar}
+        ${confBar(confG, colorG)}
       </div>
       <div class="tile">
-        <div class="lbl">Keyakinan</div>
-        <div class="val" style="font-size:32px">${conf}<span style="font-size:16px;opacity:.6">/100</span></div>
-        <div class="unit" style="color:${statusColor}">${status}</div>
+        <div class="lbl">Periodisitas · Hijau</div>
+        <div class="val" style="font-size:32px;color:${colorG}">${(confG * 100).toFixed(0)}<span style="font-size:16px;opacity:.6">%</span></div>
+        <div class="unit" style="color:${colorG}">${confLabel(confG)}</div>
       </div>
       <div class="tile">
-        <div class="lbl">SDNN (HRV)</div>
-        <div class="val" style="font-size:32px">${sdnn != null ? sdnn.toFixed(1) : '—'}</div>
-        <div class="unit">ms · ${beats} denyut</div>
+        <div class="lbl">BPM · Merah (MAX30102)</div>
+        <div class="val" style="font-size:32px;color:${colorR}">${bpmR != null ? bpmR.toFixed(1) : '—'}</div>
+        <div class="unit" style="color:${colorR}">${confLabel(confR)} (${(confR*100).toFixed(0)}%)</div>
       </div>
       <div class="tile">
-        <div class="lbl">IBI Median</div>
-        <div class="val" style="font-size:32px">${ibi != null ? ibi.toFixed(0) : '—'}</div>
-        <div class="unit">ms</div>
+        <div class="lbl">BPM · IR (MAX30102)</div>
+        <div class="val" style="font-size:32px;color:${colorI}">${bpmI != null ? bpmI.toFixed(1) : '—'}</div>
+        <div class="unit" style="color:${colorI}">${confLabel(confI)} (${(confI*100).toFixed(0)}%)</div>
       </div>
     </div>`;
   }
@@ -753,61 +760,85 @@ function renderRaw(r, bpm_engine) {
 }
 
 // ── PWA ──
-function renderPwa(p) {
-  const noteEl = document.getElementById('pwaNote');
-  if (p.note) {
-    noteEl.innerHTML = `<div class="note">⚠️ ${p.note}</div>`;
-  } else {
-    noteEl.innerHTML = '';
-  }
+function renderPwa(p, analysis) {
+  analysis = analysis || {};
+  const ar = analysis.red || {};
+  const ai = analysis.ir  || {};
 
-  if (p.filtered_ppg && p.filtered_ppg.length) {
-    const line = makeXY(p.filtered_ppg);
-    const peaks = (p.peaks_ppg || []).map(i => ({ x: i, y: p.filtered_ppg[i] }));
-    upd(charts.pwaP, line, peaks);
-  }
-  if (p.filtered_red && p.filtered_red.length) {
-    const line = makeXY(p.filtered_red);
-    const peaks = (p.peaks_red || []).map(i => ({ x: i, y: p.filtered_red[i] }));
+  const noteEl = document.getElementById('pwaNote');
+  noteEl.innerHTML = p.note ? `<div class="note">⚠️ ${p.note}</div>` : '';
+
+  // Grafik RED AC (baseline dibuang)
+  if (ar.ac && ar.ac.length) {
+    const line  = makeXY(ar.ac);
+    const peaks = (ar.peaks || []).map(i => ({ x: i, y: ar.ac[i] }));
     upd(charts.pwaR, line, peaks);
   }
 
-  const fw = document.getElementById('featWrap');
-  const feats = p.features || {};
-  const bpm   = p.bpm;
+  // Grafik IR AC (baseline dibuang)
+  if (ai.ac && ai.ac.length && charts.pwaIr) {
+    const line  = makeXY(ai.ac);
+    const peaks = (ai.peaks || []).map(i => ({ x: i, y: ai.ac[i] }));
+    upd(charts.pwaIr, line, peaks);
+  }
 
+  // Tile BPM + periodisitas RED dan IR
+  const tilesEl = document.getElementById('pwaBpmTiles');
+  if (tilesEl) {
+    const confColor = c => c >= 0.6 ? 'var(--c2)' : c >= 0.3 ? '#e0a020' : '#888';
+    const confColorIr = c => c >= 0.6 ? 'var(--c3)' : c >= 0.3 ? '#e0a020' : '#888';
+    const confLabel = c => c >= 0.6 ? 'Kuat' : c >= 0.3 ? 'Lemah' : 'Derau';
+    const confBar = (c, col) =>
+      `<div style="height:4px;border-radius:2px;margin-top:6px;
+        background:linear-gradient(90deg,${col} ${Math.round(c*100)}%,rgba(128,128,128,.2) ${Math.round(c*100)}%)"></div>`;
+
+    const bpmR = ar.bpm, confR = ar.conf ?? 0;
+    const bpmI = ai.bpm, confI = ai.conf ?? 0;
+    const colR = confColor(confR), colI = confColorIr(confI);
+
+    tilesEl.innerHTML = `<div class="tiles" style="margin-bottom:12px">
+      <div class="tile" style="border-color:rgba(230,103,103,.3)">
+        <div class="lbl">BPM · Merah 660 nm</div>
+        <div class="val" style="font-size:40px;color:${colR}">${bpmR != null ? bpmR.toFixed(1) : '—'}</div>
+        <div class="unit">denyut / menit</div>
+        ${confBar(confR, colR)}
+      </div>
+      <div class="tile">
+        <div class="lbl">Periodisitas · Merah</div>
+        <div class="val" style="font-size:32px;color:${colR}">${(confR * 100).toFixed(0)}<span style="font-size:16px;opacity:.6">%</span></div>
+        <div class="unit" style="color:${colR}">${confLabel(confR)}</div>
+      </div>
+      <div class="tile" style="border-color:rgba(144,133,233,.3)">
+        <div class="lbl">BPM · IR 880 nm</div>
+        <div class="val" style="font-size:40px;color:${colI}">${bpmI != null ? bpmI.toFixed(1) : '—'}</div>
+        <div class="unit">denyut / menit</div>
+        ${confBar(confI, colI)}
+      </div>
+      <div class="tile">
+        <div class="lbl">Periodisitas · IR</div>
+        <div class="val" style="font-size:32px;color:${colI}">${(confI * 100).toFixed(0)}<span style="font-size:16px;opacity:.6">%</span></div>
+        <div class="unit" style="color:${colI}">${confLabel(confI)}</div>
+      </div>
+    </div>`;
+  }
+
+  // Tabel fitur morfologi (dari pipeline PWA lama — tetap dipertahankan)
+  const fw    = document.getElementById('featWrap');
+  const feats = p.features || {};
   if (!Object.keys(feats).length) {
     fw.innerHTML = `<div class="empty"><h3>Sinyal terlalu pendek</h3><p>Perlu ≥ 2 detik data bersih untuk ekstraksi fitur.<br>Pastikan sensor menempel dengan baik.</p></div>`;
     return;
   }
-
-  // Group features by channel prefix
-  const grouped = {};
-  for (const [k, v] of Object.entries(feats)) {
-    const prefix = k.split('_')[0];
-    if (!grouped[prefix]) grouped[prefix] = [];
-    grouped[prefix].push([k, v]);
-  }
-
-  const bpmTile = bpm != null
-    ? `<div class="tiles" style="margin-bottom:14px">
-        <div class="tile" style="border-color:rgba(25,158,112,.3)">
-          <div class="lbl">BPM (dari PPG)</div>
-          <div class="val" style="font-size:40px;color:var(--c1)">${bpm.toFixed(1)}</div>
-          <div class="unit">denyut / menit</div>
-        </div>
-       </div>` : '';
 
   const rows = Object.entries(feats)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([k, v]) => `<tr><td>${k.replace(/_/g,' ')}</td><td>${typeof v === 'number' ? v.toFixed(4) : v}</td></tr>`)
     .join('');
 
-  fw.innerHTML = `${bpmTile}
-    <table class="ftbl">
-      <thead><tr><th>Fitur</th><th>Nilai</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
+  fw.innerHTML = `<table class="ftbl">
+    <thead><tr><th>Fitur</th><th>Nilai</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }
 
 // ── MLP ──
