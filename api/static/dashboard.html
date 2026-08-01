@@ -238,6 +238,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
   <button class="tab"     onclick="tab('xgb',this)">🎯 Setelah XGBoost</button>
   <button class="tab"     onclick="tab('fw',this)">⚙️ Firmware</button>
   <button class="tab"     onclick="tab('pwa-cfg',this)">🔧 PWA</button>
+  <button class="tab"     onclick="tab('calib',this)">🔬 Kalibrasi</button>
   <button class="tab"     onclick="tab('access-log',this)">🔍 Log Akses</button>
 </div>
 
@@ -347,6 +348,28 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 <!-- ── TAB 3: MLP ── -->
 <div id="p-mlp" class="pane">
   <div id="mlpNote"></div>
+
+  <!-- Estimasi regresi linier — placeholder sebelum MLP dikalibrasi -->
+  <div class="card" style="border-color:rgba(250,178,25,.3);margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <div class="card-ttl" style="margin:0">Estimasi Sementara — Regresi Linier (IR DC)</div>
+      <span style="font-size:10px;padding:2px 8px;border-radius:10px;
+        background:rgba(250,178,25,.15);color:var(--warn);font-weight:600">
+        BELUM DIKALIBRASI
+      </span>
+    </div>
+    <p style="font-size:11.5px;color:var(--muted);margin-bottom:12px;line-height:1.6">
+      Koefisien dari Gusti et al. (IJCS 2023) · Input = rata-rata nilai IR mentah (DC) ·
+      Akurasi asli: gula darah 91,44% · kolesterol 84,94% · asam urat 84,91% —
+      <em>belum tentu akurat di sensor ANTARAGA sebelum rekalibrasi dengan alat invasif</em>
+    </p>
+    <div id="linregTiles" class="tiles" style="margin-bottom:8px"></div>
+    <div style="font-size:10px;color:var(--muted)">
+      IR DC mean = <span id="linregDC" style="font-family:monospace;color:var(--text2)">—</span> ·
+      Rumus: y = a·DC + b (Gusti et al. 2023)
+    </div>
+  </div>
+
   <div class="tiles">
     <div class="tile">
       <div class="lbl">Tekanan Sistolik</div>
@@ -507,6 +530,209 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
       <button class="btn" onclick="pwaSave()">💾 Simpan</button>
       <button class="btn-sec" onclick="pwaReset()">↺ Default</button>
       <span id="pwaSaveMsg" style="display:none;font-size:12px;color:var(--c1)">✓ Tersimpan — berlaku pada ingest berikutnya</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── TAB: Kalibrasi ── -->
+<div id="p-calib" class="pane">
+
+  <!-- Navigasi cepat -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
+    <span style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em">Navigasi:</span>
+    <button class="btn-sec btn-sm" onclick="tab('raw',document.querySelector('.tab'))">📡 Data Asli</button>
+    <button class="btn-sec btn-sm" onclick="tab('pwa',document.querySelectorAll('.tab')[1])">🌊 PWA Signal</button>
+    <button class="btn-sec btn-sm" onclick="tab('mlp',document.querySelectorAll('.tab')[2])">🧠 Estimasi MLP</button>
+    <button class="btn-sec btn-sm" onclick="tab('xgb',document.querySelectorAll('.tab')[3])">🎯 Prediksi Stroke</button>
+  </div>
+
+  <!-- Ringkasan dataset -->
+  <div id="calibSummaryBar" class="sbar" style="margin-bottom:14px;gap:20px"></div>
+
+  <!-- Form rekam sesi -->
+  <div class="card" style="border-color:rgba(25,158,112,.3)">
+    <div class="card-ttl">Rekam Sesi Kalibrasi — Sinyal Sensor + Nilai Alat Invasif</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.6">
+      Tempelkan sensor ke jari subjek, tunggu sinyal stabil (≥10 dtk), lalu isi nilai alat invasif dan klik Simpan.
+      Sinyal PPG diambil otomatis dari buffer device yang sedang terhubung.
+    </p>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:14px">
+      <div>
+        <label class="up-label">ID Subjek <span style="color:var(--muted)">(anonim)</span></label>
+        <input id="clSubject" class="up-input" type="text" placeholder="mis. S001">
+      </div>
+      <div>
+        <label class="up-label">Usia (tahun)</label>
+        <input id="clAge" class="up-input" type="number" min="1" max="120" placeholder="mis. 45">
+      </div>
+      <div>
+        <label class="up-label">Gender</label>
+        <select id="clGender" class="up-input">
+          <option value="L">L — Laki-laki</option>
+          <option value="P">P — Perempuan</option>
+        </select>
+      </div>
+      <div>
+        <label class="up-label">Kondisi pengukuran</label>
+        <select id="clKondisi" class="up-input">
+          <option value="puasa">Puasa</option>
+          <option value="2j_setelah_makan">2 jam setelah makan</option>
+          <option value="sewaktu">Sewaktu (acak)</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">
+      Ground Truth — Nilai Alat Invasif / Medis Standar
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px">
+      <div>
+        <label class="up-label">Gula Darah (mg/dL)</label>
+        <input id="clGula" class="up-input" type="number" step="0.1" placeholder="mis. 95">
+      </div>
+      <div>
+        <label class="up-label">Kolesterol (mg/dL)</label>
+        <input id="clKol" class="up-input" type="number" step="0.1" placeholder="mis. 175">
+      </div>
+      <div>
+        <label class="up-label">Asam Urat (mg/dL)</label>
+        <input id="clAU" class="up-input" type="number" step="0.1" placeholder="mis. 5.2">
+      </div>
+      <div>
+        <label class="up-label">Sistolik (mmHg)</label>
+        <input id="clSis" class="up-input" type="number" step="1" placeholder="mis. 120">
+      </div>
+      <div>
+        <label class="up-label">Diastolik (mmHg)</label>
+        <input id="clDia" class="up-input" type="number" step="1" placeholder="mis. 80">
+      </div>
+      <div>
+        <label class="up-label">SpO2 Referensi (%)</label>
+        <input id="clSpo2" class="up-input" type="number" step="0.1" min="80" max="100" placeholder="mis. 98">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-ok" onclick="calibSave()">💾 Simpan Sesi Kalibrasi</button>
+      <span id="calibMsg" style="font-size:12px;display:none"></span>
+    </div>
+  </div>
+
+  <!-- Tabel rekaman -->
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+      <div class="card-ttl" style="margin:0">Dataset Kalibrasi</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn-sec btn-sm" onclick="calibLoad()">↺ Refresh</button>
+        <button class="btn btn-sm" onclick="calibExport()">⬇ Export CSV</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="ftbl" id="calibTbl" style="min-width:900px">
+        <thead>
+          <tr>
+            <th>#</th><th>Subjek</th><th>Usia</th><th>Gender</th><th>Kondisi</th>
+            <th>IR DC</th><th>BPM</th><th>SpO2 sensor</th>
+            <th style="color:var(--c1)">Gula ↓</th>
+            <th style="color:var(--c2)">Kol ↓</th>
+            <th style="color:var(--c3)">AU ↓</th>
+            <th>Sis ↓</th><th>Dia ↓</th><th>SpO2 ref</th>
+            <th>Waktu</th><th></th><th></th>
+          </tr>
+        </thead>
+        <tbody id="calibBody">
+          <tr><td colspan="17" style="text-align:center;color:var(--muted);padding:20px">Belum ada data — rekam sesi pertama di atas</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Hasil Pelatihan MLP terakhir -->
+  <div class="card" style="border-color:rgba(57,135,229,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+      <div class="card-ttl" style="margin:0">Hasil Pelatihan MLP Terakhir</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-sec btn-sm" onclick="calibLoadReport()">↺ Muat Laporan</button>
+        <button class="btn btn-sm" onclick="tab('mlp',document.querySelectorAll(\'.tab\')[2])">→ Ke Tab MLP</button>
+      </div>
+    </div>
+    <div id="calibReportWrap" style="font-size:12px;color:var(--muted)">
+      Klik "Muat Laporan" setelah menjalankan <code style="background:var(--surface2);padding:1px 5px;border-radius:4px">python model/train_mlp_calibration.py</code>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Edit Modal Kalibrasi ── -->
+<div id="calibEditModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;
+  align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:22px;
+    width:min(520px,94vw);max-height:88vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.4)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="font-weight:700;font-size:14px">Edit Rekaman Kalibrasi <span id="editRecId" style="color:var(--muted)"></span></div>
+      <button class="btn-del" onclick="calibCloseEdit()" style="font-size:16px;padding:2px 8px">✕</button>
+    </div>
+
+    <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Identitas Subjek</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+      <div>
+        <label class="up-label">ID Subjek</label>
+        <input id="editSubject" class="up-input" type="text">
+      </div>
+      <div>
+        <label class="up-label">Usia (tahun)</label>
+        <input id="editAge" class="up-input" type="number" min="1" max="120">
+      </div>
+      <div>
+        <label class="up-label">Gender</label>
+        <select id="editGender" class="up-input">
+          <option value="L">L — Laki-laki</option>
+          <option value="P">P — Perempuan</option>
+        </select>
+      </div>
+      <div>
+        <label class="up-label">Kondisi</label>
+        <select id="editKondisi" class="up-input">
+          <option value="puasa">Puasa</option>
+          <option value="2j_setelah_makan">2 jam setelah makan</option>
+          <option value="sewaktu">Sewaktu</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Nilai Ground Truth — Alat Invasif</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+      <div>
+        <label class="up-label">Gula Darah (mg/dL)</label>
+        <input id="editGula" class="up-input" type="number" step="0.1">
+      </div>
+      <div>
+        <label class="up-label">Kolesterol (mg/dL)</label>
+        <input id="editKol" class="up-input" type="number" step="0.1">
+      </div>
+      <div>
+        <label class="up-label">Asam Urat (mg/dL)</label>
+        <input id="editAU" class="up-input" type="number" step="0.1">
+      </div>
+      <div>
+        <label class="up-label">Sistolik (mmHg)</label>
+        <input id="editSis" class="up-input" type="number" step="1">
+      </div>
+      <div>
+        <label class="up-label">Diastolik (mmHg)</label>
+        <input id="editDia" class="up-input" type="number" step="1">
+      </div>
+      <div>
+        <label class="up-label">SpO2 Referensi (%)</label>
+        <input id="editSpo2" class="up-input" type="number" step="0.1" min="80" max="100">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;align-items:center">
+      <span id="editMsg" style="font-size:12px;display:none"></span>
+      <button class="btn-sec" onclick="calibCloseEdit()">Batal</button>
+      <button class="btn btn-ok" onclick="calibSaveEdit()">💾 Simpan Perubahan</button>
     </div>
   </div>
 </div>
@@ -749,6 +975,7 @@ function updateAll(d) {
   renderStats(d.analysis || {});
   renderRaw(d.raw, d.analysis || {});
   renderPwa(d.pwa, d.analysis || {});
+  renderLinreg((d.analysis || {}).linreg);
   renderMlp(d.mlp);
   renderXgb(d.xgboost);
 }
@@ -1003,6 +1230,281 @@ function renderPwa(p, analysis) {
   </table>`;
 }
 
+// ═══════════════════════════════════════════════
+//  KALIBRASI
+// ═══════════════════════════════════════════════
+async function calibLoad() {
+  const devFilter = devId ? `?device_id=${encodeURIComponent(devId)}` : '';
+  try {
+    const [rows, summary] = await Promise.all([
+      fetch(`/v1/calibrate${devFilter}&limit=200`).then(r => r.ok ? r.json() : []),
+      fetch(`/v1/calibrate/summary${devFilter}`).then(r => r.ok ? r.json() : {}),
+    ]);
+    renderCalibSummary(summary);
+    renderCalibTable(rows);
+  } catch {}
+}
+
+function renderCalibSummary(s) {
+  const el = document.getElementById('calibSummaryBar');
+  if (!el) return;
+  if (!s.total) {
+    el.innerHTML = '<span class="si"><span class="val" style="color:var(--muted)">Belum ada rekaman kalibrasi</span></span>';
+    return;
+  }
+  const st = (obj, unit) => obj && obj.n ? `${obj.mean} ${unit} (${obj.min}–${obj.max})` : '—';
+  el.innerHTML = `
+    <span class="si"><span class="lbl">Total</span><span class="val">${s.total} sesi</span></span>
+    <span class="si"><span class="lbl">Subjek</span><span class="val">${s.subjects}</span></span>
+    <span class="si"><span class="lbl">Gula Darah</span><span class="val">${st(s.gula_darah,'mg/dL')}</span></span>
+    <span class="si"><span class="lbl">Kolesterol</span><span class="val">${st(s.kolesterol,'mg/dL')}</span></span>
+    <span class="si"><span class="lbl">Asam Urat</span><span class="val">${st(s.asam_urat,'mg/dL')}</span></span>
+    <span class="si"><span class="lbl">Sistolik</span><span class="val">${st(s.sistolik,'mmHg')}</span></span>
+    <span class="si"><span class="lbl">BPM sensor</span><span class="val">${st(s.bpm,'bpm')}</span></span>`;
+}
+
+function renderCalibTable(rows) {
+  const tbody = document.getElementById('calibBody');
+  if (!tbody) return;
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="17" style="text-align:center;color:var(--muted);padding:20px">Belum ada data</td></tr>';
+    return;
+  }
+  const fmt = v => v != null ? Number(v).toFixed(1) : '—';
+  const fmtI = v => v != null ? Number(v).toLocaleString('id') : '—';
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td style="color:var(--muted)">${r.id}</td>
+      <td style="font-weight:600">${r.subject_id}</td>
+      <td>${r.age_years}</td>
+      <td>${r.gender}</td>
+      <td style="color:var(--muted)">${r.kondisi||'—'}</td>
+      <td style="font-family:monospace">${fmtI(r.ir_dc_mean)}</td>
+      <td>${fmt(r.bpm)}</td>
+      <td>${fmt(r.spo2_sensor)}</td>
+      <td style="color:var(--c1);font-weight:600">${fmt(r.gula_darah_mg_dl)}</td>
+      <td style="color:var(--c2);font-weight:600">${fmt(r.kolesterol_mg_dl)}</td>
+      <td style="color:var(--c3);font-weight:600">${fmt(r.asam_urat_mg_dl)}</td>
+      <td>${fmt(r.sistolik_mmhg)}</td>
+      <td>${fmt(r.diastolik_mmhg)}</td>
+      <td>${fmt(r.spo2_ref_pct)}</td>
+      <td style="color:var(--muted);font-size:10px">${new Date(r.session_ts).toLocaleString('id')}</td>
+      <td><button class="btn-sec btn-sm" style="font-size:11px;padding:2px 7px" onclick="calibEdit(${r.id})">✎</button></td>
+      <td><button class="btn-del" onclick="calibDelete(${r.id})">✕</button></td>
+    </tr>`).join('');
+}
+
+async function calibSave() {
+  const msgEl = document.getElementById('calibMsg');
+  const show = (txt, col) => { msgEl.textContent = txt; msgEl.style.color = col; msgEl.style.display = ''; };
+
+  const device = devId || document.getElementById('devIn').value.trim();
+  if (!device) { show('Hubungkan perangkat dulu (pilih device di atas)', 'var(--warn)'); return; }
+
+  const subj = document.getElementById('clSubject').value.trim();
+  const age  = document.getElementById('clAge').value.trim();
+  if (!subj) { show('ID subjek wajib diisi', 'var(--warn)'); return; }
+  if (!age)  { show('Usia wajib diisi', 'var(--warn)'); return; }
+
+  const p = new URLSearchParams({
+    device_id:  device,
+    subject_id: subj,
+    age_years:  age,
+    gender:     document.getElementById('clGender').value,
+    kondisi:    document.getElementById('clKondisi').value,
+  });
+  const addOpt = (id, key) => { const v = document.getElementById(id).value.trim(); if (v) p.append(key, v); };
+  addOpt('clGula', 'gula_darah_mg_dl');
+  addOpt('clKol',  'kolesterol_mg_dl');
+  addOpt('clAU',   'asam_urat_mg_dl');
+  addOpt('clSis',  'sistolik_mmhg');
+  addOpt('clDia',  'diastolik_mmhg');
+  addOpt('clSpo2', 'spo2_ref_pct');
+
+  show('Menyimpan…', 'var(--muted)');
+  try {
+    const r = await fetch(`/v1/calibrate?${p}`, { method: 'POST' });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      show(`Gagal: ${e.detail || r.status}`, 'var(--critical)'); return;
+    }
+    show('✓ Sesi tersimpan!', 'var(--good)');
+    calibLoad();
+    // Reset form
+    ['clSubject','clGula','clKol','clAU','clSis','clDia','clSpo2'].forEach(id => document.getElementById(id).value = '');
+    setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
+  } catch (e) {
+    show(`Error: ${e.message}`, 'var(--critical)');
+  }
+}
+
+async function calibDelete(id) {
+  if (!confirm(`Hapus rekaman kalibrasi #${id}?`)) return;
+  await fetch(`/v1/calibrate/${id}`, { method: 'DELETE' });
+  calibLoad();
+}
+
+function calibExport() {
+  const devFilter = devId ? `?device_id=${encodeURIComponent(devId)}` : '';
+  window.location.href = `/v1/calibrate/export.csv${devFilter}`;
+}
+
+// ── Edit rekaman kalibrasi ──────────────────────────────────────────────────
+let _calibEditId = null;
+
+async function calibEdit(id) {
+  const devFilter = devId ? `?device_id=${encodeURIComponent(devId)}&limit=200` : '?limit=200';
+  const rows = await fetch(`/v1/calibrate${devFilter}`).then(r => r.ok ? r.json() : []);
+  const rec  = rows.find(r => r.id === id);
+  if (!rec) { alert('Rekaman tidak ditemukan — coba refresh tabel.'); return; }
+
+  _calibEditId = id;
+  document.getElementById('editRecId').textContent  = `#${id}`;
+  document.getElementById('editSubject').value = rec.subject_id || '';
+  document.getElementById('editAge').value     = rec.age_years  || '';
+  document.getElementById('editGender').value  = rec.gender     || 'L';
+  document.getElementById('editKondisi').value = rec.kondisi    || 'sewaktu';
+  document.getElementById('editGula').value    = rec.gula_darah_mg_dl ?? '';
+  document.getElementById('editKol').value     = rec.kolesterol_mg_dl  ?? '';
+  document.getElementById('editAU').value      = rec.asam_urat_mg_dl   ?? '';
+  document.getElementById('editSis').value     = rec.sistolik_mmhg     ?? '';
+  document.getElementById('editDia').value     = rec.diastolik_mmhg    ?? '';
+  document.getElementById('editSpo2').value    = rec.spo2_ref_pct      ?? '';
+  document.getElementById('editMsg').style.display = 'none';
+
+  const modal = document.getElementById('calibEditModal');
+  modal.style.display = 'flex';
+}
+
+function calibCloseEdit() {
+  document.getElementById('calibEditModal').style.display = 'none';
+  _calibEditId = null;
+}
+
+async function calibSaveEdit() {
+  if (_calibEditId == null) return;
+  const msgEl = document.getElementById('editMsg');
+  const show  = (txt, col) => { msgEl.textContent = txt; msgEl.style.color = col; msgEl.style.display = ''; };
+
+  const p = new URLSearchParams();
+  const addOpt = (inputId, key) => {
+    const v = document.getElementById(inputId).value.trim();
+    if (v !== '') p.append(key, v);
+  };
+  addOpt('editSubject', 'subject_id');
+  addOpt('editAge',     'age_years');
+  p.append('gender',  document.getElementById('editGender').value);
+  p.append('kondisi', document.getElementById('editKondisi').value);
+  addOpt('editGula', 'gula_darah_mg_dl');
+  addOpt('editKol',  'kolesterol_mg_dl');
+  addOpt('editAU',   'asam_urat_mg_dl');
+  addOpt('editSis',  'sistolik_mmhg');
+  addOpt('editDia',  'diastolik_mmhg');
+  addOpt('editSpo2', 'spo2_ref_pct');
+
+  show('Menyimpan…', 'var(--muted)');
+  try {
+    const r = await fetch(`/v1/calibrate/${_calibEditId}?${p}`, { method: 'PATCH' });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      show(`Gagal: ${e.detail || r.status}`, 'var(--critical)'); return;
+    }
+    show('✓ Tersimpan', 'var(--good)');
+    setTimeout(() => calibCloseEdit(), 800);
+    calibLoad();
+  } catch (e) {
+    show(`Error: ${e.message}`, 'var(--critical)');
+  }
+}
+
+// Tutup modal jika klik di latar
+document.getElementById('calibEditModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('calibEditModal')) calibCloseEdit();
+});
+
+// ── Laporan hasil pelatihan MLP ──────────────────────────────────────────────
+async function calibLoadReport() {
+  const wrap = document.getElementById('calibReportWrap');
+  wrap.innerHTML = '<span style="color:var(--muted)">Memuat…</span>';
+  try {
+    const data = await fetch('/v1/calibrate/training-report').then(r => r.json());
+    if (!data.available) {
+      wrap.innerHTML = `<span style="color:var(--warn)">${data.message}</span>`;
+      return;
+    }
+    const m = data.metrics;
+    const targets = {
+      gula_darah_mg_dl: 'Gula Darah',
+      kolesterol_mg_dl: 'Kolesterol',
+      asam_urat_mg_dl:  'Asam Urat',
+      sistolik_mmhg:    'Sistolik',
+      diastolik_mmhg:   'Diastolik',
+    };
+    const rows = Object.entries(targets).map(([k, label]) => {
+      if (!m[k]) return `<tr><td>${label}</td><td colspan="5" style="color:var(--muted)">Data tidak cukup</td></tr>`;
+      const v = m[k];
+      const accColor = v.accuracy_pct >= 90 ? 'var(--good)' : v.accuracy_pct >= 80 ? 'var(--warn)' : 'var(--critical)';
+      return `<tr>
+        <td style="font-weight:600">${label}</td>
+        <td style="font-family:monospace">${v.n}</td>
+        <td style="font-family:monospace">${v.cv}</td>
+        <td style="font-family:monospace">${v.r2}</td>
+        <td style="font-family:monospace">${v.mae}</td>
+        <td style="font-family:monospace;color:${accColor};font-weight:600">${v.accuracy_pct}%</td>
+      </tr>`;
+    }).join('');
+    wrap.innerHTML = `
+      <table class="ftbl" style="width:100%">
+        <thead><tr>
+          <th>Target</th><th>N</th><th>CV</th><th>R²</th><th>MAE</th><th>Akurasi</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">
+        Scatter plots tersimpan di <code style="background:var(--surface2);padding:1px 5px;border-radius:4px">reports/kalibrasi/scatter_*.png</code>
+      </div>`;
+  } catch (e) {
+    wrap.innerHTML = `<span style="color:var(--critical)">Gagal memuat: ${e.message}</span>`;
+  }
+}
+
+// ── Regresi linier (placeholder gula darah / kolesterol / asam urat) ──
+function renderLinreg(lr) {
+  const tilesEl = document.getElementById('linregTiles');
+  const dcEl    = document.getElementById('linregDC');
+  if (!tilesEl) return;
+
+  if (!lr || !lr.available) {
+    tilesEl.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:4px 0">
+      Menunggu sinyal IR (minimal 1 detik)…</div>`;
+    if (dcEl) dcEl.textContent = '—';
+    return;
+  }
+
+  if (dcEl) dcEl.textContent = Number(lr.ir_dc_mean).toLocaleString('id');
+
+  const gd = lr.gula_darah_mg_dl;
+  const kl = lr.kolesterol_mg_dl;
+  const au = lr.asam_urat_mg_dl;
+
+  const gdSt = gd < 100 ? {l:'Normal',c:'var(--good)'} : gd < 126 ? {l:'Prediabetes',c:'var(--warn)'} : {l:'Diabetes',c:'var(--critical)'};
+  const klSt = kl < 200 ? {l:'Normal',c:'var(--good)'} : kl < 240 ? {l:'Batas Tinggi',c:'var(--warn)'} : {l:'Tinggi',c:'var(--critical)'};
+  const auSt = au < 7.0 ? {l:'Normal',c:'var(--good)'} : {l:'Hiperurisemia',c:'var(--warn)'};
+
+  const mkTile = (lbl, val, unit, st, color) => `
+    <div class="tile" style="border-color:rgba(250,178,25,.2)">
+      <div class="lbl">${lbl} <span style="font-size:9px;color:var(--muted)">(tdk dikalibrasi)</span></div>
+      <div class="val" style="font-size:28px;color:${color}">${val != null ? val.toFixed(1) : '—'}</div>
+      <div class="unit">${unit}</div>
+      <div class="st" style="color:${st.c}">${st.l}</div>
+    </div>`;
+
+  tilesEl.innerHTML =
+    mkTile('Gula Darah', gd, 'mg/dL', gdSt, gdSt.c) +
+    mkTile('Kolesterol',  kl, 'mg/dL', klSt, klSt.c) +
+    mkTile('Asam Urat',   au, 'mg/dL', auSt, auSt.c);
+}
+
 // ── MLP ──
 function renderMlp(m) {
   const noteEl = document.getElementById('mlpNote');
@@ -1082,6 +1584,7 @@ function tab(name, btn) {
   if (name === 'fw')         fwInit();
   if (name === 'pwa-cfg')    pwaSettingsInit();
   if (name === 'access-log') alConnect();
+  if (name === 'calib')      calibLoad();
 }
 
 // ═══════════════════════════════════════════════

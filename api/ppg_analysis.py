@@ -170,6 +170,43 @@ def channel_stats(
     }
 
 
+# ── Estimasi gula darah / kolesterol / asam urat — regresi linier ─────────
+# Koefisien dari Gusti et al. (IJCS Vol.12 No.6, 2023).
+# Input = rata-rata nilai IR mentah (DC).  BELUM DIKALIBRASI ke sensor ANTARAGA —
+# hanya untuk demo pipeline sebelum data kalibrasi nyata terkumpul.
+_LINREG: dict[str, tuple[float, float]] = {
+    "gula_darah":  (0.0036,   -294.18),   # R²=0.80
+    "kolesterol":  (0.0015,     5.9566),   # R²=0.77
+    "asam_urat":   (0.00005,   -0.9687),  # R²=0.81
+}
+
+
+def compute_linreg_vitals(
+    ir_raw: list | np.ndarray,
+    fs: float,
+) -> dict:
+    """Estimasi gula darah, kolesterol, asam urat via regresi linier DC-IR.
+
+    Identik dengan metode Gusti et al. 2023: pakai rata-rata (DC) nilai IR
+    mentah sebagai satu-satunya prediktor.  Hasil ini BELUM DIKALIBRASI —
+    koefisien bawaan dari dataset mereka, bukan dari rekaman ANTARAGA.
+    """
+    arr = np.asarray(ir_raw, dtype=np.float64)
+    if len(arr) < max(8, int(fs)):
+        return {"available": False}
+    dc = float(arr.mean())
+    a_gd, b_gd = _LINREG["gula_darah"]
+    a_kl, b_kl = _LINREG["kolesterol"]
+    a_au, b_au = _LINREG["asam_urat"]
+    return {
+        "available":       True,
+        "ir_dc_mean":      round(dc),
+        "gula_darah_mg_dl": round(a_gd * dc + b_gd, 1),
+        "kolesterol_mg_dl": round(a_kl * dc + b_kl, 1),
+        "asam_urat_mg_dl":  round(a_au * dc + b_au, 1),
+    }
+
+
 # ── SpO2 via rasio Beer-Lambert ───────────────────────────────────────────
 
 def compute_spo2(

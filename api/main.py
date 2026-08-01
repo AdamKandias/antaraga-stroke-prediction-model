@@ -901,7 +901,9 @@ def _compute_ppg_analysis(
       dc, ac_p2p, pi_permil, ref_pi_permil  (dari channel_stats)
     """
     try:
-        from api.ppg_analysis import analyze_channel, channel_stats, compute_spo2
+        from api.ppg_analysis import (
+            analyze_channel, channel_stats, compute_spo2, compute_linreg_vitals,
+        )
 
         def _proc(sig: list, fs: float, ch: str) -> dict:
             if not sig:
@@ -913,18 +915,20 @@ def _compute_ppg_analysis(
 
         fs_m = float(fs_max or 200)
         result = {
-            "green": _proc(ppg, float(fs_ppg or 200), "green"),
-            "red":   _proc(red, fs_m, "red"),
-            "ir":    _proc(ir,  fs_m, "ir"),
-            "spo2":  compute_spo2(red, ir, fs_m),
+            "green":        _proc(ppg, float(fs_ppg or 200), "green"),
+            "red":          _proc(red, fs_m, "red"),
+            "ir":           _proc(ir,  fs_m, "ir"),
+            "spo2":         compute_spo2(red, ir, fs_m),
+            "linreg":       compute_linreg_vitals(ir, fs_m),
         }
         return result
     except Exception as exc:
         return {
-            "green": _empty_ac(str(exc)),
-            "red":   _empty_ac(),
-            "ir":    _empty_ac(),
-            "spo2":  {"spo2": None, "r_ratio": None, "valid": False},
+            "green":  _empty_ac(str(exc)),
+            "red":    _empty_ac(),
+            "ir":     _empty_ac(),
+            "spo2":   {"spo2": None, "r_ratio": None, "valid": False},
+            "linreg": {"available": False},
         }
 
 
@@ -1001,6 +1005,271 @@ def _compute_xgboost(device_id: str, db: Session) -> dict:
         "threshold": resp.get("threshold"),
         "model_name": resp.get("model_name"),
         "predicted_at": log.created_at.isoformat(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# /v1/calibrate — rekam sesi kalibrasi (sinyal PPG + nilai invasif)
+# ---------------------------------------------------------------------------
+
+@app.post("/v1/calibrate", status_code=201)
+def calibrate_create(
+    device_id: str,
+    subject_id: str,
+    age_years: float,
+    gender: str,
+    kondisi: str | None = None,
+    gula_darah_mg_dl: float | None = None,
+    kolesterol_mg_dl: float | None = None,
+    asam_urat_mg_dl: float | None = None,
+    sistolik_mmhg: float | None = None,
+    diastolik_mmhg: float | None = None,
+    spo2_ref_pct: float | None = None,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Rekam satu sesi kalibrasi.
+
+    Sinyal PPG diambil otomatis dari buffer (window 10 detik terakhir) berdasarkan
+    device_id.  Nilai invasif (ground truth) dimasukkan manual oleh peneliti.
+    """
+    batches = ingest_buffer.get_window_s(device_id, 10.0)
+    if not batches:
+        raise HTTPException(status_code=404, detail=f"Belum ada sinyal dari '{device_id}' — pastikan firmware sedang berjalan")
+
+    latest = batches[-1]
+    fs_ppg = float(latest.get("fs_ppg", 200))
+    fs_max = float(latest.get("fs_max", 200))
+
+    all_green = [float(v) for b in batches for v in b.get("ppg", [])]
+    all_red   = [float(v) for b in batches for v in b.get("red", [])]
+    all_ir    = [float(v) for b in batches for v in b.get("ir", [])]
+
+    # Ekstrak fitur sinyal
+    from api.ppg_analysis import channel_stats, bpm_autocorr, compute_spo2
+    ir_st  = channel_stats(all_ir,  fs_max, "ir")
+    red_st = channel_stats(all_red, fs_max, "red")
+    bpm_val, _ = bpm_autocorr(np.array(all_ir, dtype=float), fs_max) if all_ir else (None, 0.0)
+    spo2_res   = compute_spo2(all_red, all_ir, fs_max)
+
+    def _join(arr: list) -> str:
+        return ";".join(str(round(v)) for v in arr)
+
+    rec = models_db.CalibrationRecord(
+        device_id    = device_id,
+        subject_id   = subject_id.strip(),
+        age_years    = age_years,
+        gender       = gender.strip().upper(),
+        kondisi      = (kondisi or "").strip() or None,
+        fs_hz        = fs_max,
+        green_raw    = _join(all_green) if all_green else None,
+        red_raw      = _join(all_red)   if all_red   else None,
+        infrared_raw = _join(all_ir)    if all_ir    else None,
+        ir_dc_mean   = ir_st.get("dc"),
+        ir_ac_p2p    = ir_st.get("ac_p2p"),
+        red_dc_mean  = red_st.get("dc"),
+        red_ac_p2p   = red_st.get("ac_p2p"),
+        bpm          = bpm_val,
+        spo2_sensor  = spo2_res.get("spo2"),
+        gula_darah_mg_dl = gula_darah_mg_dl,
+        kolesterol_mg_dl  = kolesterol_mg_dl,
+        asam_urat_mg_dl   = asam_urat_mg_dl,
+        sistolik_mmhg     = sistolik_mmhg,
+        diastolik_mmhg    = diastolik_mmhg,
+        spo2_ref_pct      = spo2_ref_pct,
+    )
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
+    return _calib_to_dict(rec)
+
+
+@app.get("/v1/calibrate")
+def calibrate_list(
+    device_id: str | None = None,
+    limit: int = Query(200, ge=1, le=2000),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    """Daftar rekaman kalibrasi, terbaru duluan."""
+    q = db.query(models_db.CalibrationRecord).order_by(
+        desc(models_db.CalibrationRecord.created_at)
+    )
+    if device_id:
+        q = q.filter(models_db.CalibrationRecord.device_id == device_id)
+    return [_calib_to_dict(r) for r in q.limit(limit).all()]
+
+
+@app.patch("/v1/calibrate/{record_id}")
+def calibrate_update(
+    record_id: int,
+    subject_id: str | None = None,
+    age_years: float | None = None,
+    gender: str | None = None,
+    kondisi: str | None = None,
+    gula_darah_mg_dl: float | None = None,
+    kolesterol_mg_dl: float | None = None,
+    asam_urat_mg_dl: float | None = None,
+    sistolik_mmhg: float | None = None,
+    diastolik_mmhg: float | None = None,
+    spo2_ref_pct: float | None = None,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Perbarui nilai ground truth atau metadata satu rekaman kalibrasi."""
+    rec = db.get(models_db.CalibrationRecord, record_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="Record tidak ditemukan")
+    if subject_id        is not None: rec.subject_id        = subject_id.strip()
+    if age_years         is not None: rec.age_years         = age_years
+    if gender            is not None: rec.gender            = gender.strip().upper()
+    if kondisi           is not None: rec.kondisi           = kondisi.strip() or None
+    if gula_darah_mg_dl  is not None: rec.gula_darah_mg_dl  = gula_darah_mg_dl
+    if kolesterol_mg_dl  is not None: rec.kolesterol_mg_dl  = kolesterol_mg_dl
+    if asam_urat_mg_dl   is not None: rec.asam_urat_mg_dl   = asam_urat_mg_dl
+    if sistolik_mmhg     is not None: rec.sistolik_mmhg     = sistolik_mmhg
+    if diastolik_mmhg    is not None: rec.diastolik_mmhg    = diastolik_mmhg
+    if spo2_ref_pct      is not None: rec.spo2_ref_pct      = spo2_ref_pct
+    db.commit()
+    db.refresh(rec)
+    return _calib_to_dict(rec)
+
+
+@app.delete("/v1/calibrate/{record_id}", status_code=204)
+def calibrate_delete(record_id: int, db: Session = Depends(get_db)) -> None:
+    rec = db.get(models_db.CalibrationRecord, record_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="Record tidak ditemukan")
+    db.delete(rec)
+    db.commit()
+
+
+@app.get("/v1/calibrate/training-report")
+def calibrate_training_report() -> dict:
+    """Baca hasil pelatihan MLP terakhir dari artifacts (jika sudah dilatih)."""
+    import pathlib
+    metrics_path = pathlib.Path(__file__).resolve().parent.parent / "model" / "artifacts" / "mlp_calibration_metrics.json"
+    if not metrics_path.exists():
+        return {"available": False, "message": "Model belum dilatih — jalankan: python model/train_mlp_calibration.py"}
+    import json as _json
+    data = _json.loads(metrics_path.read_text())
+    return {"available": True, "metrics": data}
+
+
+@app.get("/v1/calibrate/export.csv")
+def calibrate_export(
+    device_id: str | None = None,
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    """Export dataset kalibrasi sebagai CSV (kompatibel model/train_mlp_calibration.py)."""
+    import csv, io
+    q = db.query(models_db.CalibrationRecord).order_by(
+        models_db.CalibrationRecord.created_at
+    )
+    if device_id:
+        q = q.filter(models_db.CalibrationRecord.device_id == device_id)
+    rows = q.all()
+
+    buf = io.StringIO()
+    headers = [
+        "id", "device_id", "subject_id", "session_ts", "age_years", "gender", "kondisi",
+        "fs_hz", "green_raw", "red_raw", "infrared_raw",
+        "ir_dc_mean", "ir_ac_p2p", "red_dc_mean", "red_ac_p2p", "bpm", "spo2_sensor",
+        "gula_darah_mg_dl", "kolesterol_mg_dl", "asam_urat_mg_dl",
+        "sistolik_mmhg", "diastolik_mmhg", "spo2_ref_pct",
+        # Alias kompatibel train_ppg_vitals.py
+        "blood_glucose_mg_dl", "systolic_bp_mmhg", "diastolic_bp_mmhg",
+    ]
+    w = csv.DictWriter(buf, fieldnames=headers, extrasaction="ignore")
+    w.writeheader()
+    for r in rows:
+        w.writerow({
+            "id": r.id,
+            "device_id": r.device_id,
+            "subject_id": r.subject_id,
+            "session_ts": r.created_at.isoformat(),
+            "age_years": r.age_years,
+            "gender": r.gender,
+            "kondisi": r.kondisi or "",
+            "fs_hz": r.fs_hz,
+            "green_raw": r.green_raw or "",
+            "red_raw": r.red_raw or "",
+            "infrared_raw": r.infrared_raw or "",
+            "ir_dc_mean": r.ir_dc_mean or "",
+            "ir_ac_p2p": r.ir_ac_p2p or "",
+            "red_dc_mean": r.red_dc_mean or "",
+            "red_ac_p2p": r.red_ac_p2p or "",
+            "bpm": r.bpm or "",
+            "spo2_sensor": r.spo2_sensor or "",
+            "gula_darah_mg_dl": r.gula_darah_mg_dl or "",
+            "kolesterol_mg_dl": r.kolesterol_mg_dl or "",
+            "asam_urat_mg_dl": r.asam_urat_mg_dl or "",
+            "sistolik_mmhg": r.sistolik_mmhg or "",
+            "diastolik_mmhg": r.diastolik_mmhg or "",
+            "spo2_ref_pct": r.spo2_ref_pct or "",
+            # Alias
+            "blood_glucose_mg_dl": r.gula_darah_mg_dl or "",
+            "systolic_bp_mmhg": r.sistolik_mmhg or "",
+            "diastolic_bp_mmhg": r.diastolik_mmhg or "",
+        })
+
+    buf.seek(0)
+    filename = f"kalibrasi_{device_id or 'semua'}.csv"
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/v1/calibrate/summary")
+def calibrate_summary(
+    device_id: str | None = None,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Statistik ringkas dataset kalibrasi."""
+    q = db.query(models_db.CalibrationRecord)
+    if device_id:
+        q = q.filter(models_db.CalibrationRecord.device_id == device_id)
+    rows = q.all()
+    n = len(rows)
+    if n == 0:
+        return {"total": 0}
+
+    def _stats(vals):
+        v = [x for x in vals if x is not None]
+        if not v:
+            return {"n": 0}
+        arr = np.array(v)
+        return {"n": len(v), "min": round(float(arr.min()), 1),
+                "max": round(float(arr.max()), 1), "mean": round(float(arr.mean()), 1)}
+
+    return {
+        "total": n,
+        "subjects": len({r.subject_id for r in rows}),
+        "devices": list({r.device_id for r in rows}),
+        "age":         _stats([r.age_years         for r in rows]),
+        "gula_darah":  _stats([r.gula_darah_mg_dl  for r in rows]),
+        "kolesterol":  _stats([r.kolesterol_mg_dl   for r in rows]),
+        "asam_urat":   _stats([r.asam_urat_mg_dl    for r in rows]),
+        "sistolik":    _stats([r.sistolik_mmhg       for r in rows]),
+        "diastolik":   _stats([r.diastolik_mmhg      for r in rows]),
+        "bpm":         _stats([r.bpm                for r in rows]),
+        "spo2_sensor": _stats([r.spo2_sensor        for r in rows]),
+    }
+
+
+def _calib_to_dict(r: models_db.CalibrationRecord) -> dict:
+    return {
+        "id": r.id, "device_id": r.device_id,
+        "subject_id": r.subject_id, "age_years": r.age_years,
+        "gender": r.gender, "kondisi": r.kondisi,
+        "session_ts": r.created_at.isoformat(),
+        "ir_dc_mean": r.ir_dc_mean, "ir_ac_p2p": r.ir_ac_p2p,
+        "red_dc_mean": r.red_dc_mean, "bpm": r.bpm, "spo2_sensor": r.spo2_sensor,
+        "gula_darah_mg_dl": r.gula_darah_mg_dl,
+        "kolesterol_mg_dl":  r.kolesterol_mg_dl,
+        "asam_urat_mg_dl":   r.asam_urat_mg_dl,
+        "sistolik_mmhg":     r.sistolik_mmhg,
+        "diastolik_mmhg":    r.diastolik_mmhg,
+        "spo2_ref_pct":      r.spo2_ref_pct,
     }
 
 

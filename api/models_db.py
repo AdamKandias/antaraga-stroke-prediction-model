@@ -94,6 +94,49 @@ class VitalReading(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
 
+class CalibrationRecord(Base):
+    """Satu sesi kalibrasi: sinyal PPG dari sensor + nilai invasif sebagai ground truth.
+
+    Satu baris = satu subjek, satu waktu pengukuran.
+    Dipakai untuk melatih MLP (model/train_mlp_calibration.py).
+    """
+
+    __tablename__ = "calibration_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+
+    # Identitas subjek (anonim)
+    subject_id: Mapped[str] = mapped_column(String, nullable=False)   # mis. "S001"
+    age_years: Mapped[float] = mapped_column(Float, nullable=False)
+    gender: Mapped[str] = mapped_column(String, nullable=False)        # "L" / "P"
+    kondisi: Mapped[str | None] = mapped_column(String, nullable=True) # "puasa" / "2j_makan"
+
+    # Sinyal mentah — disimpan sebagai string nilai dipisah ";" (kompatibel train_ppg_vitals.py)
+    fs_hz: Mapped[float] = mapped_column(Float, nullable=False)
+    green_raw: Mapped[str | None] = mapped_column(Text, nullable=True)
+    red_raw: Mapped[str | None] = mapped_column(Text, nullable=True)
+    infrared_raw: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Fitur sinyal yang sudah dihitung (untuk tampilan cepat & training sederhana)
+    ir_dc_mean: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ir_ac_p2p: Mapped[float | None] = mapped_column(Float, nullable=True)
+    red_dc_mean: Mapped[float | None] = mapped_column(Float, nullable=True)
+    red_ac_p2p: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bpm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    spo2_sensor: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Ground truth dari alat invasif / medis standar
+    gula_darah_mg_dl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    kolesterol_mg_dl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    asam_urat_mg_dl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sistolik_mmhg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    diastolik_mmhg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    spo2_ref_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
 class PredictionLog(Base):
     """Every call to /predict/stroke-risk, /assessment/abcd2, or
     /estimate/vitals-from-ppg is recorded here, purely so the testing
