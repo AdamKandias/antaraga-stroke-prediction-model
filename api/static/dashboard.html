@@ -103,6 +103,25 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 .badge.med{background:rgba(250,178,25,.15);color:var(--warn)}
 .badge.hi{background:rgba(208,59,59,.15);color:var(--critical)}
 
+/* ── Window selector ── */
+.win-sel{display:flex;gap:3px;align-items:center}
+.win-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text2);
+  padding:3px 9px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:500;transition:all .12s}
+.win-btn:hover{border-color:rgba(57,135,229,.5);color:var(--text)}
+.win-btn.on{background:#3987e5;color:#fff;border-color:#3987e5}
+
+/* ── Stats panel ── */
+.stats-panel{background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;padding:8px 14px;margin-bottom:14px}
+.stats-ttl{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.06em;margin-bottom:6px}
+.sptbl{width:100%;border-collapse:collapse;font-size:11.5px;font-variant-numeric:tabular-nums}
+.sptbl th,.sptbl td{padding:4px 8px;text-align:right;border-bottom:1px solid var(--grid)}
+.sptbl th{color:var(--muted);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+.sptbl td:first-child,.sptbl th:first-child{text-align:left;padding-left:0}
+.sptbl tr:last-child td{border-bottom:none}
+@media(max-width:700px){.sptbl th:nth-child(5),.sptbl td:nth-child(5){display:none}}
+
 /* ── Empty / note ── */
 .empty{text-align:center;padding:40px 24px;color:var(--muted)}
 .empty h3{font-size:15px;margin-bottom:6px;color:var(--text2)}
@@ -199,6 +218,16 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
   <span class="si"><span class="lbl">Diperbarui</span><span id="ts" class="val">—</span></span>
   <span class="si"><span class="lbl">PPG</span><span id="nppg" class="val">—</span></span>
   <span class="si"><span class="lbl">MAX30102</span><span id="nmax" class="val">—</span></span>
+  <span class="si" style="margin-left:auto">
+    <span class="lbl">Jendela</span>
+    <span class="win-sel">
+      <button class="win-btn"    onclick="setWin(5,this)">5s</button>
+      <button class="win-btn on" onclick="setWin(10,this)">10s</button>
+      <button class="win-btn"    onclick="setWin(20,this)">20s</button>
+      <button class="win-btn"    onclick="setWin(30,this)">30s</button>
+      <button class="win-btn"    onclick="setWin(60,this)">60s</button>
+    </span>
+  </span>
 </div>
 
 <!-- Tabs -->
@@ -210,6 +239,31 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
   <button class="tab"     onclick="tab('fw',this)">⚙️ Firmware</button>
   <button class="tab"     onclick="tab('pwa-cfg',this)">🔧 PWA</button>
   <button class="tab"     onclick="tab('access-log',this)">🔍 Log Akses</button>
+</div>
+
+<!-- ── Panel statistik — persisten di semua tab ── -->
+<div class="stats-panel">
+  <div class="stats-ttl">Statistik Jendela — DC &amp; AC Mentah · Perfusi = AC/DC · BPM = Autokorelasi</div>
+  <div style="overflow-x:auto">
+    <table class="sptbl">
+      <thead>
+        <tr>
+          <th>Kanal</th>
+          <th>DC</th>
+          <th>AC p2p (1 dtk)</th>
+          <th>Perfusi ‰</th>
+          <th>Acuan ‰</th>
+          <th>BPM</th>
+          <th>Periodisitas</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr id="statGreen"><td colspan="7" style="text-align:center;color:var(--muted);padding:8px">Menunggu data…</td></tr>
+        <tr id="statRed"   style="display:none"></tr>
+        <tr id="statIr"    style="display:none"></tr>
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <!-- ── TAB 1: Raw ── -->
@@ -508,7 +562,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 // ═══════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════
-let devId = '', timer = null, charts = {}, ready = false;
+let devId = '', timer = null, charts = {}, ready = false, winS = 10;
 
 // ═══════════════════════════════════════════════
 //  CHART FACTORY
@@ -635,6 +689,13 @@ async function loadDevices() {
 
 function onSelChange(v) { if (v) document.getElementById('devIn').value = v; }
 
+function setWin(s, btn) {
+  winS = s;
+  document.querySelectorAll('.win-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  if (devId) poll();
+}
+
 function connect() {
   const v = (document.getElementById('devIn').value || document.getElementById('devSel').value).trim();
   if (!v) { alert('Masukkan DEVICE_ID terlebih dahulu'); return; }
@@ -652,7 +713,7 @@ function connect() {
 async function poll() {
   if (!devId) return;
   try {
-    const r = await fetch(`/v1/ingest/latest?device_id=${encodeURIComponent(devId)}`);
+    const r = await fetch(`/v1/ingest/latest?device_id=${encodeURIComponent(devId)}&window_s=${winS}`);
     if (!r.ok) {
       setStatus('err', r.status === 404 ? `Belum ada data dari "${devId}"` : `HTTP ${r.status}`);
       return;
@@ -674,6 +735,7 @@ function updateAll(d) {
   document.getElementById('nppg').textContent = `${d.raw.n_ppg} sp · ${d.raw.fs_ppg} Hz`;
   document.getElementById('nmax').textContent = `${d.raw.n_max} sp · ${d.raw.fs_max} Hz`;
 
+  renderStats(d.analysis || {});
   renderRaw(d.raw, d.analysis || {});
   renderPwa(d.pwa, d.analysis || {});
   renderMlp(d.mlp);
@@ -683,6 +745,38 @@ function updateAll(d) {
 function setStatus(state, msg) {
   document.getElementById('dot').className = 'dot' + (state === 'ok' ? ' ok' : state === 'err' ? ' err' : '');
   document.getElementById('stTxt').textContent = msg;
+}
+
+// ── Stats panel (persisten semua tab, identik plotter.py _tick_stats) ──
+function renderStats(analysis) {
+  const ch = [
+    { id: 'statGreen', label: 'HIJAU 525 nm (SEN0203)',       data: analysis.green || {}, color: 'var(--c1)' },
+    { id: 'statRed',   label: 'MERAH 660 nm (MAX30102)',      data: analysis.red   || {}, color: 'var(--c2)' },
+    { id: 'statIr',    label: 'IR 880 nm (MAX30102)',         data: analysis.ir    || {}, color: 'var(--c3)' },
+  ];
+  for (const { id, label, data: d, color } of ch) {
+    const tr = document.getElementById(id);
+    if (!tr) continue;
+    tr.style.display = '';
+
+    const bpm  = d.bpm;
+    const conf = d.conf ?? 0;
+    const confPct  = (conf * 100).toFixed(1);
+    const confNote = conf < 0.30 ? ' (derau)' : '';
+    const confCol  = conf >= 0.6 ? 'var(--c1)' : conf >= 0.3 ? 'var(--warn)' : 'var(--muted)';
+
+    const fmt = v => v != null ? Number(v).toLocaleString('id') : '—';
+    const fmtF = (v, n=2) => v != null ? Number(v).toFixed(n) : '—';
+
+    tr.innerHTML = `
+      <td style="color:${color};font-weight:600;font-size:11px">${label}</td>
+      <td>${fmt(d.dc)}</td>
+      <td>${fmt(d.ac_p2p)}</td>
+      <td>${fmtF(d.pi_permil)}</td>
+      <td>${d.ref_pi_permil != null ? fmtF(d.ref_pi_permil) : '—'}</td>
+      <td style="color:${conf >= 0.3 ? 'var(--text)' : 'var(--muted)'}">${bpm != null ? bpm.toFixed(1) : '—'}</td>
+      <td style="color:${confCol}">${confPct}%${confNote}</td>`;
+  }
 }
 
 // ── Raw ──

@@ -130,6 +130,46 @@ def _find_peaks_ac(y: np.ndarray, fs: float, bpm_max: float = 180.0) -> list[int
     return [int(p) for p in peaks]
 
 
+# ── Referensi perfusi (dari rekaman rekam_ppg_merah_v2_irred1.txt) ────────
+_REF_PI: dict[str, float | None] = {
+    "green": None,   # belum ada acuan rekaman optimal
+    "red":   1.44,
+    "ir":    3.03,
+}
+
+
+def channel_stats(
+    raw: list | np.ndarray,
+    fs: float,
+    channel: str = "green",
+) -> dict:
+    """DC, AC p2p (1 detik terakhir), perfusi permil.
+
+    Identik dengan blok perhitungan di _tick_stats() plotter.py:
+      dc  = mean(y)
+      ac  = max(y[-1s:]) - min(y[-1s:])
+      pi  = 1000 * ac / dc
+    """
+    arr = np.asarray(raw, dtype=np.float64)
+    n   = len(arr)
+    if n == 0:
+        return {
+            "dc": None, "ac_p2p": None, "pi_permil": None,
+            "ref_pi_permil": _REF_PI.get(channel),
+        }
+    dc   = float(arr.mean())
+    n1s  = min(n, max(8, int(fs)))
+    seg  = arr[-n1s:]
+    ac   = float(seg.max() - seg.min())
+    pi   = round(1000.0 * ac / dc, 2) if dc > 1 else 0.0
+    return {
+        "dc":            round(dc),
+        "ac_p2p":        round(ac),
+        "pi_permil":     pi,
+        "ref_pi_permil": _REF_PI.get(channel),
+    }
+
+
 # ── API publik ─────────────────────────────────────────────────────────────
 
 def analyze_channel(

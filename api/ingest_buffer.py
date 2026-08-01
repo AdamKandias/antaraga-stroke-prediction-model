@@ -8,7 +8,7 @@ from collections import deque
 from datetime import datetime, timezone
 from threading import Lock
 
-WINDOW_BATCHES = 20  # 20 × 500ms = 10 detik sinyal
+WINDOW_BATCHES = 120  # 120 × 500ms = 60 detik sinyal
 
 _lock = Lock()
 _buffers: dict[str, deque] = {}
@@ -29,6 +29,28 @@ def get_window(device_id: str) -> list[dict]:
     with _lock:
         buf = _buffers.get(device_id)
         return list(buf) if buf else []
+
+
+def get_window_s(device_id: str, window_s: float = 10.0) -> list[dict]:
+    """Batches dalam window_s detik terakhir (berdasarkan _received_at server)."""
+    with _lock:
+        buf = _buffers.get(device_id)
+        if not buf:
+            return []
+        batches = list(buf)
+    if not batches:
+        return []
+    cutoff = datetime.now(timezone.utc).timestamp() - window_s
+    filtered = []
+    for b in batches:
+        ts_str = b.get("_received_at", "")
+        try:
+            ts = datetime.fromisoformat(ts_str).timestamp()
+            if ts >= cutoff:
+                filtered.append(b)
+        except (ValueError, TypeError):
+            filtered.append(b)
+    return filtered if filtered else batches[-1:]
 
 
 def get_latest(device_id: str) -> dict | None:

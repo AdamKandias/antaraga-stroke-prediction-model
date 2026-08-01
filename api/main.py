@@ -759,10 +759,14 @@ def list_devices() -> list[str]:
 
 
 @app.get("/v1/ingest/latest")
-def ingest_latest_dashboard(device_id: str, db: Session = Depends(get_db)) -> dict:
+def ingest_latest_dashboard(
+    device_id: str,
+    window_s: float = Query(10.0, ge=1.0, le=60.0, description="Jendela waktu sinyal (detik, 1–60)"),
+    db: Session = Depends(get_db),
+) -> dict:
     """Kembalikan data terbaru dari device dalam 4 tahap pemrosesan:
     raw → PWA → MLP → XGBoost. Dipakai oleh /dashboard."""
-    batches = ingest_buffer.get_window(device_id)
+    batches = ingest_buffer.get_window_s(device_id, window_s)
     if not batches:
         raise HTTPException(status_code=404, detail=f"Belum ada data dari device '{device_id}'")
 
@@ -888,18 +892,29 @@ def _compute_pwa(ppg: list, red: list, ir: list, fs_ppg: int, fs_max: int) -> di
 def _compute_ppg_analysis(
     ppg: list, red: list, ir: list, fs_ppg: int, fs_max: int
 ) -> dict:
-    """Analisis tiga kanal: buang baseline (ac_signal) + BPM autokorelasi.
+    """Analisis tiga kanal: buang baseline + BPM autokorelasi + statistik.
 
-    Identik dengan algoritma di gui/plotter.py (movavg, detrend, ac_signal,
-    bpm_autocorr).  Dipakai untuk tampilan 'bandpass buang baseline' di
-    dashboard Tab 1 (hijau) dan Tab 2 (merah + inframerah untuk PWA).
+    Menggabungkan analyze_channel() dan channel_stats() dari ppg_analysis.py,
+    identik dengan algoritma di gui/plotter.py (ac_signal, bpm_autocorr,
+    _tick_stats).  Setiap kanal mengembalikan:
+      ac, bpm, conf, peaks        (dari analyze_channel)
+      dc, ac_p2p, pi_permil, ref_pi_permil  (dari channel_stats)
     """
     try:
-        from api.ppg_analysis import analyze_channel
+        from api.ppg_analysis import analyze_channel, channel_stats
+
+        def _proc(sig: list, fs: float, ch: str) -> dict:
+            if not sig:
+                return _empty_ac()
+            return {
+                **analyze_channel(sig, fs),
+                **channel_stats(sig, fs, ch),
+            }
+
         return {
-            "green": analyze_channel(ppg, float(fs_ppg or 200)) if ppg else _empty_ac(),
-            "red":   analyze_channel(red, float(fs_max or 200)) if red else _empty_ac(),
-            "ir":    analyze_channel(ir,  float(fs_max or 200)) if ir  else _empty_ac(),
+            "green": _proc(ppg, float(fs_ppg or 200), "green"),
+            "red":   _proc(red, float(fs_max or 200), "red"),
+            "ir":    _proc(ir,  float(fs_max or 200), "ir"),
         }
     except Exception as exc:
         return {
@@ -910,7 +925,10 @@ def _compute_ppg_analysis(
 
 
 def _empty_ac(note: str | None = None) -> dict:
-    d: dict = {"ac": [], "bpm": None, "conf": 0.0, "peaks": []}
+    d: dict = {
+        "ac": [], "bpm": None, "conf": 0.0, "peaks": [],
+        "dc": None, "ac_p2p": None, "pi_permil": None, "ref_pi_permil": None,
+    }
     if note:
         d["note"] = note
     return d
