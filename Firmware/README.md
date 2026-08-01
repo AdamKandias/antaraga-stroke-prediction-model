@@ -1,223 +1,391 @@
-# ANTARAGA BPM — hitung denyut dari SON1303, di perangkat
+# ANTARAGA Smartband — Firmware Streaming
 
-XIAO ESP32-S3. Mencuplik SON1303 dengan front-end **identik** dengan
-[../Firmware](../Firmware) (A1/GPIO2, 200 Hz, oversample 16x, atenuasi 12 dB,
-12 bit), lalu menghitung **BPM di tempat** dan mencetaknya ke serial. Tanpa
-WiFi, tanpa cloud, tanpa MAX30102.
+XIAO ESP32-S3. Mengalirkan **data mentah** MAX30102 (RED+IR, 400 Hz) dan SON1303
+(PPG analog, 200 Hz) ke cloud lewat HTTPS, plus persen baterai. Data dikemas per
+**package 1000 ms** dan disaring gerbang SQI sebelum dikirim — package yang tidak
+layak dibuang di perangkat, tidak pernah menyentuh jaringan.
 
-Front-end yang identik itu inti programnya: BPM di sini dihitung dari deretan
-angka yang persis sama dengan yang dikirim firmware streaming ke cloud. Jadi
-kalau hasilnya berbeda dari hitungan cloud, penyebabnya **algoritma** — bukan
-beda cara mencuplik.
+Jendela 1 detik dipilih supaya memuat **satu siklus jantung utuh** pada ≥60 bpm.
+Itu yang membuat perfusi jadi metrik mutu yang sahih; di 500 ms, package yang
+jatuh di fase diastol bisa tidak memuat upstroke sama sekali.
 
-| | ../Firmware | program ini |
+Yang **dikirim** tetap 100% mentah: SQI hanya memutuskan kirim/buang, tidak
+memfilter, menghaluskan, atau me-resample satu sampel pun. Semua analisis (PWA,
+VPG, APG, BPM, SpO2) tetap dikerjakan di sisi cloud.
+
+## Alur kerja
+
+```
+boot
+ │
+ ├─ CORE 0 (netTask) ── nyalakan WiFi → cari & sambung AP → sinkron NTP → set EV_WIFI_OK
+ │                                                                             │
+ ├─ CORE 1 (sensorTask) ── tunggu EV_WIFI_OK ────────────────────────────────┘
+ │        └─ D2 = LOW  → P-MOSFET Q2 nyambung → SON1303 dapat 3V3
+ │        └─ MAX30102 keluar dari shutdown, dibaca lewat FIFO
+ │        └─ settle 1 detik (sampel DIBUANG, bukan dikirim)
+ │        └─ isi package tiap 500 ms → qFilled
+ │
+ ├─ CORE 0 (netTask) ── ambil dari qFilled → SQI → layak? → JSON → POST HTTPS
+ │                                             └─ tidak layak → BUANG        │
+ │                                                    └── kembalikan ke qFree ┘
+ │
+ └─ CORE 1 (loop)   ── kedipkan LED D10 + cetak [STAT] tiap 5 detik
+```
+
+Baterai dibaca di task yang sama dengan PPG (tiap 2 detik, A0) supaya handle ADC1
+hanya punya satu pemilik. Hasilnya ikut di setiap batch.
+
+## Yang harus diisi sebelum flash
+
+Semua di [include/config.h](include/config.h):
+
+| Konstanta | Isi dengan |
+|---|---|
+| `WIFI_SSID`, `WIFI_PASS` | kredensial AP |
+| `CLOUD_HOST`, `CLOUD_PORT`, `CLOUD_PATH` | endpoint HTTPS penerima |
+| `CLOUD_API_KEY` | token (dikirim `Authorization: Bearer <key>`), kosongkan bila tak perlu |
+| `DEVICE_ID` | id unik perangkat |
+| `CLOUD_INSECURE_TLS` | `1` saat development; **`0` + isi `CLOUD_ROOT_CA` untuk produksi** |
+| `FW_VERSION` | **naikkan tiap kali membuat `.bin` untuk diunggah** — lihat bagian OTA |
+
+## Kontrak payload
+
+`POST {CLOUD_PATH}` · `Content-Type: application/json` · satu request per `BATCH_MS` (default 500 ms).
+
+```json
+{
+  "id": "antaraga-001",
+  "seq": 42,
+  "t_ms": 128450,
+  "t_unix_ms": 1753600000123,
+  "fs_ppg": 200,
+  "fs_max": 400,
+  "batt_mv": 3912,
+  "batt_pct": 72,
+  "ovf": 0,
+  "sqi": 87,
+  "sqi_flags": 0,
+  "ir_dc": 138204,
+  "ir_p2p": 4120,
+  "ir_pi": 29,
+  "ir_jump": 610,
+  "ir_jump_n": 0,
+  "ir_tort10": 34,
+  "ppg_dc": 2042,
+  "ppg_p2p": 180,
+  "ppg_jump_n": 0,
+  "ppg_tort10": 51,
+  "clip_n": 0,
+  "ppg": [2041, 2043, 2044, "... 200 nilai"],
+  "red": [131072, 131155, "... ~400 nilai"],
+  "ir":  [148390, 148402, "... ~400 nilai"]
+}
+```
+
+| Field | Arti |
+|---|---|
+| `seq` | nomor package berurutan sejak streaming mulai. **Lompatan = package hilang ATAU ditolak SQI** |
+| `t_ms` | `millis()` saat sampel PPG **pertama** package ini |
+| `t_unix_ms` | epoch UTC ms saat sampel pertama; `0` bila NTP gagal |
+| `ppg[]` | ADC mentah SON1303, 0–4095, hasil rata-rata `PPG_OVERSAMPLE` bacaan per titik |
+| `red[]`, `ir[]` | ADC mentah MAX30102, 18-bit (0–262143). Nilai 262143 = saturasi |
+| `ovf` | overflow FIFO MAX30102. **Lihat peringatan di bawah — tidak dapat dipercaya pada unit ini** |
+| `batt_pct` | 0–100, interpolasi kurva Li-Po 3,3–4,2 V (bukan skala linear) |
+| `sqi` | skor kelayakan 0–100. Package yang sampai ke cloud selalu ≥ `SQI_MIN_SCORE` |
+| `sqi_flags` | bitmask alasan tolak. Pada package yang terkirim **selalu 0** — ada untuk audit |
+| `ir_dc`, `ir_p2p` | rerata IR dan puncak-ke-puncak. `ir_dc` cuma penyebut normalisasi, bukan penilai mutu |
+| `ir_pi` | perfusi `p2p/DC` dalam **per-mil**. 29 = 2,9% |
+| `ir_jump` | lompatan TERBESAR antar dua sampel berurutan |
+| `ir_jump_n` | cacah sampel yang melompat ≥ ambang lunak (35% p2p) |
+| `ir_tort10` | tortuosity `Σ\|Δ\|/p2p` **×10**. 34 = 3,4 — makin kecil makin mulus |
+| `ppg_*` | idem untuk kanal SON1303 |
+| `clip_n` | cacah sampel yang mentok rel ADC (IR + RED + PPG) |
+
+> **`ovf` tidak dapat dipercaya.** Pada unit yang diuji, register `OVF_COUNTER`
+> (0x05) MAX30102 macet di `1`: terbaca 1 lewat burst maupun transaksi terpisah,
+> dan menolak di-clear, padahal FIFO hanya terisi 1 dari 32 slot dan cacah sampel
+> membuktikan tidak ada data hilang. Firmware menjumlahkan register itu tiap
+> polling (200×/detik), jadi angkanya membengkak tanpa arti. Abaikan field ini di
+> cloud; pakai `seq` untuk mendeteksi package hilang.
+
+### Merekonstruksi sumbu waktu
+
+`ppg[i]` jatuh di `t_ms + i * 1000 / fs_ppg` — akurat, karena dicuplik oleh tick
+FreeRTOS ESP32.
+
+Untuk `red[]`/`ir[]`, **jangan langsung pakai `fs_max`**. MAX30102 punya osilator
+internal sendiri yang tidak sinkron dengan ESP32, jadi jumlah sampel per batch
+sedikit bervariasi. Turunkan laju sebenarnya dari cacahan:
+
+```
+fs_max_nyata = len(red) / (len(ppg) / fs_ppg)
+```
+
+Firmware juga mencetak angka ini tiap 5 detik sebagai `fs_max_ukur` di baris `[STAT]`.
+Selisih beberapa Hz itu normal (osilator MAX30102 punya toleransi beberapa persen).
+
+Selisih **kelipatan bulat** — misalnya `fs_max_ukur` ≈ setengah atau seperempat
+`fs_max` — artinya lain: kombinasi sample-rate × pulse-width di `CFG_SPO2` tidak
+dilayani chip. Di mode SpO2 (2 LED) dengan PW 411 µs, `SPO2_SR` mentok di 400 Hz;
+minta 800 atau 1000 Hz dan chip meng-clamp tanpa memberi error, lalu `SMP_AVE`
+membagi hasilnya. Perbaikannya di `CFG_SPO2`/`CFG_FIFO` ([src/sensors.cpp](src/sensors.cpp)),
+bukan di `MAX_PROFILE_PWA` — dan `MAX_FS_HZ` di
+[include/antaraga.h](include/antaraga.h) wajib ikut disesuaikan, karena nilai
+itulah yang dikirim sebagai `fs_max`.
+
+Respons server: status **2xx** = sukses. Body dibaca lalu dibuang, jadi apa pun boleh,
+tapi buat sependek mungkin (mis. `{"ok":true}`) supaya koneksi keep-alive cepat bebas.
+
+## Gerbang SQI
+
+Dijalankan di **core 0** ([src/sqi.cpp](src/sqi.cpp)) tepat sebelum serialisasi —
+bukan di core sensor, yang anggaran 5 ms per tick-nya tidak boleh diganggu.
+Hitungannya jalan-lurus atas ~500 sampel, puluhan mikrodetik.
+
+Tiga aturan rancangannya:
+
+1. **Satu package = satu keputusan.** Tidak ada state yang dibawa antar package,
+   jadi package bagus tidak pernah tercemar tetangganya yang buruk.
+2. **Skor = MINIMUM sub-skor, bukan rata-rata.** Rata-rata menyamarkan outlier:
+   satu lompatan gerakan parah akan larut di antara 200 sampel lain dan package
+   sampah tetap lolos. Minimum tidak bisa disamarkan.
+3. **Statistiknya bertipe ekstrem** (min, max, lompatan terbesar). Satu-satunya
+   rerata adalah `ir_dc`/`ppg_dc`, dan itu murni penyebut normalisasi — tidak
+   pernah jadi penilai mutu.
+
+### Tiga kelas cacat yang ditangkap
+
+Ketiganya perlu, karena masing-masing buta terhadap yang lain:
+
+| Kelas | Metrik | Menangkap |
 |---|---|---|
-| Sensor | MAX30102 + SON1303 | SON1303 saja |
-| Pemrosesan sinyal | **tidak ada** (mentah dikirim) | band-pass + deteksi puncak |
-| BPM dihitung | di cloud | **di perangkat** |
-| Jaringan | WiFi + HTTPS + OTA | tidak ada |
-| Keluaran | POST JSON tiap 1000 ms | baris serial tiap 1000 ms + LED per detak |
+| kontak & pencahayaan | `ir_dc`, `clip_n`, `ir_pi` | sensor lepas, bocor cahaya, saturasi, oklusi |
+| artefak **terisolasi** | `ir_jump` + `ir_jump_n` (dua tingkat) | sentakan gerakan, glitch I2C |
+| noise **tersebar** | `ir_tort10` (tortuosity) | tremor kontak, noise per-sampel, kedip lampu 100 Hz |
 
-Dua tujuan yang bertolak belakang, karena itu dua firmware: analisis morfologi
-(PWA/VPG/APG) di cloud butuh sinyal mentah yang tak tersentuh, sedangkan
-mencari puncak butuh sinyal yang sudah dibersihkan. Menggabungkannya berarti
-salah satu harus dikompromikan.
+**Lompatan dua tingkat.** Tingkat **keras** (`SQI_IR_JUMP_HARD_PCT`, 60% p2p):
+satu sampel saja melompat sejauh itu → tolak. Tingkat **lunak**
+(`SQI_IR_JUMP_MAX_PCT`, 35% p2p): dicacah berapa banyak, ditolak kalau
+melebihi `SQI_JUMP_SOFT_PERMIL` (1%) dari total sampel. Alasannya, satu glitch
+I2C **bukan** artefak fisiologis — membuang 1 detik data bersih karenanya itu
+mubazir. Gerakan sungguhan menghasilkan banyak lompatan, bukan satu.
 
-## Algoritma — enam lapis
+**Tortuosity** = `Σ|x[i]−x[i−1]| / p2p`. PPG bersih menempuh ~2× p2p per denyut,
+jadi di jendela 1 detik nilainya ~2–4. Noise membuat lintasannya meledak untuk
+rentang yang sama. Ini **bukan** averaging: penjumlahan selisih absolut justru
+makin peka terhadap noise, bukan menghaluskannya.
 
-Tiap lapis menangkap kelas kesalahan yang lapis lain **tidak bisa lihat**.
-Seluruhnya di [src/bpm.cpp](src/bpm.cpp); ambangnya di
-[include/config.h](include/config.h).
+| Flag | Bit | Arti | Ambang di `config.h` |
+|---|---|---|---|
+| `nofinger` | 0 | DC IR terlalu rendah, sensor tidak menempel | `SQI_IR_DC_MIN` |
+| `sat` | 1 | DC kelewat tinggi / sampel mentok rel | `SQI_IR_DC_MAX`, `SQI_CLIP_MAX_N` |
+| `flat` | 2 | perfusi di bawah lantai — sensor macet / oklusi | `SQI_IR_PI_MIN_PERMIL` |
+| `motion` | 3 | lompatan (keras/lunak), perfusi berlebih, atau tortuosity tinggi | `SQI_IR_JUMP_*`, `SQI_IR_PI_MAX_PERMIL`, `SQI_IR_TORT_MAX_X10` |
+| `ppg` | 4 | kanal SON1303 di luar batas wajar | `SQI_PPG_*` |
+| `short` | 5 | jumlah sampel kurang | — |
+
+> **Kalau `BATCH_MS` diturunkan lagi ke 500**, `SQI_IR_PI_MIN_PERMIL` WAJIB
+> dikembalikan ke ~1. Jendela 500 ms lebih pendek dari satu siklus jantung, jadi
+> package yang jatuh di fase diastol bisa tidak memuat upstroke sama sekali —
+> perfusinya kecil **padahal sinyalnya sehat**, dan gerbang akan membuang data
+> bagus secara sistematis.
+
+### Mengkalibrasi ambangnya
+
+Semua angka di `config.h` adalah **titik awal hasil penalaran, bukan hasil ukur
+dari sensormu**. Urutan yang benar:
+
+1. Set `SQI_ENABLE 0` — semua package terkirim apa adanya, gerbang mati.
+2. Rekam beberapa menit: sensor menempel diam, menempel sambil bergerak, dan
+   lepas sama sekali.
+3. Di cloud, plot sebaran `ir_dc`, `ir_pi`, `ir_jump_n`, dan `ir_tort10` untuk
+   ketiga kondisi itu. Batas antar-kelompoknya akan terlihat sendiri.
+4. Patok ambangnya di sana, lalu `SQI_ENABLE 1`.
+
+`VERBOSE_SQI 1` mencetak alasan tiap package yang dibuang ke serial — berguna
+untuk melihat flag mana yang paling sering memicu tolak.
+
+**Konsekuensi operasional:** selama sensor tidak menempel, perangkat tidak
+mengirim apa pun. Bagi cloud itu tidak bisa dibedakan dari perangkat mati.
+Kalau perlu membedakannya, sediakan heartbeat terpisah — gerbang ini sengaja
+tidak mengirim apa-apa saat menolak.
+
+## OTA — ganti firmware dari dashboard, tanpa buka casing
+
+Model **pull**: perangkat yang bertanya ke server, bukan server yang mendorong.
+Konsekuensinya perangkat bisa berada di jaringan mana pun — tidak perlu satu LAN,
+tidak perlu port terbuka, tidak perlu tahu IP-nya.
+
+Partisi sudah siap sejak awal: `default_8MB.csv` punya `app0` dan `app1`
+masing-masing 3,34 MB plus `otadata`. Firmware ini ~1,07 MB, jadi muat di
+sepertiga slot. Update ditulis ke slot yang **tidak** sedang berjalan, lalu boot
+dialihkan ke sana — firmware lama tetap utuh sebagai cadangan.
+
+### Kontrak server
 
 ```
-ADC mentah (200 Hz, 12-bit)
-      │
- (1)  ├─ BAND-PASS 0,5–5 Hz   Butterworth orde-2 bertingkat (HP lalu LP).
-      │                        Buang baseline wander di bawah, dengung
-      │                        jala-jala 50/100 Hz di atas.
-      │
- (2)  ├─ PELACAK AMPLITUDO    Serangan seketika, peluruhan 0,6/detik.
-      │                        Ambang jadi relatif terhadap amplitudo yang
-      │                        sedang berjalan, bukan angka mati.
-      │
- (3)  ├─ EKSURSI HISTERESIS   Naik di 60% amplitudo, selesai di 40%,
-      │                        blanking 260 ms setelah tiap puncak.
-      │
- (4)  ├─ PUNCAK SUB-SAMPEL    Maksimum lokal TERBESAR dalam eksursi,
-      │                        diperhalus interpolasi parabola 3 titik.
-      │
- (5)  ├─ GERBANG INTERVAL     Rentang 30–220 bpm + simpangan maks 30% dari
-      │                        MEDIAN riwayat 8 interval, dengan perbaikan
-      │                        denyut terlewat dan jalur re-sync.
-      │
- (6)  └─ SKOR KEYAKINAN       MINIMUM dari 4 sub-skor → status LOCKED / NOISY /
-                               SEARCHING / NO_CONTACT / SETTLING.
+GET  /v1/ota/check?device_id=<id>&fw=<versi_sekarang>
+     → {"pending":true,"fw":"1.1.0"}     ada firmware baru
+     → {"pending":false}                 tidak ada
+
+GET  /v1/ota/firmware?device_id=<id>
+     → body = isi .bin mentah
+     → Content-Length WAJIB benar
+
+POST /v1/ota/ack?device_id=<id>&fw=<versi_terpasang>
+     → dipanggil setelah flash berhasil, supaya dashboard menandai selesai
 ```
 
-### Keputusan rancangan yang perlu diketahui
+Semua endpoint menerima `Authorization: Bearer <CLOUD_API_KEY>` yang sama dengan
+ingest. Path-nya bisa diubah di `config.h` (`OTA_PATH_*`).
 
-**Band-pass 0,5–5 Hz, bukan lebih lebar.** LP 5 Hz menumpulkan *dicrotic
-notch* — di sini itu **diinginkan**, supaya notch tidak pernah ikut terhitung
-sebagai denyut. Koefisiennya **dihitung saat runtime** dari `PPG_FS_HZ`, bukan
-ditempel sebagai angka mati: koefisien mati yang didesain untuk 200 Hz akan
-menggeser pita lolosnya diam-diam kalau laju sampel diubah — filter tetap
-jalan, hasilnya saja yang salah, tanpa satu pun pesan error. Pada 200 Hz,
-fungsi desainnya menghasilkan koefisien yang **sama** dengan yang dipakai
-`PPG_SEN0203_recorder_raw_pwa_60s.ino`, jadi jalur sinyalnya identik dengan
-rekaman yang sudah kamu validasi.
+### Alur di dashboard
 
-**Ambang adaptif, bukan tetap.** Amplitudo PPG pergelangan berubah beberapa
-kali lipat hanya karena tekanan kontak. Ambang tetap selalu salah: kalau pas
-untuk sinyal kuat, ia melewatkan seluruh denyut lemah.
+1. Build `.bin` baru — **naikkan `FW_VERSION` di [config.h](include/config.h)**.
+2. Unggah `.pio/build/seeed_xiao_esp32s3/firmware.bin` ke dashboard.
+3. Tandai perangkat sasaran sebagai *pending* dengan versi barunya.
+4. Perangkat menemukannya dalam ≤ `OTA_CHECK_INTERVAL_MS` (default 60 detik),
+   mengunduh, mem-flash, lalu restart sendiri.
 
-**Histeresis 60%/40%.** Dengan satu ambang, riak kecil di sekitarnya memicu
-belasan "denyut" per detak.
+### Dua pengaman yang wajib kamu pahami
 
-**Interpolasi parabola.** Di 200 Hz, kuantisasi 5 ms saja sudah bernilai
-~0,4 bpm pada 60 bpm. Tiga titik menghapus hampir seluruh jitter itu.
+**Perbandingan versi memutus loop reflash.** Kalau ACK tidak sampai ke server
+(jaringan putus sedetik), server masih menganggap ada update pending. Tanpa
+perbandingan versi, perangkat akan mengunduh dan mem-flash biner yang **sama**
+berulang kali tiap 60 detik dan tidak pernah sempat bekerja. Karena itu
+`FW_VERSION` **harus** dinaikkan tiap build — kalau lupa, perangkat akan
+melewatkan update dan hanya mengirim ulang ACK.
 
-**Median, bukan rerata** — di gerbang interval maupun di penilaian
-kestabilan. Satu interval sampah tidak boleh menggeser acuan yang menilainya
-sendiri. Alasan yang sama dipakai gerbang SQI di
-[../Firmware/src/sqi.cpp](../Firmware/src/sqi.cpp).
+**Status percobaan.** Firmware hasil OTA belum dianggap sah sampai berhasil
+`OTA_TRIAL_POSTS` kali POST. Kalau sampai `OTA_TRIAL_TIMEOUT_MS` belum tercapai,
+perangkat mengalihkan boot kembali ke partisi yang **terbukti** pernah jalan lalu
+restart. Slot yang belum pernah terbukti tidak akan pernah dijadikan sasaran
+revert — kalau tidak, revert pada OTA pertama justru melompat ke slot kosong.
 
-**Skor = MINIMUM sub-skor, bukan rata-rata.** Rata-rata menyamarkan outlier;
-satu aspek rusak harus bisa menjatuhkan seluruh keputusan.
+> **Batas pengaman ini.** Rollback otomatis di level bootloader ESP-IDF **tidak
+> aktif** di build Arduino/pioarduino standar. Pemulihan di atas berjalan di
+> level aplikasi, jadi ia tidak menolong kalau firmware baru crash atau boot-loop
+> **sebelum** sempat menilai dirinya. Selalu uji `.bin` lewat kabel sekali
+> sebelum diunggah ke dashboard.
 
-**Basis waktu = cacahan sampel, bukan `millis()`.** Cacahan sampel dikunci
-tick FreeRTOS; `millis()` di dalam task yang juga meladeni USB-CDC bisa
-tergeser beberapa milidetik, dan pergeseran itu masuk langsung ke interval
-sebagai jitter BPM.
+### Selama unduhan, data hilang
 
-**Jalur re-sync.** Gerbang median menolak apa pun yang melenceng >30% — tanpa
-jalan keluar, laju jantung yang berubah cepat (mulai bergerak, berdiri) akan
-ditolak selamanya dan detektor mengunci dirinya sendiri. Setelah 4 penolakan
-berurutan, riwayat dibuang dan kunci dibangun ulang.
+`netTask` tidak menguras `qFilled` selama mengunduh (belasan detik). `sensorTask`
+tetap mencuplik, pool penuh, dan batch selama jendela itu dibuang — terlihat
+sebagai lonjakan `drop` di `[STAT]`. Ini disengaja: kehilangan beberapa detik
+sekali jauh lebih murah daripada menghentikan akuisisi atau menunda update.
 
-**Angka basi dinolkan.** BPM terakhir ditahan maksimal 5 detik setelah sinyal
-memburuk, lalu dinolkan. Di layar, "72" yang membeku terlihat persis seperti
-pengukuran hidup — itu satu-satunya salah baca yang benar-benar berbahaya di
-sini. Nilai yang sedang ditahan dicetak **dalam tanda kurung**.
+### Keamanan — baca sebelum dipakai di lapangan
+
+`CLOUD_INSECURE_TLS 1` berarti sertifikat server **tidak diverifikasi**.
+Menambahkan OTA di atas kanal itu berarti siapa pun yang bisa menyisip di
+koneksi dapat memasang firmware apa pun ke alat yang menempel di tubuh orang.
+
+Sebelum dipakai di luar meja kerja, minimal salah satu: set
+`CLOUD_INSECURE_TLS 0` dan isi `CLOUD_ROOT_CA`, atau verifikasi tanda tangan
+biner sebelum dipasang. Firmware mencetak peringatan ini di serial saat boot
+selama OTA aktif dengan TLS tanpa verifikasi.
+
+## Arti kedip LED (D10)
+
+| Pola | Arti |
+|---|---|
+| kedip cepat, 100 ms | mencari / menyambung WiFi |
+| kedip sedang, 250 ms | sensor menyala, sedang settle 1 detik |
+| **bernapas** (redup ⇄ terang, ~3 s) | **STREAMING — sedang mengambil data** |
+| kedip ganda lalu jeda | sensor jalan, jaringan putus — data dibuffer |
+| nyala panjang 800 ms | sensor gagal init, cek serial monitor |
+
+Pola napas digerakkan PWM (LEDC, 4 kHz, 12 bit) dengan koreksi gamma — level
+persepsi mengikuti `(1−cos)/2` lalu dipangkatkan `LED_BREATH_GAMMA` untuk jadi
+duty. Tanpa gamma, LED terlihat melonjak terang di awal lalu menggantung penuh
+separuh siklus, sama sekali tidak seperti napas. Periode dan gamma bisa disetel
+di [config.h](include/config.h).
+
+**Seluruh** pola — termasuk yang sekadar kedip — memakai PWM, bukan
+`digitalWrite`. Begitu sebuah pin ter-attach ke LEDC, `digitalWrite` di pin itu
+tidak lagi berpengaruh; mencampur keduanya membuat pola kedip mati diam-diam
+setelah perangkat sekali saja masuk STREAMING.
+
+> Dengan R6 = 10 kΩ, arus LED hanya ~0,13 mA — sudah sangat redup, dan napas
+> memangkas rata-ratanya lagi jadi ~setengah. Kalau efeknya sulit terlihat,
+> penyebabnya nilai R6, bukan firmware. Indikator biasanya dijalankan 2–10 mA.
+
+## Membaca baris [STAT]
+
+```
+[STAT] STREAM   up=125s | batch made=124 sent=115 drop=0 httpfail=0 code=200 post=286ms
+       ppg=24800 max=49612 (fs_max_ukur=400.1 Hz) | ovf=0 overrun=0 trunc=0
+       sqi lolos=115 tolak=9 (92%) | skor terakhir=87 alasan=-
+       batt=3912 mV (72%) | rssi=-58 dBm | heap=182340
+```
+
+| Kolom | Sehat bila | Kalau tidak |
+|---|---|---|
+| `drop` | 0 | cloud/WiFi tidak mengejar → naikkan `BATCH_POOL` atau `BATCH_MS` |
+| `httpfail` | 0 | cek endpoint, sertifikat, token |
+| `post` | < `BATCH_MS` | lihat catatan keep-alive di bawah |
+| `ovf` | — | **abaikan**, register chip tidak dapat dipercaya (lihat kontrak payload) |
+| `overrun` | 0 | task sensor telat dari jadwal 5 ms → turunkan `PPG_OVERSAMPLE` |
+| `trunc` | 0 | `MAX_CAP` kurang (nyaris mustahil, headroom sudah 25%) |
+| `fs_max_ukur` | ≈ `fs_max` | lihat bagian rekonstruksi sumbu waktu di atas |
+| `sqi lolos` | tinggi saat sensor menempel | `alasan=` menunjukkan flag yang paling sering memicu tolak |
+
+Catatan: `sent` sekarang menghitung package yang **lolos SQI dan berhasil di-POST**,
+jadi `made > sent` itu wajar — selisihnya package yang sengaja dibuang.
+
+### Endpoint WAJIB mendukung HTTP keep-alive
+
+Firmware mempertahankan satu sesi TLS untuk semua package. Kalau server membalas
+`Connection: close`, setiap POST harus handshake TLS ulang (±300–800 ms). Di
+`BATCH_MS = 1000` itu masih terkejar, tapi menyisakan sedikit sekali margin —
+payload 400 Hz berukuran ~8–9 KB per package.
+
+Ciri-cirinya di `[STAT]`: `post` besar dan `drop` bertambah terus. Solusinya urut:
+nyalakan keep-alive di server → naikkan `BATCH_POOL` → naikkan `BATCH_MS`.
+
+## Kalibrasi baterai
+
+`Vsens = Vbatt / 2` lewat pembagi R1/R2 100 kΩ. Ukur `Vbatt` dengan multimeter,
+bandingkan dengan `batt=... mV` di `[STAT]`, lalu setel `BATT_CAL_TRIM` di
+`config.h`:
+
+```
+BATT_CAL_TRIM = Vbatt_multimeter / Vbatt_terbaca
+```
+
+Impedansi pembagi 50 kΩ tergolong tinggi untuk ADC ESP32; C8 100 nF yang menahan
+muatan saat sampling. Kalau bacaan konsisten rendah, trim di atas yang mengoreksi.
+
+## Peta pin
+
+| XIAO | GPIO | Fungsi |
+|---|---|---|
+| D0 / A0 | 1 | `Vsens` — pembagi tegangan baterai |
+| D1 / A1 | 2 | `SIG_PPG` — keluaran analog SON1303 |
+| D2 | 3 | enable P-MOSFET Q2 (DMP2130L) — **LOW = sensor ON** |
+| D4 | 5 | I2C SDA → MAX30102 |
+| D5 | 6 | I2C SCL → MAX30102 |
+| D10 | 9 | LED via R6 10 kΩ — HIGH = nyala |
+
+## Build
+
+`platformio.ini` memakai fork **pioarduino** karena firmware ini butuh Arduino
+core 3.x (ESP-IDF 5.x) untuk `esp_adc/adc_oneshot.h`. Platform resmi PlatformIO
+masih terkunci di core 2.0.17.
+
+`src/sensors.cpp` tetap punya jalur cadangan untuk core 2.x, jadi bila fork tidak
+bisa diunduh, ganti saja `platform = espressif32` — hanya kalibrasi ADC-nya yang
+memakai skema lama.
 
 ## Struktur
 
 | File | Isi |
 |---|---|
-| [include/config.h](include/config.h) | semua yang bisa disetel: akuisisi, filter, ambang detektor, gerbang mutu |
-| [include/bpm.h](include/bpm.h) | kontrak mesin BPM — **tanpa Arduino**, supaya bisa dikompilasi di PC |
-| [src/bpm.cpp](src/bpm.cpp) | seluruh algoritma (6 lapis di atas) |
-| [include/ppg.h](include/ppg.h), [src/ppg.cpp](src/ppg.cpp) | lapisan ADC (shim core 2.x/3.x) + task pencuplik 200 Hz |
-| [src/main.cpp](src/main.cpp) | banner, LED per detak, baris `[BPM ]` & `[STAT]` |
-| [tools/bpm_csv.cpp](tools/bpm_csv.cpp) | penguji di PC — **bukan** bagian firmware |
-
-## Flash & pakai
-
-```
-pio run -e seeed_xiao_esp32s3 -t upload
-pio device monitor
-```
-
-Tempelkan sensor, **diam**, tunggu status `LOCKED` (~4 detik: 1 detik settle
-sensor + 3 detik transien filter, lalu 4 denyut valid).
-
-```
-[BPM ]  72.4 bpm  conf  88  LOCKED     | inst  72.1 | ibi  829 ms sdnn  14
-       ac=214    dc=1832   pi=117 permil clip=0 | denyut=53 tolak=2 interp=1 resync=0
-[STAT] up=25s | sampel=4800 (fs_ukur~200.0 Hz) | overrun=0 adc_gagal=0 | heap=298476
-```
-
-Yang perlu dibaca:
-
-- **status** — hanya `LOCKED` yang layak dipakai. `SEARCHING` = sinyal ada,
-  denyut valid belum cukup. `NOISY` = denyut terdeteksi tapi mutunya di bawah
-  `BPM_MIN_CONF`. `NO_CONTACT` = sensor tidak menempel.
-- **bpm dalam tanda kurung** — nilai tertahan, bukan pengukuran hidup.
-- **overrun** — harus **0**. Kalau tidak nol, jadwal 5 ms tidak terpenuhi dan
-  seluruh basis waktu interval ikut meleset dengan faktor yang sama.
-- **fs_ukur** — harus ~`PPG_FS_HZ`. Ini yang membuktikan basis waktunya sehat.
-- **interp** tinggi → yang perlu dibetulkan kontak sensornya, bukan ambangnya.
-- **tolak/resync** tinggi saat diam → ambang atau kontak perlu disetel.
-
-### LED D10
-
-| pola | arti |
-|---|---|
-| kedip sedang (250 ms) | settle, atau sensor tidak menempel |
-| kilat per detak | sedang mengukur ← normal |
-
-## Kalibrasi ambang — lihat sinyalnya, jangan menduga
-
-Ambang yang **paling perlu** disetel untuk unitmu adalah jendela DC
-(`BPM_DC_MIN` / `BPM_DC_MAX`) dan amplitudo minimum (`BPM_AC_MIN_LSB`), karena
-keduanya bergantung pada rangkaian dan titik pemasangan, bukan pada algoritma.
-
-Setel `BPM_STREAM_CSV 1` di [include/config.h](include/config.h) → tiap sampel
-dicetak sebagai CSV:
-
-```
-t_ms,raw,ac,thr_hi,thr_lo,beat,bpm,status
-```
-
-Buka Serial Plotter (atau simpan ke file lalu plot). Yang dicari: `ac` naik
-melewati `thr_hi` tepat sekali per detak, `beat` menyala di puncaknya, dan
-`raw` tidak menyentuh 0 atau 4095. Catat `dc` saat menempel dan saat dilepas —
-dua angka itu yang menentukan jendela DC-mu.
-
-Mode ini mencetak dari dalam task pencuplik, jadi `overrun` akan naik.
-Matikan lagi saat mengukur sungguhan.
-
-## Uji algoritma di PC (tanpa board)
-
-`src/bpm.cpp` sengaja tidak menyentuh Arduino, jadi **file yang sama** bisa
-dijalankan di host terhadap sinyal yang laju denyutnya sudah diketahui. Serial
-monitor tidak bisa memberi tahu apakah "72 bpm" itu benar; uji ini bisa.
-
-```
-pio run -e native -t exec                          # 14 uji regresi
-.pio/build/native/program rekaman.csv > out.csv    # rekaman recorder-mu
-```
-
-Tanpa PlatformIO, dari folder ini:
-
-```
-g++ -std=c++11 -O2 -Iinclude src/bpm.cpp tools/bpm_csv.cpp -o bpmtest
-```
-
-Hasil uji regresi saat ini (galat terhadap laju yang diketahui):
-
-```
-bradikardia 45 bpm       rerata 44,98   galat maks 0,02   OK
-istirahat 60 bpm         rerata 60,00   galat maks 0,01   OK
-normal 75 bpm            rerata 75,00   galat maks 0,02   OK
-jalan cepat 100 bpm      rerata 100,00  galat maks 0,03   OK
-olahraga 150 bpm         rerata 150,00  galat maks 0,04   OK
-maksimal 190 bpm         rerata 190,01  galat maks 0,11   OK
-sinyal lemah (ac 40)     rerata 72,05   galat maks 0,11   OK
-derau tinggi (25 LSB)    rerata 71,96   galat maks 0,08   OK
-baseline melayang kuat   rerata 71,99   galat maks 0,07   OK
-1 dari 5 denyut hilang   rerata 72,01   galat maks 0,03   OK   (interp=6)
-DC rendah / DC tinggi    rerata 72,00   galat maks 0,01   OK
-loncatan 72->130 bpm     kunci ulang 3,9 detik            OK
-sensor dilepas (datar)   NO_CONTACT, bpm=0                OK
-```
-
-Gelombang sintetisnya **sengaja tidak sinus** — ia memuat dicrotic notch,
-karena notch itulah kandidat denyut-palsu utama. Sinus akan membuat detektor
-terlihat sempurna secara palsu.
-
-Uji "sensor dilepas" yang paling penting: detektor yang mengarang 70 bpm dari
-derau ADC saat sensor tidak menempel jauh lebih berbahaya daripada detektor
-yang sesekali kehilangan kunci.
-
-**Angka di atas membuktikan algoritmanya, bukan sensornya.** Yang belum diuji
-di sini: sinyal SON1303 nyata dari pergelangan tangan yang bergerak. Untuk
-itu, rekam dengan
-`../Firmware/.claude/programoptimasi/PPG_SEN0203_recorder_raw_pwa_60s.ino`
-lalu jalankan CSV-nya lewat mode kedua di atas, dan bandingkan dengan alat
-ukur acuan.
-
-## Kalau `PPG_FS_HZ` atau `PPG_OVERSAMPLE` diubah di ../Firmware
-
-Ubah juga di sini, supaya bagian `[AKUISISI]` kedua config tetap sama.
-Koefisien filter, blanking, dan panjang jendela dihitung ulang otomatis dari
-`PPG_FS_HZ` — tidak ada angka mati yang perlu disentuh.
+| [include/config.h](include/config.h) | **satu-satunya file yang perlu diedit** |
+| [include/antaraga.h](include/antaraga.h) | peta pin, struct `Batch`, kontrak antar-modul |
+| [src/main.cpp](src/main.cpp) | setup, pembuatan task, LED, `[STAT]` |
+| [src/sensors.cpp](src/sensors.cpp) | driver MAX30102, lapisan ADC, `sensorTask` (core 1) |
+| [src/sqi.cpp](src/sqi.cpp) | pre-processing & gerbang kelayakan per package (core 0) |
+| [src/cloud.cpp](src/cloud.cpp) | WiFi, NTP, penulis JSON, POST HTTPS, `netTask` (core 0) |

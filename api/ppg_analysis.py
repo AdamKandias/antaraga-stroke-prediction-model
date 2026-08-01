@@ -170,6 +170,41 @@ def channel_stats(
     }
 
 
+# ── SpO2 via rasio Beer-Lambert ───────────────────────────────────────────
+
+def compute_spo2(
+    red_raw: list | np.ndarray,
+    ir_raw:  list | np.ndarray,
+    fs: float,
+) -> dict:
+    """SpO2 dari R = (AC_red/DC_red) / (AC_ir/DC_ir), model empirik 110−25R.
+
+    AC diambil dari peak-to-peak 1 detik terakhir (sama dengan channel_stats).
+    DC diambil dari rata-rata seluruh window.  Diklem ke [80, 100] %.
+    Mengembalikan spo2=None jika sinyal terlalu pendek atau DC < 1.
+    """
+    r_arr = np.asarray(red_raw, dtype=np.float64)
+    i_arr = np.asarray(ir_raw,  dtype=np.float64)
+    n_min = max(8, int(fs))
+    if len(r_arr) < n_min or len(i_arr) < n_min:
+        return {"spo2": None, "r_ratio": None, "valid": False}
+
+    dc_red = float(r_arr.mean())
+    dc_ir  = float(i_arr.mean())
+    if dc_red < 1 or dc_ir < 1:
+        return {"spo2": None, "r_ratio": None, "valid": False}
+
+    n1s    = min(len(r_arr), int(fs))
+    ac_red = float(r_arr[-n1s:].max() - r_arr[-n1s:].min())
+    ac_ir  = float(i_arr[-n1s:].max() - i_arr[-n1s:].min())
+    if ac_ir < 1:
+        return {"spo2": None, "r_ratio": None, "valid": False}
+
+    R     = (ac_red / dc_red) / (ac_ir / dc_ir)
+    spo2  = round(max(80.0, min(100.0, 110.0 - 25.0 * R)), 1)
+    return {"spo2": spo2, "r_ratio": round(R, 4), "valid": True}
+
+
 # ── API publik ─────────────────────────────────────────────────────────────
 
 def analyze_channel(

@@ -901,7 +901,7 @@ def _compute_ppg_analysis(
       dc, ac_p2p, pi_permil, ref_pi_permil  (dari channel_stats)
     """
     try:
-        from api.ppg_analysis import analyze_channel, channel_stats
+        from api.ppg_analysis import analyze_channel, channel_stats, compute_spo2
 
         def _proc(sig: list, fs: float, ch: str) -> dict:
             if not sig:
@@ -911,16 +911,20 @@ def _compute_ppg_analysis(
                 **channel_stats(sig, fs, ch),
             }
 
-        return {
+        fs_m = float(fs_max or 200)
+        result = {
             "green": _proc(ppg, float(fs_ppg or 200), "green"),
-            "red":   _proc(red, float(fs_max or 200), "red"),
-            "ir":    _proc(ir,  float(fs_max or 200), "ir"),
+            "red":   _proc(red, fs_m, "red"),
+            "ir":    _proc(ir,  fs_m, "ir"),
+            "spo2":  compute_spo2(red, ir, fs_m),
         }
+        return result
     except Exception as exc:
         return {
             "green": _empty_ac(str(exc)),
             "red":   _empty_ac(),
             "ir":    _empty_ac(),
+            "spo2":  {"spo2": None, "r_ratio": None, "valid": False},
         }
 
 

@@ -143,13 +143,17 @@ static inline uint8_t minU8(uint8_t a, uint8_t b) { return a < b ? a : b; }
 // =====================================================================
 // Gerbang utama
 // =====================================================================
+/* PENTING: metrik SELALU dihitung, bahkan saat SQI_ENABLE 0. Yang dimatikan
+ * oleh SQI_ENABLE hanyalah KEPUTUSAN buang/kirim di baris terakhir.
+ *
+ * Ini bukan detail sepele: SQI_ENABLE 0 justru dipakai untuk MENGKALIBRASI
+ * ambang, dan kalibrasi butuh sebaran ir_dc / ir_pi / ir_jump_n / ir_tort10
+ * yang nyata. Kalau perhitungannya ikut dilewati, seluruh metrik terkirim
+ * sebagai 0 dan tidak ada yang bisa dikalibrasi. */
 bool sqiEvaluate(const Batch* b, Sqi* q) {
   memset(q, 0, sizeof(*q));
 
-#if !SQI_ENABLE
-  q->score = 100;
-  return true;
-#else
+  {
   ChanStat ir, red, pg;
   chanStat32(b->ir,  b->max_n, SQI_SAT_LEVEL,     &ir);
   chanStat32(b->red, b->max_n, SQI_SAT_LEVEL,     &red);
@@ -226,8 +230,16 @@ bool sqiEvaluate(const Batch* b, Sqi* q) {
   q->score = minU8(minU8(minU8(sDc, sPerf), minU8(sJump, sTort)),
                    minU8(minU8(sPpgJ, sPpgT), sClip));
   if (q->flags) q->score = 0;
+  }
 
+#if SQI_ENABLE
   return q->flags == 0 && q->score >= SQI_MIN_SCORE;
+#else
+  /* Gerbang MATI: semua package dikirim apa adanya. Skor dan flag tetap ikut
+   * di payload sebagai catatan — kamu bisa melihat package mana yang SEHARUSNYA
+   * ditolak tanpa benar-benar kehilangan datanya. Itu justru cara paling cepat
+   * mengetahui apakah ambangmu kelewat ketat. */
+  return true;
 #endif
 }
 
