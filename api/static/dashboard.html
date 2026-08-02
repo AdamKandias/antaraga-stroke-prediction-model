@@ -796,6 +796,10 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
         <option value="__no_device__">Tanpa Device ID</option>
       </select>
       <button class="btn-sec btn-sm" style="font-size:11px" onclick="alClearFilter()">✕ Reset</button>
+      <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none">
+        <input type="checkbox" id="alHideHealth" checked onchange="alRerender()" style="cursor:pointer">
+        Sembunyikan /health
+      </label>
     </div>
     <!-- Stats strip -->
     <div style="display:flex;gap:18px;margin-bottom:10px;font-size:12px;font-family:monospace">
@@ -2007,7 +2011,10 @@ function alParse(raw) {
     /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})[,.\d]* (\S+) "([A-Z]+) ([^"]+)" (\d+) ([\d.]+ms)(?: device=(\S+))?/
   );
   if (!m) return null;
-  return { ts: m[1].split(' ')[1], ip: m[2], method: m[3],
+  // Server log dalam UTC — konversi ke timezone lokal browser
+  const localTs = new Date(m[1].replace(' ', 'T') + 'Z')
+    .toLocaleTimeString('id', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  return { ts: localTs, ip: m[2], method: m[3],
            path: m[4], status: +m[5], lat: m[6], device: m[7] || null };
 }
 
@@ -2040,6 +2047,7 @@ function alVisible(p) {
   if (f.status && !String(p.status).startsWith(f.status)) return false;
   if (f.device === '__no_device__' && p.device) return false;
   if (f.device && f.device !== '__no_device__' && p.device !== f.device) return false;
+  if (document.getElementById('alHideHealth')?.checked && p.path === '/health') return false;
   return true;
 }
 
