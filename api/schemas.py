@@ -195,6 +195,20 @@ class IngestBatch(BaseModel):
     batt_mv: int = 0
     batt_pct: int = 0
     ovf: int = 0
+    # SQI metadata — dikirim firmware sejak v0.x; opsional agar payload lama tetap valid
+    sqi: int = 0           # skor 0–100 (MINIMUM sub-skor; 0 jika ada flag aktif)
+    sqi_flags: int = 0     # bitmask: 0x01=NO_FINGER 0x02=SAT 0x04=FLAT 0x08=MOTION 0x10=PPG_BAD 0x20=SHORT
+    ir_dc: int = 0
+    ir_p2p: int = 0
+    ir_pi: int = 0         # perfusi IR dalam per-mil (p2p/DC × 1000)
+    ir_jump: int = 0
+    ir_jump_n: int = 0
+    ir_tort10: int = 0     # tortuositas × 10
+    ppg_dc: int = 0
+    ppg_p2p: int = 0
+    ppg_jump_n: int = 0
+    ppg_tort10: int = 0
+    clip_n: int = 0
     ppg: list[int] = []
     red: list[int] = []
     ir: list[int] = []

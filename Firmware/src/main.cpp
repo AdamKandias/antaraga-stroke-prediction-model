@@ -178,15 +178,16 @@ static void printStats() {
     (unsigned long)g_stats.max_ovf_total, (unsigned long)g_stats.ppg_overrun,
     (unsigned long)g_stats.max_trunc);
 
-  /* Gerbang SQI. lolos+tolak = package yang sempat dinilai; sisanya terhadap
-   * batch made adalah yang keburu dibuang di pool karena jaringan tertinggal. */
-  const uint32_t sqiTot = g_stats.sqi_pass + g_stats.sqi_reject;
+  /* SQI kini murni metadata — semua package terkirim, gerbang kirim/buang
+   * sungguhan ada di cloud. "flagged" = cacah package dengan sqi_flags != 0
+   * (indikasi mutu rendah) dari total yang berhasil terkirim. */
   char sqiWhy[SQI_FLAGS_TEXT_CAP];
   sqiFlagsText(g_stats.sqi_last_flags, sqiWhy, sizeof(sqiWhy));
   Serial.printf(
-    "       sqi lolos=%lu tolak=%lu (%lu%%) | skor terakhir=%u alasan=%s\n",
-    (unsigned long)g_stats.sqi_pass, (unsigned long)g_stats.sqi_reject,
-    (unsigned long)(sqiTot ? g_stats.sqi_pass * 100UL / sqiTot : 0),
+    "       sqi flagged=%lu/%lu (%lu%%) | skor terakhir=%u alasan=%s\n",
+    (unsigned long)g_stats.sqi_flagged, (unsigned long)g_stats.batches_sent,
+    (unsigned long)(g_stats.batches_sent
+                    ? g_stats.sqi_flagged * 100UL / g_stats.batches_sent : 0),
     (unsigned)g_stats.sqi_last_score, sqiWhy);
 
   Serial.printf(

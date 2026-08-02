@@ -311,7 +311,7 @@ void sensorTask(void* arg) {
   xEventGroupWaitBits(g_events, EV_WIFI_OK, pdFALSE, pdTRUE, portMAX_DELAY);
   Serial.println(F("[SENSOR] WiFi siap -> menyalakan sensor"));
 
-  // --- Langkah 2: nyalakan sensor --------------------------------------
+  // --- Langkah 2: nyalakan SON1303 dan biarkan ia settle DULU -----------
   digitalWrite(PIN_SEN_EN, SEN_POWER_ON);      // D2 LOW -> P-MOS Q2 ON -> SON1303 dapat 3V3
 
   if (!adcInit()) {
@@ -325,6 +325,24 @@ void sensorTask(void* arg) {
   Wire.setClock(400000);
   Wire.setTimeOut(50);
 
+  /* SON1303 settle SEBELUM MAX30102 mulai berdenyut, bukan sesudahnya.
+   * Urutan lama (MAX30102 duluan, baru settle) berarti LED-nya sudah
+   * memompa arus target SEPANJANG jendela settle op-amp SON1303, jadi
+   * op-amp mencari titik bias diam sementara rel 3V3-nya masih kena
+   * denyut LED di latar belakang. Terbukti (Recorder3CH, 2026-07-31)
+   * membuat baseline SON1303 redup. Membalik urutan mengunci baseline
+   * SON1303 lebih dulu, sebelum LED MAX30102 aktif sama sekali. */
+  setState(ST_SENSOR_WARMUP);
+  Serial.printf("[SENSOR] Settle SON1303 %d ms (sebelum MAX30102 aktif)...\n",
+                SENSOR_SETTLE_MS);
+  const TickType_t kPeriod = pdMS_TO_TICKS(PPG_PERIOD_MS);
+  TickType_t lastWake = xTaskGetTickCount();
+  for (uint32_t i = 0; i < (uint32_t)(SENSOR_SETTLE_MS / PPG_PERIOD_MS); i++) {
+    vTaskDelayUntil(&lastWake, kPeriod);
+    (void)adcOversample((AdcChan)ADC_CH_PPG, PPG_OVERSAMPLE);
+  }
+
+  // --- Langkah 3: baru sekarang nyalakan MAX30102 -----------------------
   if (!maxBegin()) {
     Serial.println(F("[SENSOR] FATAL: MAX30102 tidak terdeteksi di I2C 0x57."));
     Serial.println(F("[SENSOR] Cek SDA=D4/GPIO5, SCL=D5/GPIO6, dan 3V3 (ferrite B2)."));
@@ -332,39 +350,20 @@ void sensorTask(void* arg) {
     digitalWrite(PIN_SEN_EN, SEN_POWER_OFF);
     vTaskDelete(nullptr);
   }
-  maxStart();                                   // keluar dari shutdown, LED menyala
+  maxStart();                                   // keluar dari shutdown, LED menyala; FIFO dibersihkan
   maxDumpRegs("start");
-  setState(ST_SENSOR_WARMUP);
-
-  Serial.printf("[SENSOR] MAX30102 %d Hz, SON1303 %d Hz (oversample %dx). Settle %d ms...\n",
-                MAX_FS_HZ, PPG_FS_HZ, PPG_OVERSAMPLE, SENSOR_SETTLE_MS);
-
-  // --- Langkah 3: settle — sampel dibuang, bukan dikirim ----------------
-  // FIFO tetap dikuras supaya tidak overflow dan tidak ada sisa data lama.
-  const TickType_t kPeriod = pdMS_TO_TICKS(PPG_PERIOD_MS);
-  TickType_t lastWake = xTaskGetTickCount();
-  uint32_t scratchRed[34], scratchIr[34];
-
-  for (uint32_t i = 0; i < (uint32_t)(SENSOR_SETTLE_MS / PPG_PERIOD_MS); i++) {
-    vTaskDelayUntil(&lastWake, kPeriod);
-    (void)adcOversample((AdcChan)ADC_CH_PPG, PPG_OVERSAMPLE);
-    uint8_t wr, ovf, rd;
-    if (maxReadPtrs(wr, ovf, rd)) {
-      uint8_t avail = (uint8_t)((wr - rd) & 0x1F);
-      if (avail) maxReadFifo(avail > 32 ? 32 : avail, scratchRed, scratchIr);
-    }
-  }
-  maxClearFifo();
   readBattery(true);                            // bacaan pertama jadi seed EMA
 
   // --- Langkah 4: streaming --------------------------------------------
   setState(ST_STREAMING);
-  Serial.println(F("[SENSOR] STREAMING"));
+  Serial.printf("[SENSOR] MAX30102 %d Hz, SON1303 %d Hz (oversample %dx). STREAMING\n",
+                MAX_FS_HZ, PPG_FS_HZ, PPG_OVERSAMPLE);
 
   Batch*   b        = batchAcquire();
   uint32_t seq      = 0;
   uint16_t battTick = 0;
   const uint16_t kBattTicks = BATT_PERIOD_MS / PPG_PERIOD_MS;
+  uint32_t scratchRed[34], scratchIr[34];
 
   lastWake = xTaskGetTickCount();
   for (;;) {

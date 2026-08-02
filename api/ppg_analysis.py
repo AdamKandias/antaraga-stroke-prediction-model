@@ -214,19 +214,24 @@ def compute_spo2(
     ir_raw:  list | np.ndarray,
     fs: float,
 ) -> dict:
-    """SpO2 dari R = (AC_red/DC_red) / (AC_ir/DC_ir), model empirik 110−25R.
+    """SpO2 via R = (AC_red/DC_red) / (AC_ir/DC_ir), formula 110−25R.
 
-    AC diekstrak dengan bandpass Butterworth 0.5–3.5 Hz (cardiac band) sebelum
-    hitung peak-to-peak. Ini wajib untuk sensor 100–400 Hz karena max-min sinyal
-    RAW didominasi noise frekuensi tinggi, bukan komponen jantung. DC dari rata-
-    rata seluruh window. Hasil diklem ke [80, 100] %.
+    AC diukur dari AMPLITUDO FFT di frekuensi denyut jantung, bukan max-min.
+    Ini jauh lebih robust: max-min seluruh band 0.5–3.5 Hz masih terpengaruh
+    noise broadband di band itu; FFT hanya membaca tepat di f_jantung sehingga
+    noise di frekuensi lain tidak masuk ke perhitungan R.
+
+    Langkah:
+      1. Bandpass 0.5–3.5 Hz + hapus DC
+      2. Cari f_jantung via autokorelasi sinyal IR (sinyal lebih besar di IR)
+      3. FFT dengan Hanning window → ambil amplitudo di f_jantung ± 3 bin
+      4. R = (AC_red/DC_red) / (AC_ir/DC_ir)
     """
     from scipy.signal import butter, filtfilt
 
     r_arr = np.asarray(red_raw, dtype=np.float64)
     i_arr = np.asarray(ir_raw,  dtype=np.float64)
 
-    # Butuh minimal 2 detik agar filtfilt stabil
     n_min = max(8, int(2 * fs))
     if len(r_arr) < n_min or len(i_arr) < n_min:
         return {"spo2": None, "r_ratio": None, "valid": False}
@@ -236,20 +241,42 @@ def compute_spo2(
     if dc_red < 1 or dc_ir < 1:
         return {"spo2": None, "r_ratio": None, "valid": False}
 
-    # Bandpass 0.5–3.5 Hz → isolasi komponen denyut jantung
+    # Bandpass + hapus DC agar FFT stabil
     nyq = fs / 2.0
     try:
-        b, a = butter(3, [0.5 / nyq, min(3.5 / nyq, 0.99)], btype="band")
-        red_filt = filtfilt(b, a, r_arr)
-        ir_filt  = filtfilt(b, a, i_arr)
+        b, a   = butter(3, [0.5 / nyq, min(3.5 / nyq, 0.99)], btype="band")
+        r_filt = filtfilt(b, a, r_arr - dc_red)
+        i_filt = filtfilt(b, a, i_arr - dc_ir)
     except Exception:
         return {"spo2": None, "r_ratio": None, "valid": False}
 
-    # Peak-to-peak dari 4 detik terakhir (±4 denyut = estimasi stabil)
-    n_win  = min(len(r_arr), int(4 * fs))
-    ac_red = float(red_filt[-n_win:].max() - red_filt[-n_win:].min())
-    ac_ir  = float(ir_filt[-n_win:].max()  - ir_filt[-n_win:].min())
-    if ac_ir < 1e-3:
+    # Cari frekuensi jantung via autokorelasi IR (sinyal lebih kuat)
+    n       = len(i_filt)
+    min_lag = max(1, int(fs * 60.0 / 150.0))   # 150 BPM
+    max_lag = min(n - 1, int(fs * 60.0 / 40.0)) # 40 BPM
+    if min_lag >= max_lag:
+        return {"spo2": None, "r_ratio": None, "valid": False}
+
+    corr      = np.correlate(i_filt, i_filt, mode="full")[n - 1:]
+    heart_lag = min_lag + int(np.argmax(corr[min_lag: max_lag + 1]))
+    heart_hz  = fs / heart_lag
+
+    # FFT amplitudo RED dan IR tepat di frekuensi jantung ± 3 bin
+    N     = len(r_filt)
+    win   = np.hanning(N)
+    fft_r = np.abs(np.fft.rfft(r_filt * win)) * 2.0 / N
+    fft_i = np.abs(np.fft.rfft(i_filt * win)) * 2.0 / N
+    freqs = np.fft.rfftfreq(N, d=1.0 / fs)
+
+    f_idx = int(np.argmin(np.abs(freqs - heart_hz)))
+    bw    = 3
+    lo    = max(1, f_idx - bw)
+    hi    = min(len(fft_r) - 1, f_idx + bw + 1)
+
+    ac_red = float(np.sqrt(np.sum(fft_r[lo:hi] ** 2)))
+    ac_ir  = float(np.sqrt(np.sum(fft_i[lo:hi] ** 2)))
+
+    if ac_ir < 1e-9:
         return {"spo2": None, "r_ratio": None, "valid": False}
 
     R    = (ac_red / dc_red) / (ac_ir / dc_ir)

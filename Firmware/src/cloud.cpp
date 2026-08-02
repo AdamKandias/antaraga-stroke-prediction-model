@@ -72,8 +72,9 @@ static size_t buildJson(const Batch* b, const Sqi* q) {
   w.key("batt_pct");  w.u32(b->batt_pct);                        w.chr(',');
   w.key("ovf");       w.u32(b->max_ovf);                         w.chr(',');
 
-  /* Metrik SQI ikut dikirim supaya keputusan gerbang di firmware bisa diaudit
-   * dari sisi cloud — package yang sampai ke sini pasti sqi_flags = 0. */
+  /* Metrik SQI ikut dikirim SELALU, apa pun nilainya — inilah yang dipakai
+   * cloud sebagai gerbang kirim/buang sungguhan. Firmware tidak lagi
+   * membuang package apa pun sendiri. */
   w.key("sqi");        w.u32(q->score);                          w.chr(',');
   w.key("sqi_flags");  w.u32(q->flags);                          w.chr(',');
   w.key("ir_dc");      w.u32(q->ir_dc);                          w.chr(',');
@@ -534,30 +535,31 @@ void netTask(void* arg) {
     Batch* b = nullptr;
     if (xQueueReceive(g_qFilled, &b, pdMS_TO_TICKS(1000)) != pdTRUE) continue;
 
-    /* GERBANG SQI — dijalankan sebelum apa pun yang menyentuh jaringan, jadi
-     * package sampah tidak pernah memakan bandwidth maupun kuota. Hitungannya
-     * hanya jalan-lurus atas ~500 sampel (puluhan mikrodetik), dan ini core 0
-     * yang memang sedang menunggu, bukan core sensor. */
+    /* METRIK SQI — dihitung untuk SETIAP package sebagai metadata; tidak lagi
+     * memutuskan kirim/buang di sini. Gerbang kelayakan sepenuhnya dipindah ke
+     * cloud: cloud punya akses ke seluruh sub-metrik (ir_dc, ir_pi, ir_jump,
+     * tortuosity, dst), bisa mengubah ambang kapan pun tanpa flash ulang
+     * firmware, dan bisa memutuskan lebih optimal karena melihat lebih dari
+     * satu package sekaligus. Hitungannya hanya jalan-lurus atas ~500 sampel
+     * (puluhan mikrodetik), dan ini core 0 yang memang sedang menunggu, bukan
+     * core sensor. */
     Sqi q;
-    const bool layak = sqiEvaluate(b, &q);
+    sqiEvaluate(b, &q);
     g_stats.sqi_last_score = q.score;
     g_stats.sqi_last_flags = q.flags;
-    if (!layak) {
-      g_stats.sqi_reject++;
+    if (q.flags) {
+      g_stats.sqi_flagged++;
 #if VERBOSE_SQI
       char why[SQI_FLAGS_TEXT_CAP];
       sqiFlagsText(q.flags, why, sizeof(why));
-      Serial.printf("[SQI ] buang seq=%lu skor=%u (%s) ir_dc=%lu pi=%u permil"
+      Serial.printf("[SQI ] flag seq=%lu skor=%u (%s) ir_dc=%lu pi=%u permil"
                     " jump=%lu n=%u tort=%u.%u\n",
                     (unsigned long)b->seq, (unsigned)q.score, why,
                     (unsigned long)q.ir_dc, (unsigned)q.ir_pi,
                     (unsigned long)q.ir_jump, (unsigned)q.ir_jump_n,
                     (unsigned)(q.ir_tort10 / 10), (unsigned)(q.ir_tort10 % 10));
 #endif
-      xQueueSend(g_qFree, &b, 0);      // buffer langsung kembali ke pool
-      continue;
     }
-    g_stats.sqi_pass++;
 
     const size_t n = buildJson(b, &q);
     bool ok = false;

@@ -82,9 +82,9 @@
  * jendela ini DIBUANG, jadi noise transien power-on tidak ikut terkirim.
  *
  * CATATAN: recorder SON1303-mu memakai warmup 8 detik karena baseline op-amp
- * SON1303 (kopling DC) butuh waktu settle. 1000 ms sesuai permintaan, tapi
+ * SON1303 (kopling DC) butuh waktu settle. 2000 ms sesuai permintaan, tapi
  * kalau batch-batch awal terlihat melayang/drift, naikkan nilai ini.        */
-#define SENSOR_SETTLE_MS          1000
+#define SENSOR_SETTLE_MS          2000
 
 /* Durasi data per package (= per 1x POST).
  *
@@ -105,15 +105,17 @@
 #define BATCH_POOL                6
 
 // =====================================================================
-// SQI — gerbang kelayakan per package (dihitung di core 0, src/sqi.cpp)
+// SQI — metrik kualitas per package (dihitung di core 0, src/sqi.cpp)
 // =====================================================================
-/* Satu package = satu keputusan: layak -> POST, tidak layak -> DIBUANG.
- * Tidak ada nilai yang dirata-rata antar package, dan skor akhir diambil dari
- * MINIMUM sub-skor. Rata-rata justru menyamarkan outlier — satu lompatan
- * gerakan akan tenggelam dan package sampah tetap lolos.
+/* Firmware TIDAK lagi memutuskan kirim/buang. Semua package selalu dikirim
+ * apa adanya; angka-angka di bawah ini hanya menentukan skor & flags yang
+ * IKUT DIKIRIM sebagai metadata (sqi, sqi_flags, ir_*, ppg_*), supaya gerbang
+ * kelayakan sungguhan dikerjakan di cloud — bisa diubah kapan pun tanpa flash
+ * ulang, dan bisa melihat lebih dari satu package sekaligus saat memutuskan.
  *
- * 0 = semua package dikirim apa adanya (berguna saat kalibrasi ambang). */
-#define SQI_ENABLE                0
+ * Tidak ada nilai yang dirata-rata antar package: skor akhir diambil dari
+ * MINIMUM sub-skor, karena rata-rata justru menyamarkan outlier — satu
+ * lompatan gerakan akan tenggelam dan package sampah tetap tampak baik. */
 
 // --- MAX30102 kanal IR (ADC 18-bit, 0..262143) -----------------------
 #define SQI_SAT_LEVEL             262100  // ambang "mentok rel"
@@ -127,13 +129,15 @@
 #define SQI_IR_DC_GOOD_HI         220000
 #define SQI_IR_DC_MAX             255000
 
-/* Perfusi (p2p / DC) dalam per-mil. Di BATCH_MS 1000 ini gerbang mutu SUNGGUHAN,
- * bukan lagi sekadar lantai anti-flatline, karena jendelanya memuat denyut utuh.
+/* Perfusi (p2p / DC) dalam per-mil. Di BATCH_MS 1000 ini penanda mutu
+ * SUNGGUHAN, bukan lagi sekadar lantai anti-flatline, karena jendelanya
+ * memuat denyut utuh.
  *
  * Nilai khas: jari ~5-30 per-mil (0,5-3%), pergelangan jauh lebih rendah.
- * MIN sengaja dipatok konservatif — kalau kelewat tinggi, gerbang membuang data
- * sehat dan kamu tidak punya apa pun untuk dikalibrasi. Naikkan SETELAH melihat
- * sebaran ir_p2p/ir_dc yang nyata dari sensormu (pakai SQI_ENABLE 0). */
+ * MIN sengaja dipatok konservatif — kalau kelewat tinggi, skor/flag akan
+ * menandai data sehat sebagai buruk (data-nya sendiri TETAP terkirim, jadi
+ * tidak ada yang hilang). Naikkan SETELAH melihat sebaran ir_p2p/ir_dc yang
+ * nyata dari sensormu di payload yang diterima cloud. */
 #define SQI_IR_PI_MIN_PERMIL      2       // 0,2%
 #define SQI_IR_PI_GOOD_LO         5       // 0,5%
 #define SQI_IR_PI_GOOD_HI         60      // 6%
@@ -172,9 +176,6 @@
 #define SQI_PPG_JUMP_MAX_PCT      45
 #define SQI_PPG_TORT_GOOD_X10     80
 #define SQI_PPG_TORT_MAX_X10      200
-
-// Skor minimum supaya package dikirim (0..100).
-#define SQI_MIN_SCORE             60
 
 // =====================================================================
 // Baterai (Vsens di A0/GPIO1, pembagi R1=R2=100k -> Vbatt/2)
@@ -272,4 +273,4 @@
 #define SERIAL_BAUD               115200
 #define STAT_PERIOD_MS            5000    // baris "[STAT]" tiap 5 s
 #define VERBOSE_HTTP              1       // cetak status code tiap POST
-#define VERBOSE_SQI               1       // cetak alasan tiap package yang dibuang
+#define VERBOSE_SQI               1       // cetak alasan tiap package yang ditandai (flag menyala)

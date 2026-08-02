@@ -76,11 +76,12 @@ struct Batch {
 };
 
 // ---------------------------------------------------------------------
-// SQI — penilaian kelayakan SATU package (dihitung di core 0, sqi.cpp)
+// SQI — metrik kualitas SATU package (dihitung di core 0, sqi.cpp).
+// Metadata saja — gerbang kirim/buang dilakukan di CLOUD, bukan di sini.
 // ---------------------------------------------------------------------
-// Alasan tolak. Flag apa pun yang menyala = package langsung dibuang,
-// berapa pun skornya. Dikirim ke cloud sebagai "sqi_flags" supaya keputusan
-// firmware bisa diaudit dari sisi server.
+// Indikator masalah. Flag apa pun yang menyala memaksa skor jadi 0 (lihat
+// sqi.cpp), sebagai sinyal kuat "kemungkinan besar bermutu rendah". Dikirim
+// ke cloud sebagai "sqi_flags" supaya cloud yang memutuskan kirim/buang.
 #define SQI_F_NO_FINGER  (1 << 0)   // DC IR terlalu rendah — sensor tidak menempel
 #define SQI_F_SATURATED  (1 << 1)   // DC kelewat tinggi / sampel mentok rel ADC
 #define SQI_F_FLAT       (1 << 2)   // nyaris tanpa riak — sensor macet / tidak ada denyut
@@ -108,9 +109,10 @@ struct Sqi {
   uint16_t clip_n;      // cacah sampel yang mentok rel (IR + RED + PPG)
 };
 
-// true = package layak kirim. Tidak mengubah isi Batch sama sekali —
-// data yang dikirim tetap 100% mentah.
-bool sqiEvaluate(const Batch* b, Sqi* out);
+// Menghitung SELURUH metrik/skor SQI ke *out sebagai metadata untuk cloud.
+// TIDAK memutuskan kirim/buang — gerbang kelayakan sepenuhnya di cloud.
+// Tidak mengubah isi Batch sama sekali — data yang dikirim tetap 100% mentah.
+void sqiEvaluate(const Batch* b, Sqi* out);
 
 /* Alasan tolak jadi teks. Buffer WAJIB disediakan pemanggil (bukan statis di
  * dalam fungsi): ini dipanggil dari loop() di core 1 DAN dari netTask di core 0,
@@ -146,9 +148,9 @@ struct Stats {
   volatile uint32_t ppg_samples;
   volatile uint32_t max_samples;
 
-  // Gerbang SQI — package yang dibuang di sini TIDAK pernah menyentuh jaringan
-  volatile uint32_t sqi_pass;
-  volatile uint32_t sqi_reject;
+  // Metrik SQI — semua package tetap dikirim; ini murni visibilitas lokal.
+  // Gerbang kirim/buang dilakukan di cloud dari metadata sqi/sqi_flags.
+  volatile uint32_t sqi_flagged;     // cacah package dengan sqi_flags != 0
   volatile uint8_t  sqi_last_score;
   volatile uint8_t  sqi_last_flags;
 };

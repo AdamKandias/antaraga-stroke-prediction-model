@@ -5,22 +5,33 @@
  * BUKAN di core 1: core sensor punya anggaran 5 ms per tick yang tidak boleh
  * diganggu, sedangkan core 0 justru banyak menganggur menunggu jaringan.
  *
+ * MODUL INI TIDAK MEMUTUSKAN KIRIM/BUANG. Ia hanya menghitung metadata mutu
+ * sinyal (skor + flags + sub-metrik mentah) yang dikirim BERSAMA data mentah
+ * ke cloud. Gerbang kelayakan sungguhan — kirim atau buang — dikerjakan di
+ * cloud, bukan di firmware: ambangnya bisa diubah kapan pun tanpa flash ulang,
+ * dan cloud bisa melihat lebih dari satu package sekaligus (atau menggabungkan
+ * sinyal lain) saat memutuskan, sesuatu yang tidak bisa dilakukan gerbang
+ * sekali-lihat di firmware.
+ *
  * PRINSIP RANCANGAN
  * -----------------
- * 1. Satu package = satu keputusan. Tidak ada state yang dibawa antar package,
- *    jadi package bagus tidak pernah ikut tercemar oleh tetangganya yang buruk.
+ * 1. Satu package = satu hasil metrik. Tidak ada state yang dibawa antar
+ *    package, jadi metrik package bagus tidak pernah ikut tercemar oleh
+ *    tetangganya yang buruk.
  *
  * 2. Skor akhir = MINIMUM sub-skor, bukan rata-rata. Ini inti permintaannya:
  *    rata-rata menyamarkan outlier — satu lompatan gerakan parah akan larut di
- *    antara ratusan sampel lain dan package sampah tetap lolos. Minimum tidak
- *    bisa disamarkan; satu aspek rusak langsung menjatuhkan seluruh package.
+ *    antara ratusan sampel lain dan package sampah tetap terlihat baik.
+ *    Minimum tidak bisa disamarkan; satu aspek rusak langsung menjatuhkan
+ *    skor seluruh package.
  *
  * 3. Statistiknya bertipe EKSTREM (min, max, lompatan terbesar, panjang
  *    lintasan) — bukan rerata. Satu-satunya rerata di sini adalah DC, dan itu
  *    murni penyebut normalisasi + telemetri, tidak pernah jadi penilai mutu.
  *
  * 4. Data yang dikirim TIDAK disentuh. Tidak ada filter, smoothing, atau
- *    resampling. Modul ini hanya menjawab satu pertanyaan: kirim atau buang.
+ *    resampling, dan tidak ada package yang dibuang di sini — modul ini hanya
+ *    menghitung metadata, cloud yang menjawab pertanyaan kirim/buang.
  *
  * TIGA KELAS CACAT YANG DITANGKAP
  * -------------------------------
@@ -141,16 +152,14 @@ static uint8_t decayScore(uint32_t v, uint32_t good, uint32_t maxV) {
 static inline uint8_t minU8(uint8_t a, uint8_t b) { return a < b ? a : b; }
 
 // =====================================================================
-// Gerbang utama
+// Perhitungan metrik & skor — TIDAK ada gerbang kirim/buang di sini
 // =====================================================================
-/* PENTING: metrik SELALU dihitung, bahkan saat SQI_ENABLE 0. Yang dimatikan
- * oleh SQI_ENABLE hanyalah KEPUTUSAN buang/kirim di baris terakhir.
- *
- * Ini bukan detail sepele: SQI_ENABLE 0 justru dipakai untuk MENGKALIBRASI
- * ambang, dan kalibrasi butuh sebaran ir_dc / ir_pi / ir_jump_n / ir_tort10
- * yang nyata. Kalau perhitungannya ikut dilewati, seluruh metrik terkirim
- * sebagai 0 dan tidak ada yang bisa dikalibrasi. */
-bool sqiEvaluate(const Batch* b, Sqi* q) {
+/* Menghitung SELURUH metrik SQI dan mengisi *q sebagai metadata yang dikirim
+ * bersama data mentah. Keputusan kirim/buang sepenuhnya dipindah ke CLOUD:
+ * cloud punya akses ke seluruh sub-metrik (ir_dc, ir_pi, ir_jump, tortuosity,
+ * dst), bisa mengubah ambang kapan pun tanpa flash ulang firmware, dan bisa
+ * melihat lebih dari satu package sekaligus saat memutuskan. */
+void sqiEvaluate(const Batch* b, Sqi* q) {
   memset(q, 0, sizeof(*q));
 
   {
@@ -231,16 +240,6 @@ bool sqiEvaluate(const Batch* b, Sqi* q) {
                    minU8(minU8(sPpgJ, sPpgT), sClip));
   if (q->flags) q->score = 0;
   }
-
-#if SQI_ENABLE
-  return q->flags == 0 && q->score >= SQI_MIN_SCORE;
-#else
-  /* Gerbang MATI: semua package dikirim apa adanya. Skor dan flag tetap ikut
-   * di payload sebagai catatan — kamu bisa melihat package mana yang SEHARUSNYA
-   * ditolak tanpa benar-benar kehilangan datanya. Itu justru cara paling cepat
-   * mengetahui apakah ambangmu kelewat ketat. */
-  return true;
-#endif
 }
 
 // =====================================================================

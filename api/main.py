@@ -740,6 +740,57 @@ def ingest_firmware_batch(
 
 
 # ---------------------------------------------------------------------------
+# SQI helpers — filter batch berkualitas buruk sebelum analisis
+# Flag bitmask sesuai Firmware/include/antaraga.h
+# ---------------------------------------------------------------------------
+
+_SQI_F_NO_FINGER = 0x01  # sensor tidak menempel
+_SQI_F_SATURATED = 0x02  # ADC jenuh
+_SQI_F_FLAT      = 0x04  # sinyal datar / tanpa denyut
+_SQI_F_MOTION    = 0x08  # artefak gerak
+_SQI_F_PPG_BAD   = 0x10  # kanal SON1303 buruk
+_SQI_F_SHORT     = 0x20  # batch terlalu pendek
+
+# Flag yang membuat data IR/RED tidak dapat dipakai untuk SpO2 dan BPM
+_SQI_DISCARD = _SQI_F_NO_FINGER | _SQI_F_SATURATED | _SQI_F_FLAT | _SQI_F_MOTION
+
+
+def _filter_good_batches(batches: list[dict]) -> list[dict]:
+    """Kembalikan batch tanpa flag kritis; jika semua buruk, kembalikan semua (fallback)."""
+    good = [b for b in batches if not (b.get("sqi_flags", 0) & _SQI_DISCARD)]
+    return good if good else batches
+
+
+def _sqi_summary(batches: list[dict]) -> dict:
+    if not batches:
+        return {}
+    lat   = batches[-1]
+    flags = lat.get("sqi_flags", 0)
+    score = lat.get("sqi", 0)
+    names = []
+    if flags & 0x01: names.append("NO_FINGER")
+    if flags & 0x02: names.append("SATURATED")
+    if flags & 0x04: names.append("FLAT")
+    if flags & 0x08: names.append("MOTION")
+    if flags & 0x10: names.append("PPG_BAD")
+    if flags & 0x20: names.append("SHORT")
+    n_total   = len(batches)
+    n_flagged = sum(1 for b in batches if b.get("sqi_flags", 0) & _SQI_DISCARD)
+    return {
+        "score":             score,
+        "flags":             flags,
+        "flag_names":        names,
+        "ir_dc":             lat.get("ir_dc", 0),
+        "ir_pi":             lat.get("ir_pi", 0),
+        "ir_tort10":         lat.get("ir_tort10", 0),
+        "n_total":           n_total,
+        "n_flagged":         n_flagged,
+        "pct_good":          round(100 * (n_total - n_flagged) / n_total) if n_total else 0,
+        "analysis_filtered": n_flagged > 0,
+    }
+
+
+# ---------------------------------------------------------------------------
 # /dashboard — web dashboard untuk monitoring hardware
 # ---------------------------------------------------------------------------
 
@@ -771,12 +822,14 @@ def ingest_latest_dashboard(
         raise HTTPException(status_code=404, detail=f"Belum ada data dari device '{device_id}'")
 
     latest  = batches[-1]
-    # Concatenate window untuk sinyal yang lebih panjang (PWA/MLP butuh ≥ 2 detik)
-    all_ppg = [float(v) for b in batches for v in b.get("ppg", [])]
-    all_red = [float(v) for b in batches for v in b.get("red", [])]
-    all_ir  = [float(v) for b in batches for v in b.get("ir", [])]
     fs_ppg  = int(latest.get("fs_ppg", 200))
     fs_max  = int(latest.get("fs_max", 400))
+
+    # Filter batch berkualitas buruk sebelum analisis
+    good_batches = _filter_good_batches(batches)
+    all_ppg = [float(v) for b in good_batches for v in b.get("ppg", [])]
+    all_red = [float(v) for b in good_batches for v in b.get("red", [])]
+    all_ir  = [float(v) for b in good_batches for v in b.get("ir", [])]
 
     # --- Stage 1: Raw (tampilkan single batch terbaru) ---
     ppg_raw = [float(v) for v in latest.get("ppg", [])]
@@ -811,6 +864,7 @@ def ingest_latest_dashboard(
         "received_at": latest.get("_received_at", ""),
         "batt_pct": latest.get("batt_pct", 0),
         "batt_mv": latest.get("batt_mv", 0),
+        "sqi": _sqi_summary(batches),
         "raw": stage_raw,
         "pwa": stage_pwa,
         "mlp": stage_mlp,

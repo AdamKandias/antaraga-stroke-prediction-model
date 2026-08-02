@@ -275,6 +275,17 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
     <span id="spo2R" style="font-size:10px;color:var(--muted);font-family:monospace">—</span>
     <span style="font-size:9px;color:var(--muted);margin-left:6px">· 110−25×R (Beer-Lambert) · RED+IR</span>
   </div>
+  <div id="sqiRow" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:5px 0 1px;
+    border-top:1px solid var(--grid);margin-top:3px">
+    <span style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap">SQI</span>
+    <div style="flex:0 0 80px;height:7px;background:var(--surface2);border-radius:4px;overflow:hidden">
+      <div id="sqiBarFill" style="height:100%;width:0%;background:var(--muted);transition:width .4s ease,background .3s"></div>
+    </div>
+    <span id="sqiScore" style="font-size:15px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums">—</span>
+    <span style="font-size:10px;color:var(--muted)">/100</span>
+    <span id="sqiFlags" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-left:2px"></span>
+    <span id="sqiGoodPct" style="font-size:10px;color:var(--muted);margin-left:auto;white-space:nowrap"></span>
+  </div>
 </div>
 
 <!-- ── TAB 1: Raw ── -->
@@ -973,6 +984,7 @@ function updateAll(d) {
   document.getElementById('nmax').textContent = `${d.raw.n_max} sp · ${d.raw.fs_max} Hz`;
 
   renderStats(d.analysis || {});
+  renderSqi(d.sqi || {});
   renderRaw(d.raw, d.analysis || {});
   renderPwa(d.pwa, d.analysis || {});
   renderLinreg((d.analysis || {}).linreg);
@@ -1041,6 +1053,44 @@ function renderStats(analysis) {
   document.getElementById('spo2Status').textContent = spo2Label(sv);
   document.getElementById('spo2Status').style.color = sc;
   document.getElementById('spo2R').textContent      = sp.r_ratio != null ? sp.r_ratio.toFixed(4) : '—';
+}
+
+// ── SQI bar ──
+function renderSqi(sqi) {
+  const score  = sqi.score ?? null;
+  const fill   = document.getElementById('sqiBarFill');
+  const scoreEl = document.getElementById('sqiScore');
+  const flagsEl = document.getElementById('sqiFlags');
+  const pctEl   = document.getElementById('sqiGoodPct');
+
+  const col = score == null ? 'var(--muted)' :
+              score >= 60   ? 'var(--good)'   :
+              score >= 30   ? 'var(--warn)'   : 'var(--critical)';
+
+  if (fill) { fill.style.width = (score ?? 0) + '%'; fill.style.background = col; }
+  if (scoreEl) { scoreEl.textContent = score != null ? score : '—'; scoreEl.style.color = col; }
+
+  if (flagsEl) {
+    const names = sqi.flag_names || [];
+    const FLAG_ID = { NO_FINGER:'Tdk Terpasang', SATURATED:'Jenuh', FLAT:'Datar',
+                      MOTION:'Gerak', PPG_BAD:'PPG Buruk', SHORT:'Pendek' };
+    if (names.length === 0 && score != null) {
+      flagsEl.innerHTML = '<span style="font-size:10px;font-weight:600;color:var(--good)">BERSIH</span>';
+    } else {
+      flagsEl.innerHTML = names.map(f =>
+        `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;
+         background:rgba(208,59,59,.15);color:var(--critical)">${FLAG_ID[f] || f}</span>`
+      ).join('');
+    }
+  }
+
+  if (pctEl) {
+    const n = sqi.n_total;
+    const pct = sqi.pct_good;
+    pctEl.textContent = n != null
+      ? `${pct}% bagus · ${n} batch${sqi.analysis_filtered ? ' · analisis difilter' : ''}`
+      : '';
+  }
 }
 
 // ── Raw ──
