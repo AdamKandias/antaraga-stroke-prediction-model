@@ -54,7 +54,7 @@ ARTIFACT_PATH = ARTIFACT_DIR / "stroke_risk_model.joblib"
 METRICS_PATH = ARTIFACT_DIR / "metrics.json"
 
 NUMERIC_FEATURES = ["age", "avg_glucose_level", "bmi"]
-BINARY_FEATURES = ["hypertension", "heart_disease"]
+BINARY_FEATURES = ["hypertension", "heart_disease", "is_working"]
 CATEGORICAL_FEATURES = ["gender", "residence_type", "smoking_status"]
 FEATURE_ORDER = NUMERIC_FEATURES + BINARY_FEATURES + CATEGORICAL_FEATURES
 
@@ -71,6 +71,8 @@ CV = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
 def load_dataset() -> pd.DataFrame:
     df = pd.read_csv(DATA_PATH)
     df = df.rename(columns={"Residence_type": "residence_type"})
+    # Map 5-way work_type ke binary is_working (kompatibel dengan input mobile app)
+    df["is_working"] = df["work_type"].isin(["Private", "Self-employed", "Govt_job"]).astype(int)
     for col, categories in CATEGORY_VALUES.items():
         df[col] = pd.Categorical(df[col], categories=categories)
     return df[FEATURE_ORDER + ["stroke"]]

@@ -41,23 +41,32 @@ def detrend(x: np.ndarray, win: int) -> np.ndarray:
 
 
 def ac_signal(x: np.ndarray, fs: float) -> np.ndarray:
-    """Komponen denyut: HP dua-tingkat + LP ringan (~5 Hz).
+    """Komponen denyut: bandpass Butterworth zero-phase 0.5–5 Hz, orde 4.
 
-    Identik dengan ac_signal() di plotter.py.
-
-    Kenapa dua tingkat HP: gelombang napas ~0.25 Hz ada di semua PPG nyata,
-    dan satu tingkat rerata-bergerak hanya menekannya ke ~53%.  Sisa sebesar
-    itu membuat autokorelasi meluruh monoton → BPM selalu salah (~220).
-    Dua tingkat menekannya ke ~28% sementara denyut 43 bpm masih lolos
-    dengan gain 1.23.
-
-    LP window 17–18 sampel pada 200 Hz ≈ -3 dB di 5 Hz.
+    0.5 Hz high-pass: buang DC, drift termal, dan modulasi napas (~0.15–0.3 Hz).
+    5 Hz low-pass: buang noise frekuensi tinggi; harmonik denyut hingga ~75 bpm
+    ke-4 (4 × 75/60 = 5 Hz) masih lolos utuh.
+    filtfilt = zero-phase (tidak ada delay grup) — puncak akurat di posisi asli.
     """
+    from scipy.signal import butter, filtfilt
+
+    arr = np.asarray(x, dtype=np.float64)
+    n   = len(arr)
     fs  = max(float(fs), 20.0)
-    w_hp = fs * 2.5                                    # ~2.5 s
-    y   = detrend(detrend(x, w_hp), w_hp)
-    lp  = max(3, int(round(0.44 * fs / 5.0)))         # ~-3 dB di 5 Hz
-    return movavg(y, lp)
+    nyq = fs / 2.0
+
+    # Guard: filtfilt butuh minimal ~3× panjang koefisien sampel
+    min_len = 50
+    if n < min_len:
+        return arr - arr.mean()
+
+    low  = 0.5 / nyq
+    high = min(5.0 / nyq, 0.95)   # clamp agar tidak melebihi Nyquist
+    b, a = butter(4, [low, high], btype="band")
+
+    # Potong padlen jika sinyal pendek
+    padlen = min(3 * (max(len(b), len(a)) - 1), n // 2 - 1)
+    return filtfilt(b, a, arr, padlen=max(0, padlen))
 
 
 # ── BPM via autokorelasi FFT ───────────────────────────────────────────────

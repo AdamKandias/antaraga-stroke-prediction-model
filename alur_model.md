@@ -1,249 +1,246 @@
-# Konsep Model AI — ANTARAGA
+# Alur Model ANTARAGA — Teknis & Parameter
+
+> Dokumen ini menjelaskan arsitektur lengkap pipeline prediksi risiko stroke,
+> dari sinyal PPG sensor hingga skor akhir, beserta bobot, parameter, dan
+> sumber data setiap komponen.
 
 ---
 
-## 1. MLP (Multi-Layer Perceptron)
-
-### Apa itu MLP?
-
-MLP adalah jenis **jaringan saraf tiruan (neural network)** yang paling dasar
-dan paling banyak dipakai. Ia meniru cara otak bekerja: sinyal masuk dari
-satu sisi, diproses berlapis-lapis, dan keluar sebagai hasil prediksi di sisi
-lain.
-
-### Struktur
+## Gambaran Umum Pipeline
 
 ```
-INPUT LAYER          HIDDEN LAYER 1     HIDDEN LAYER 2     OUTPUT LAYER
-(23 fitur PPG)           (16 neuron)         (8 neuron)       (3 output)
-
-  x₁  ──┐                                                  ┌─→ sistol (mmHg)
-  x₂  ──┤     ┌──[○]──┐                ┌──[○]──┐          ├─→ diastol (mmHg)
-  x₃  ──┼──►  ├──[○]──┤  ──────────►  ├──[○]──┤  ──────► └─→ gula darah (mg/dL)
-  ...  ──┤     ├──[○]──┤                └──[○]──┘
-  x₂₃ ──┘     └──[○]──┘
-                 16 node                  8 node
+┌─────────────────────────────────────────────────────────┐
+│                    SENSOR ANTARAGA                       │
+│   MAX30102 (IR 880nm + RED 660nm)  +  SON1303 (525nm)   │
+│   18-bit / 400Hz                   +  12-bit / 200Hz    │
+└────────────────────┬────────────────────────────────────┘
+                     │  sinyal PPG mentah (buffer 10 detik)
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│                  SQI FILTERING                           │
+│   Saring paket buruk (NO_FINGER | SATURATED |           │
+│   FLAT | MOTION) sebelum analisis                        │
+└────────────────────┬────────────────────────────────────┘
+                     │  sinyal bersih
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│              TAHAP 1: EKSTRAKSI FITUR PPG               │
+│                                                         │
+│  ir_dc_mean   — rata-rata komponen DC kanal IR          │
+│  ir_ac_p2p    — amplitudo AC puncak-ke-lembah IR        │
+│  red_dc_mean  — rata-rata komponen DC kanal RED         │
+│  red_ac_p2p   — amplitudo AC puncak-ke-lembah RED       │
+│  bpm          — detak jantung (autocorrelation)         │
+└────────────────────┬────────────────────────────────────┘
+                     │  + age_years, gender_code (dari profil)
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│              TAHAP 2: MLP KALIBRASI                     │
+│         (MLPRegressor per target, solver=lbfgs)         │
+│                                                         │
+│  Input (7 fitur):                                       │
+│    ir_dc_mean, ir_ac_p2p, red_dc_mean, red_ac_p2p,     │
+│    bpm, age_years, gender_code                          │
+│                                                         │
+│  Output (5 prediksi vital sign):                        │
+│    gula_darah_mg_dl   → avg_glucose_level (XGBoost)    │
+│    sistolik_mmhg      → derivasi flag hypertension      │
+│    diastolik_mmhg     → derivasi flag hypertension      │
+│    kolesterol_mg_dl   → (belum dipakai di XGBoost)     │
+│    asam_urat_mg_dl    → (belum dipakai di XGBoost)     │
+└────────────────────┬────────────────────────────────────┘
+                     │  + data profil dari mobile app
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│              TAHAP 3: XGBOOST STROKE RISK               │
+│         XGBClassifier — 8 fitur — threshold 0.705       │
+│                                                         │
+│  Output: probabilitas risiko stroke 0.0–1.0             │
+│  Klasifikasi: LOW (<0.705) / HIGH (≥0.705)              │
+└─────────────────────────────────────────────────────────┘
 ```
-
-### Cara Kerja
-
-**1. Forward Pass (Maju)**
-
-Setiap neuron menghitung:
-
-```
-output = aktivasi( w₁x₁ + w₂x₂ + ... + wₙxₙ + bias )
-```
-
-- `x` = nilai input dari neuron sebelumnya
-- `w` = bobot (weight) — inilah yang dipelajari saat training
-- `bias` = nilai geser
-- `aktivasi` = fungsi nonlinear (di ANTARAGA: **tanh**)
-
-Fungsi **tanh** mengubah nilai apapun menjadi rentang −1 sampai +1:
-
-```
-tanh(x) = (eˣ − e⁻ˣ) / (eˣ + e⁻ˣ)
-```
-
-Fungsi ini dipilih karena sinyal PPG punya nilai positif dan negatif
-(setelah bandpass filter), dan tanh lebih stabil dari ReLU untuk sinyal
-fisiologis.
-
-**2. Backpropagation (Mundur) — Proses Belajar**
-
-Setelah forward pass, MLP membandingkan hasilnya dengan nilai referensi
-(ground truth dari kalibrasi). Selisihnya disebut **loss (error)**:
-
-```
-Loss = MSE = (1/n) Σ (prediksi − nilai_nyata)²
-```
-
-Lalu error ini disebarkan **mundur** ke seluruh jaringan dengan
-**aturan rantai (chain rule)** kalkulus untuk menghitung:
-*"berapa kontribusi setiap bobot terhadap error ini?"*
-
-Setelah itu setiap bobot diperbarui:
-
-```
-w_baru = w_lama − learning_rate × ∂Loss/∂w
-```
-
-Proses ini diulang ribuan kali (`max_iter=5000`) sampai error
-tidak turun lagi.
-
-**3. Regularisasi L2 (alpha=0.01)**
-
-Agar bobot tidak terlalu besar (overfitting), ditambahkan penalti:
-
-```
-Loss_total = MSE + alpha × Σ w²
-```
-
-`alpha=0.01` adalah trade-off ringan — jaringan tetap fleksibel tapi
-tidak menghafal noise data kalibrasi.
-
-### Penggunaan di ANTARAGA
-
-```
-Sinyal PPG (green/red/IR, ≥8 detik)
-    ↓ Pipeline PWA (Bandpass → Peak Detection → Fitur Morfologi)
-23 fitur numerik + usia
-    ↓ StandardScaler (z-score normalization)
-MLP (16 → 8 → 3)  [tanh, alpha=0.01, max_iter=5000]
-    ↓
-Estimasi: sistol (mmHg) | diastol (mmHg) | gula darah (mg/dL)
-```
-
-### Status
-Model ini **belum dilatih** — arsitektur dan pipeline sudah siap,
-menunggu data kalibrasi dari hardware nyata (pasang smartband → ukur
-dengan alat standar → simpan hasilnya).
 
 ---
 
-## 2. XGBoost — Extreme Gradient Boosting
+## Tahap 1: Ekstraksi Fitur PPG
 
-### Apa itu Gradient Boosting?
+| Fitur | Sumber | Deskripsi |
+|---|---|---|
+| `ir_dc_mean` | Buffer IR 880nm | Rata-rata amplitudo sinyal DC (komponen statis) |
+| `ir_ac_p2p` | Buffer IR 880nm | Amplitudo pulsasi AC (puncak ke lembah) |
+| `red_dc_mean` | Buffer RED 660nm | Rata-rata amplitudo DC kanal merah |
+| `red_ac_p2p` | Buffer RED 660nm | Amplitudo pulsasi AC kanal merah |
+| `bpm` | IR (autocorrelation) | Detak jantung dihitung dari frekuensi pulsasi |
 
-Gradient Boosting adalah teknik **ensemble** (gabungan banyak model lemah)
-yang membangun model satu per satu secara berurutan. Setiap model baru
-berfokus pada **kesalahan model sebelumnya**.
+---
 
-Analogi: seperti seorang murid yang setiap kali ujian hanya belajar soal
-yang kemarin salah. Lama-lama ia jago di semua soal.
+## Tahap 2: MLP Kalibrasi
 
-### Algoritma Gradient Boosting (Dasar)
-
-```
-Iterasi 1:  Buat pohon keputusan T₁ → prediksi F₁(x)
-             Error₁ = y - F₁(x)
-
-Iterasi 2:  Buat pohon T₂ yang belajar dari Error₁ → F₂(x)
-             Error₂ = y - [F₁(x) + F₂(x)]
-
-Iterasi 3:  Buat pohon T₃ yang belajar dari Error₂ → F₃(x)
-             ...
-
-Final:      F(x) = F₁(x) + F₂(x) + ... + Fₙ(x)
-            (semua pohon dijumlahkan dengan bobot learning rate η)
-```
-
-Kata "Gradient" berasal dari cara mencari arah perbaikan: setiap pohon
-baru dibuat untuk memprediksi **negatif gradien dari fungsi loss**,
-bukan error biasa. Ini lebih umum dan bisa dipakai untuk berbagai jenis loss.
-
-### Apa yang Membuat XGBoost *Extreme*?
-
-XGBoost (Chen & Guestrin, 2016) adalah implementasi Gradient Boosting yang
-dioptimasi secara matematis dan teknis:
-
-**a. Fungsi Objektif dengan Regularisasi**
-
-Berbeda dari GBM standar, XGBoost secara eksplisit meminimalkan:
+### Arsitektur
 
 ```
-Obj = Σ L(yᵢ, ŷᵢ) + Σₖ Ω(Tₖ)
-           ↑                ↑
-     Loss per data      Penalti kompleksitas pohon
+Input layer: 7 neuron
+Hidden layer 1: 64 neuron (ReLU)
+Hidden layer 2: 32 neuron (ReLU)
+Output layer: 1 neuron (nilai kontinu per model)
+
+Solver: lbfgs (optimal untuk dataset kecil <200 baris)
+Regularisasi alpha: 0.01
+Cross-validation: LOO jika n<30, 5-fold jika n≥30
 ```
 
-Di mana:
+### Fitur Input MLP
+
+| Fitur | Sumber | Tipe |
+|---|---|---|
+| `ir_dc_mean` | Sensor (MAX30102 IR) | Float |
+| `ir_ac_p2p` | Sensor (MAX30102 IR) | Float |
+| `red_dc_mean` | Sensor (MAX30102 RED) | Float |
+| `red_ac_p2p` | Sensor (MAX30102 RED) | Float |
+| `bpm` | Dihitung dari IR | Float |
+| `age_years` | Profil mobile (ulang tahun) | Float |
+| `gender_code` | Profil mobile (L=1, P=0) | Binary |
+
+### Output MLP → Vital Sign yang Diprediksi
+
+| Target | Satuan | Dipakai Tahap Selanjutnya |
+|---|---|---|
+| `gula_darah_mg_dl` | mg/dL | ✓ → `avg_glucose_level` ke XGBoost |
+| `sistolik_mmhg` | mmHg | ✓ → derivasi flag `hypertension` |
+| `diastolik_mmhg` | mmHg | ✓ → derivasi flag `hypertension` |
+| `kolesterol_mg_dl` | mg/dL | (belum dipakai di XGBoost saat ini) |
+| `asam_urat_mg_dl` | mg/dL | (belum dipakai di XGBoost saat ini) |
+
+**Derivasi hypertension:**
 ```
-Ω(T) = γ × (jumlah daun) + λ/2 × Σ (bobot daun)²
-```
-
-- `γ` = penalti per daun (pruning otomatis)
-- `λ` = L2 regularisasi pada bobot daun → di ANTARAGA: `reg_lambda=1.0`
-
-**b. Aproksimasi Histogram (tree_method="hist")**
-
-Daripada mencoba semua nilai split yang mungkin (lambat untuk dataset besar),
-XGBoost membagi nilai fitur menjadi **bucket histogram** dan hanya mencari
-split terbaik di antara bucket. Jauh lebih cepat, akurasi hampir sama.
-
-**c. Penanganan Imbalance: scale_pos_weight**
-
-Dataset stroke: 95% negatif, 5% positif. Kalau dibiarkan, model malas
-memprediksi stroke sama sekali. Solusi:
-
-```
-scale_pos_weight = jumlah_negatif / jumlah_positif ≈ 19.56
-```
-
-Artinya setiap satu data positif (stroke) dihitung **19,56× lebih berat**
-daripada satu data negatif saat menghitung loss. Model jadi lebih sensitif
-terhadap kasus stroke.
-
-### Parameter ANTARAGA dan Maknanya
-
-```python
-XGBClassifier(
-    n_estimators    = 100,    # jumlah pohon yang dibangun berurutan
-    max_depth       = 4,      # kedalaman maks tiap pohon (semakin dalam → overfitting)
-    learning_rate   = 0.03,   # η — seberapa besar kontribusi tiap pohon
-                              # kecil = konservatif, butuh lebih banyak pohon
-    min_child_weight= 5,      # jumlah minimum data di setiap daun
-                              # makin besar → pohon lebih sederhana → anti-overfitting
-    subsample       = 1.0,    # pakai 100% data per iterasi (tidak sub-sampling)
-    colsample_bytree= 1.0,    # pakai 100% fitur per pohon
-    reg_lambda      = 1.0,    # bobot penalti L2 pada daun pohon
-    scale_pos_weight= 19.56,  # kompensasi imbalance kelas
-    tree_method     = "hist", # histogram-based (lebih cepat)
-    eval_metric     = "aucpr" # optimasi Area Under Precision-Recall Curve
-)
+hypertension = 1  jika  sistolik ≥ 140  ATAU  diastolik ≥ 90
+hypertension = 0  jika  keduanya di bawah ambang
 ```
 
-### Cara Kerja di ANTARAGA
+---
+
+## Tahap 3: XGBoost Stroke Risk Classifier
+
+### Parameter Model Terpilih
 
 ```
-Input (8 fitur per pasien):
-  age=65, glucose=180, bmi=27.4, hypertension=1,
-  heart_disease=0, gender="Male", residence="Urban", smoking="smokes"
-         ↓
-  Pohon 1: "Usia > 60 DAN glukosa > 160?" → probabilitas awal 0.12
-         ↓
-  Pohon 2: "Hipertensi DAN perokok?" → tambah 0.08 × 0.03
-         ↓
-  Pohon 3: "BMI antara 25-30?" → tambah / kurangi ...
-         ↓  (100 pohon berurutan)
-  Probabilitas akhir: 0.78
-         ↓
-  Bandingkan dengan threshold 0.705
-         ↓
-  0.78 ≥ 0.705 → RISIKO TINGGI 🔴
+model:          XGBClassifier (menang vs HistGradientBoosting)
+n_estimators:   100
+max_depth:      4
+learning_rate:  0.03
+min_child_weight: 5
+subsample:      1.0
+colsample_bytree: 1.0
+reg_lambda:     1.0
+scale_pos_weight: 19.56  (kompensasi class imbalance — rasio negatif/positif)
+tree_method:    hist
+eval_metric:    aucpr
 ```
 
-### Hasil Pelatihan
+### Fitur Input dan Bobot (Feature Importance)
+
+| Fitur | Bobot (%) | Sumber | Keterangan |
+|---|---|---|---|
+| `age` | **50.2%** | Profil mobile (birthday) | Faktor risiko terbesar |
+| `bmi` | 8.6% | Profil mobile (BB ÷ TB²) | Dihitung otomatis |
+| `hypertension` | 7.9% | Derived dari MLP (sistolik/diastolik) | 0 atau 1 |
+| `gender` | 7.8% | Profil mobile | Male/Female/Other |
+| `avg_glucose_level` | 7.6% | **MLP ANTARAGA** (gula darah) | mg/dL |
+| `heart_disease` | 7.6% | Profil mobile | 0 atau 1 |
+| `residence_type` | 5.9% | Profil mobile | Urban/Rural |
+| `smoking_status` | 4.4% | Profil mobile | 3 kategori |
+
+> **Catatan:** Dari 8 fitur XGBoost, **3 fitur dinamis** berasal dari sensor
+> ANTARAGA (via MLP): gula darah, sistolik, diastolik. Sisanya 5 fitur statis
+> dari profil yang diisi sekali oleh pengguna.
+
+### Threshold dan Metrik Model
 
 | Metrik | Nilai |
 |---|---|
-| AUC-ROC | **0.823** |
-| Recall (Sensitivitas) | 0.493 |
-| Precision | 0.206 |
-| F1-Score | 0.290 |
-| Threshold optimal | **0.705** |
+| **Threshold keputusan** | 0.705 |
+| **AUC-ROC** | 0.823 |
+| **Precision (positif)** | 20.6% |
+| **Recall (sensitivitas)** | 49.3% |
+| **F1 Score** | 0.290 |
+| **Akurasi total** | 88.2%* |
 
-> Recall 49% artinya dari 100 orang yang benar-benar berisiko stroke,
-> sistem berhasil mendeteksi ~49 orang. Angka ini rendah karena dataset
-> publik — diharapkan meningkat setelah fine-tuning dengan data kalibrasi
-> dari pengguna ANTARAGA nyata.
+*Akurasi total menyesatkan karena dataset sangat tidak seimbang (4.9% positif).
+Metrik yang lebih relevan secara klinis adalah Recall dan Precision.
+
+### Interpretasi Confusion Matrix (Test Set, n=1533)
+
+```
+                    Prediksi: RENDAH   Prediksi: TINGGI
+Aktual: RENDAH          1315               143    ← False Positive
+Aktual: TINGGI            38                37    ← True Positive
+
+False Positive Rate: 143 dari 180 prediksi TINGGI = 79.4% false alarm
+Sensitivity (Recall): 37 dari 75 kasus nyata terdeteksi = 49.3%
+```
+
+### Fitur yang Dihapus dari Dataset Asli
+
+| Fitur | Alasan Dihapus |
+|---|---|
+| `ever_married` | Tidak relevan untuk target lansia (diasumsikan menikah) |
+| `work_type` | 5-kategori asli tidak kompatibel; digantikan `is_working` di profil tapi belum masuk model |
 
 ---
 
-## 3. Perbandingan MLP vs XGBoost dalam ANTARAGA
+## Mapping Data: Mobile App → Model
 
-| Aspek | MLP | XGBoost |
+### Data dari Profil Mobile (sekali isi)
+
+| Field di Flutter | Dipakai oleh | Mapped ke |
 |---|---|---|
-| **Dipakai untuk** | Estimasi vital dari PPG | Klasifikasi risiko stroke |
-| **Tipe masalah** | Regresi (output angka) | Klasifikasi biner |
-| **Cara belajar** | Gradient descent, semua parameter sekaligus | Boosting bertahap, pohon demi pohon |
-| **Kekuatan** | Bisa tangkap pola nonlinear kompleks dari sinyal | Robust terhadap fitur campuran, tahan imbalance |
-| **Kelemahan** | Butuh data banyak, sensitif ke skala fitur | Lebih sulit diinterpretasi dibanding satu pohon |
-| **Preprocessing** | Wajib StandardScaler | Tidak perlu normalisasi |
-| **Status** | Menunggu kalibrasi hardware | ✅ Sudah dilatih & deployed |
+| `birthday` | XGBoost | `age` |
+| `gender` (L/P) | MLP + XGBoost | `gender_code` (MLP), `gender` (XGBoost) |
+| `weight_kg` + `height_cm` | XGBoost | `bmi = weight / (height/100)²` |
+| `heartDisease` (bool) | XGBoost | `heart_disease` (0/1) |
+| `residenceType` (Urban/Rural) | XGBoost | `residence_type` |
+| `smokingStatus` (3 pilihan) | XGBoost | `smoking_status` |
+| `hasDiabetes` (bool) | — | Dikumpulkan, belum dipakai di model |
+| `isWorking` (bool) | — | Dikumpulkan, belum dipakai di model |
+
+### Data dari Sensor ANTARAGA (setiap pengukuran)
+
+| Komponen | Menghasilkan | Dipakai oleh |
+|---|---|---|
+| MAX30102 IR + RED → MLP | `gula_darah_mg_dl` | XGBoost `avg_glucose_level` |
+| MAX30102 IR + RED → MLP | `sistolik_mmhg` + `diastolik_mmhg` | XGBoost `hypertension` (derived) |
+| MAX30102 IR → PPG analysis | `bpm` | MLP input + tampilan dashboard |
 
 ---
 
-*Referensi: Chen & Guestrin (2016) "XGBoost: A Scalable Tree Boosting System";
-Rumelhart et al. (1986) "Learning representations by back-propagating errors"*
+## Parameter Belum Dipakai di XGBoost
+
+| Data yang Dikumpulkan | Status | Potensi |
+|---|---|---|
+| `kolesterol_mg_dl` (dari MLP) | Belum di XGBoost | Perlu dataset publik yang mencantumkan kolesterol + stroke |
+| `asam_urat_mg_dl` (dari MLP) | Belum di XGBoost | Hubungan asam urat-stroke ada tapi tidak sekuat gula darah |
+| `isWorking` (dari profil) | Belum di XGBoost | Bisa dimasukkan jika retrain dengan data yang memiliki fitur ini |
+| `hasDiabetes` (dari profil) | Belum di XGBoost | Berkorelasi kuat dengan avg_glucose_level — perlu uji multikolinearitas |
+
+**Rekomendasi:** Untuk PKM saat ini, kolesterol dan asam urat lebih bernilai sebagai
+output informatif ke pengguna (dashboard) daripada fitur tambahan XGBoost — karena
+dataset publik yang dipakai untuk pelatihan tidak memuat kedua variabel tersebut.
+
+---
+
+## Pertanyaan: Data Dari Berapa Periode?
+
+Saat ini XGBoost menggunakan **satu sesi pengukuran** (snapshot tunggal).
+Opsi ke depan:
+
+| Pendekatan | Keterangan |
+|---|---|
+| **Snapshot (sekarang)** | Nilai dari sesi terakhir langsung dikirim ke XGBoost |
+| **Rolling average (7 hari)** | Rata-rata 7 hari terakhir untuk gula darah & TD — mengurangi noise pengukuran tunggal |
+| **Tren (slope)** | Apakah gula darah naik atau turun dalam N hari terakhir — fitur tambahan yang lebih informatif |
+
+Implementasi rolling average membutuhkan tabel riwayat vital reading dan query per profil.
+
+---
+
+*Dokumen ini adalah bagian dari proposal PKM-KC ANTARAGA.*

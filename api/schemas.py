@@ -76,6 +76,7 @@ class ProfilePayload(BaseModel):
     is_working: bool = True
     residence_type: ResidenceType
     has_diabetes: bool = False
+    family_history_stroke: bool = False
 
     @field_validator("status_merokok")
     @classmethod
@@ -109,6 +110,7 @@ class StrokeRiskResponse(BaseModel):
     risk_level: str
     threshold: float
     model_name: str
+    risk_flags: list[str] = []
 
 
 class VitalReadingResponse(BaseModel):

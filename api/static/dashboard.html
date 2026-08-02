@@ -282,7 +282,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 <div id="p-raw" class="pane on">
   <div id="rawBpm"></div>
   <div class="card">
-    <div class="card-ttl">PPG Komponen AC — Buang Baseline (2× MA + LP 5 Hz · Algoritma Plotter · Puncak: ●)</div>
+    <div class="card-ttl">PPG Komponen AC — Bandpass 0,5–5 Hz Butterworth (Zero-phase · Puncak: ●)</div>
     <div class="cw"><canvas id="cPpgFilt"></canvas></div>
     <div class="leg">
       <div class="li"><div class="ld" style="background:var(--c1)"></div>PPG AC (Baseline Dibuang)</div>
@@ -324,7 +324,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
   <div id="pwaNote"></div>
   <div id="pwaBpmTiles"></div>
   <div class="card">
-    <div class="card-ttl">RED 660 nm — Komponen AC (Buang Baseline · Puncak Sistol: ●)</div>
+    <div class="card-ttl">RED 660 nm — Setelah Bandpass + Inversi (Puncak Sistol setelah inversi reflektif: ●)</div>
     <div class="cw"><canvas id="cPwaR"></canvas></div>
     <div class="leg">
       <div class="li"><div class="ld" style="background:var(--c2)"></div>RED AC</div>
@@ -332,7 +332,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
     </div>
   </div>
   <div class="card">
-    <div class="card-ttl">IR 880 nm — Komponen AC (Buang Baseline · Puncak Sistol ●, Morfologi Sistolik/Diastolik)</div>
+    <div class="card-ttl">IR 880 nm — Setelah Bandpass + Inversi (Puncak Sistol ●, Morfologi Per-Pulsasi: crest time · lebar ½ amplitudo)</div>
     <div class="cw"><canvas id="cPwaIr"></canvas></div>
     <div class="leg">
       <div class="li"><div class="ld" style="background:var(--c3)"></div>IR AC</div>
@@ -389,6 +389,37 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
       <div class="unit">mg/dL</div>
       <div id="mGluSt" class="st"></div>
     </div>
+  </div>
+
+  <!-- Tile kalibrasi MLP: kolesterol, asam urat -->
+  <div id="mlpCalibTiles" style="display:none;margin-top:14px">
+    <div class="card-ttl" style="margin-bottom:10px">Hasil Kalibrasi MLP</div>
+    <div class="tiles">
+      <div class="tile">
+        <div class="lbl">Kolesterol</div>
+        <div id="mKol" class="val">—</div>
+        <div class="unit">mg/dL</div>
+        <div id="mKolSt" class="st"></div>
+      </div>
+      <div class="tile">
+        <div class="lbl">Asam Urat</div>
+        <div id="mUrat" class="val">—</div>
+        <div class="unit">mg/dL</div>
+        <div id="mUratSt" class="st"></div>
+      </div>
+      <div class="tile">
+        <div class="lbl">Sistolik (MLP)</div>
+        <div id="mCalibSys" class="val">—</div>
+        <div class="unit">mmHg</div>
+        <div id="mCalibSysSt" class="st"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Risk flags dari kalibrasi MLP -->
+  <div id="mlpRiskFlags" style="display:none;margin-top:12px">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:5px;font-weight:600">FAKTOR RISIKO (MLP)</div>
+    <div id="mlpFlagBadges" style="display:flex;flex-wrap:wrap;gap:5px"></div>
   </div>
 </div>
 
@@ -576,9 +607,9 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
       <div>
         <label class="up-label">Kondisi pengukuran</label>
         <select id="clKondisi" class="up-input">
+          <option value="sewaktu">Sewaktu (acak)</option>
           <option value="puasa">Puasa</option>
           <option value="2j_setelah_makan">2 jam setelah makan</option>
-          <option value="sewaktu">Sewaktu (acak)</option>
         </select>
       </div>
     </div>
@@ -1482,12 +1513,40 @@ function renderMlp(m) {
     noteEl.innerHTML = `<div class="note">⏳ ${m.message}</div>`;
     ['mSys','mDia','mGlu'].forEach(id => document.getElementById(id).textContent = '—');
     ['mSysSt','mDiaSt','mGluSt'].forEach(id => document.getElementById(id).textContent = '');
+    document.getElementById('mlpCalibTiles').style.display = 'none';
+    document.getElementById('mlpRiskFlags').style.display = 'none';
     return;
   }
   noteEl.innerHTML = '';
   tile('mSys','mSysSt', m.systolic_bp_mmhg,    sysStatus);
   tile('mDia','mDiaSt', m.diastolic_bp_mmhg,   diaStatus);
   tile('mGlu','mGluSt', m.blood_glucose_mg_dl, gluStatus);
+
+  // Kalibrasi MLP — kolesterol, asam urat, sistolik
+  const cv = m.calib_vitals;
+  if (cv) {
+    document.getElementById('mlpCalibTiles').style.display = '';
+    const kolStatus = v => v < 200 ? {label:'Normal',color:'var(--good)'} : v < 240 ? {label:'Batas Tinggi',color:'var(--warn)'} : {label:'Sangat Tinggi',color:'var(--critical)'};
+    const uratStatus = v => v <= 6.2 ? {label:'Normal',color:'var(--good)'} : {label:'Tinggi',color:'var(--critical)'};
+    tile('mKol',       'mKolSt',       cv.kolesterol_mg_dl, kolStatus);
+    tile('mUrat',      'mUratSt',      cv.asam_urat_mg_dl,  uratStatus);
+    tile('mCalibSys',  'mCalibSysSt',  cv.sistolik_mmhg,    sysStatus);
+  } else {
+    document.getElementById('mlpCalibTiles').style.display = 'none';
+  }
+
+  // Risk flags dari kalibrasi MLP
+  const flags = m.risk_flags || [];
+  const flagWrap = document.getElementById('mlpRiskFlags');
+  const flagBadges = document.getElementById('mlpFlagBadges');
+  if (flags.length) {
+    flagWrap.style.display = '';
+    flagBadges.innerHTML = flags.map(f =>
+      `<span style="background:rgba(234,179,8,.15);border:1px solid rgba(234,179,8,.5);border-radius:12px;padding:2px 10px;font-size:11px;color:#b45309">${f}</span>`
+    ).join('');
+  } else {
+    flagWrap.style.display = 'none';
+  }
 }
 
 function tile(vid, sid, v, fn) {
@@ -1539,7 +1598,14 @@ function renderXgb(x) {
       <tr><td>Model</td><td>${x.model_name||'XGBoost'}</td></tr>
       <tr><td>Threshold</td><td>${thPct}%</td></tr>
       <tr><td>Diprediksi</td><td>${ts}</td></tr>
-    </table>`;
+    </table>
+    ${(x.risk_flags && x.risk_flags.length) ? `
+    <div style="margin-top:10px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:5px;font-weight:600">FAKTOR RISIKO TAMBAHAN</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">
+        ${x.risk_flags.map(f => `<span style="background:rgba(234,179,8,.15);border:1px solid rgba(234,179,8,.5);border-radius:12px;padding:2px 10px;font-size:11px;color:#b45309">${f}</span>`).join('')}
+      </div>
+    </div>` : ''}`;
 }
 
 // ═══════════════════════════════════════════════

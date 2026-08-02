@@ -26,6 +26,7 @@ from api.ml import predict_stroke_risk
 from api.ml_vitals import is_model_available, predict_vitals_from_ppg
 from api.profile_utils import (
     age_from_birthday,
+    compute_risk_flags,
     profile_to_features,
     record_vital_reading,
     resolve_active_profile,
@@ -90,6 +91,7 @@ def _profile_to_response(profile: models_db.Profile) -> schemas.ProfileResponse:
         is_working=profile.is_working,
         residence_type=profile.residence_type,
         has_diabetes=profile.has_diabetes,
+        family_history_stroke=getattr(profile, "family_history_stroke", False),
     )
 
 
@@ -220,6 +222,7 @@ def create_profile(
         is_working=payload.is_working,
         residence_type=payload.residence_type.value,
         has_diabetes=payload.has_diabetes,
+        family_history_stroke=payload.family_history_stroke,
     )
     db.add(profile)
     db.flush()
@@ -282,6 +285,7 @@ def update_profile(
     profile.is_working = payload.is_working
     profile.residence_type = payload.residence_type.value
     profile.has_diabetes = payload.has_diabetes
+    profile.family_history_stroke = payload.family_history_stroke
 
     db.commit()
     db.refresh(profile)
@@ -322,7 +326,8 @@ def predict_stroke_risk_endpoint(
         "avg_glucose_level": vital.blood_glucose_mg_dl,
     }
     result = predict_stroke_risk(profile_to_features(profile, vital_dict))
-    response = schemas.StrokeRiskResponse(**result)
+    risk_flags = compute_risk_flags(profile)
+    response = schemas.StrokeRiskResponse(**result, risk_flags=risk_flags)
 
     record_vital_reading(
         db,
@@ -1011,23 +1016,54 @@ def _compute_bpm_engine(ppg: list, fs: int) -> dict:
 
 def _compute_mlp(ppg: list, red: list, ir: list, fs_ppg: int) -> dict:
     from api.ml_vitals import is_model_available, predict_vitals_from_ppg
+    from api.ml_calibration import (
+        compute_risk_flags_from_vitals,
+        is_calibration_model_available,
+        predict_vitals,
+    )
+    from api.ppg_analysis import bpm_autocorr, channel_stats
 
-    if not is_model_available():
-        return {
-            "available": False,
-            "message": "Model MLP belum dilatih — menunggu data kalibrasi dari hardware",
-        }
-    try:
-        result = predict_vitals_from_ppg(
-            fs_hz=float(fs_ppg),
-            age_years=60.0,
-            green=ppg or None,
-            red=red or None,
-            infrared=ir or None,
-        )
-        return {"available": True, **result}
-    except Exception as exc:
-        return {"available": False, "message": str(exc)}
+    out: dict = {"available": False}
+
+    # --- Old PPG-vitals model (systolic, diastolic, glucose) ---
+    if is_model_available():
+        try:
+            result = predict_vitals_from_ppg(
+                fs_hz=float(fs_ppg),
+                age_years=60.0,
+                green=ppg or None,
+                red=red or None,
+                infrared=ir or None,
+            )
+            out = {"available": True, **result}
+        except Exception as exc:
+            out = {"available": False, "message": str(exc)}
+    else:
+        out["message"] = "Model MLP belum dilatih — menunggu data kalibrasi dari hardware"
+
+    # --- Calibration MLP (gula, kolesterol, asam_urat, sistolik, diastolik) ---
+    if is_calibration_model_available() and ir and red:
+        try:
+            fs_m = float(fs_ppg)
+            ir_stats  = channel_stats(ir,  fs_m, "ir")
+            red_stats = channel_stats(red, fs_m, "red")
+            bpm_val, _ = bpm_autocorr(ir, fs_m)
+            calib_vitals = predict_vitals(
+                ir_dc_mean  = ir_stats.get("dc") or 0.0,
+                ir_ac_p2p   = ir_stats.get("ac_p2p") or 0.0,
+                red_dc_mean = red_stats.get("dc") or 0.0,
+                red_ac_p2p  = red_stats.get("ac_p2p") or 0.0,
+                bpm         = bpm_val or 60.0,
+            )
+            out["calib_vitals"] = calib_vitals
+            out["risk_flags"]   = compute_risk_flags_from_vitals(calib_vitals)
+            out["available"]    = True
+        except Exception:
+            out.setdefault("risk_flags", [])
+    else:
+        out.setdefault("risk_flags", [])
+
+    return out
 
 
 def _compute_xgboost(device_id: str, db: Session) -> dict:
@@ -1050,6 +1086,19 @@ def _compute_xgboost(device_id: str, db: Session) -> dict:
         return {"available": False, "message": "Belum ada prediksi risiko stroke — tunggu batch berikutnya"}
 
     resp = json.loads(log.response_payload)
+
+    # Ambil risk_flags profil jika device sudah di-pair
+    profile_flags: list = []
+    if user:
+        from api.profile_utils import compute_risk_flags, resolve_active_profile
+        active = resolve_active_profile(db, user.id)
+        if active:
+            profile_flags = compute_risk_flags(active)
+
+    stored_flags: list = resp.get("risk_flags", [])
+    # Gabungkan: flags dari log (sudah tersimpan) + flags profil terbaru
+    all_flags = list(dict.fromkeys(stored_flags + profile_flags))  # deduplicate, preserve order
+
     return {
         "available": True,
         "probability": resp.get("probability"),
@@ -1057,6 +1106,7 @@ def _compute_xgboost(device_id: str, db: Session) -> dict:
         "threshold": resp.get("threshold"),
         "model_name": resp.get("model_name"),
         "predicted_at": log.created_at.isoformat(),
+        "risk_flags": all_flags,
     }
 
 

@@ -82,6 +82,34 @@ def profile_to_features(profile: models_db.Profile, vital: dict) -> dict:
         "bmi": bmi,
         "hypertension": int(derive_hypertension(vital["systolic_bp"], vital.get("diastolic_bp"))),
         "heart_disease": profile.heart_disease,
+        "is_working": int(profile.is_working),
         "residence_type": profile.residence_type,
         "smoking_status": profile.status_merokok,
     }
+
+
+def compute_risk_flags(
+    profile: models_db.Profile,
+    kolesterol: float | None = None,
+    asam_urat: float | None = None,
+) -> list[str]:
+    """Faktor risiko stroke berbasis profil dan hasil MLP kalibrasi.
+    Digunakan sebagai peringatan tambahan di luar skor XGBoost."""
+    flags: list[str] = []
+
+    if getattr(profile, "family_history_stroke", False):
+        flags.append("Riwayat keluarga stroke")
+
+    if profile.has_diabetes:
+        flags.append("Riwayat diabetes melitus")
+
+    if kolesterol is not None:
+        if kolesterol >= 240:
+            flags.append(f"Kolesterol sangat tinggi ({kolesterol:.0f} mg/dL ≥240)")
+        elif kolesterol >= 200:
+            flags.append(f"Kolesterol batas tinggi ({kolesterol:.0f} mg/dL, 200–239)")
+
+    if asam_urat is not None and asam_urat > 6.2:
+        flags.append(f"Asam urat tinggi ({asam_urat:.1f} mg/dL >6,2)")
+
+    return flags

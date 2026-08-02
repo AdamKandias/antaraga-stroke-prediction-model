@@ -67,6 +67,7 @@ class Profile(Base):
     is_working: Mapped[bool] = mapped_column(Boolean, default=True)
     residence_type: Mapped[str] = mapped_column(String, default="Urban")
     has_diabetes: Mapped[bool] = mapped_column(Boolean, default=False)
+    family_history_stroke: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
