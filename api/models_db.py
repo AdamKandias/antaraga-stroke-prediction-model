@@ -124,7 +124,6 @@ class CalibrationRecord(Base):
     red_dc_mean: Mapped[float | None] = mapped_column(Float, nullable=True)
     red_ac_p2p: Mapped[float | None] = mapped_column(Float, nullable=True)
     bpm: Mapped[float | None] = mapped_column(Float, nullable=True)
-    spo2_sensor: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Ground truth dari alat invasif / medis standar
     gula_darah_mg_dl: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -132,7 +131,6 @@ class CalibrationRecord(Base):
     asam_urat_mg_dl: Mapped[float | None] = mapped_column(Float, nullable=True)
     sistolik_mmhg: Mapped[float | None] = mapped_column(Float, nullable=True)
     diastolik_mmhg: Mapped[float | None] = mapped_column(Float, nullable=True)
-    spo2_ref_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 

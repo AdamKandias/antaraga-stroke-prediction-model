@@ -265,16 +265,6 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
       </tbody>
     </table>
   </div>
-  <div id="spo2Bar" style="display:flex;align-items:center;gap:10px;padding:6px 0 2px;
-    border-top:1px solid var(--grid);margin-top:4px;font-variant-numeric:tabular-nums">
-    <span style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap">SpO2</span>
-    <span id="spo2Val" style="font-size:22px;font-weight:700;color:var(--muted)">—</span>
-    <span style="font-size:12px;color:var(--muted)">%</span>
-    <span id="spo2Status" style="font-size:11px;font-weight:600"></span>
-    <span style="font-size:10px;color:var(--muted);margin-left:4px">R = </span>
-    <span id="spo2R" style="font-size:10px;color:var(--muted);font-family:monospace">—</span>
-    <span style="font-size:9px;color:var(--muted);margin-left:6px">· 110−25×R (Beer-Lambert) · RED+IR</span>
-  </div>
   <div id="sqiRow" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:5px 0 1px;
     border-top:1px solid var(--grid);margin-top:3px">
     <span style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap">SQI</span>
@@ -332,7 +322,6 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 <!-- ── TAB 2: PWA ── -->
 <div id="p-pwa" class="pane">
   <div id="pwaNote"></div>
-  <div id="spo2Tile" style="margin-bottom:14px"></div>
   <div id="pwaBpmTiles"></div>
   <div class="card">
     <div class="card-ttl">RED 660 nm — Komponen AC (Buang Baseline · Puncak Sistol: ●)</div>
@@ -618,10 +607,6 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
         <label class="up-label">Diastolik (mmHg)</label>
         <input id="clDia" class="up-input" type="number" step="1" placeholder="mis. 80">
       </div>
-      <div>
-        <label class="up-label">SpO2 Referensi (%)</label>
-        <input id="clSpo2" class="up-input" type="number" step="0.1" min="80" max="100" placeholder="mis. 98">
-      </div>
     </div>
 
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -644,16 +629,16 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
         <thead>
           <tr>
             <th>#</th><th>Subjek</th><th>Usia</th><th>Gender</th><th>Kondisi</th>
-            <th>IR DC</th><th>BPM</th><th>SpO2 sensor</th>
+            <th>IR DC</th><th>BPM</th>
             <th style="color:var(--c1)">Gula ↓</th>
             <th style="color:var(--c2)">Kol ↓</th>
             <th style="color:var(--c3)">AU ↓</th>
-            <th>Sis ↓</th><th>Dia ↓</th><th>SpO2 ref</th>
+            <th>Sis ↓</th><th>Dia ↓</th>
             <th>Waktu</th><th></th><th></th>
           </tr>
         </thead>
         <tbody id="calibBody">
-          <tr><td colspan="17" style="text-align:center;color:var(--muted);padding:20px">Belum ada data — rekam sesi pertama di atas</td></tr>
+          <tr><td colspan="15" style="text-align:center;color:var(--muted);padding:20px">Belum ada data — rekam sesi pertama di atas</td></tr>
         </tbody>
       </table>
     </div>
@@ -733,10 +718,6 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
       <div>
         <label class="up-label">Diastolik (mmHg)</label>
         <input id="editDia" class="up-input" type="number" step="1">
-      </div>
-      <div>
-        <label class="up-label">SpO2 Referensi (%)</label>
-        <input id="editSpo2" class="up-input" type="number" step="0.1" min="80" max="100">
       </div>
     </div>
 
@@ -997,22 +978,6 @@ function setStatus(state, msg) {
   document.getElementById('stTxt').textContent = msg;
 }
 
-// ── SpO2 helpers ──
-function spo2Color(v) {
-  if (v == null) return 'var(--muted)';
-  if (v >= 97)  return 'var(--good)';
-  if (v >= 95)  return 'var(--warn)';
-  if (v >= 92)  return 'var(--serious)';
-  return 'var(--critical)';
-}
-function spo2Label(v) {
-  if (v == null) return '';
-  if (v >= 97)  return 'Normal';
-  if (v >= 95)  return 'Batas Normal';
-  if (v >= 92)  return 'Rendah';
-  return 'Sangat Rendah';
-}
-
 // ── Stats panel (persisten semua tab, identik plotter.py _tick_stats) ──
 function renderStats(analysis) {
   const ch = [
@@ -1044,15 +1009,6 @@ function renderStats(analysis) {
       <td style="color:${confCol}">${confPct}%${confNote}</td>`;
   }
 
-  // SpO2 bar di bawah tabel
-  const sp = (analysis.spo2) || {};
-  const sv = sp.spo2;
-  const sc = spo2Color(sv);
-  document.getElementById('spo2Val').textContent    = sv != null ? sv.toFixed(1) : '—';
-  document.getElementById('spo2Val').style.color    = sc;
-  document.getElementById('spo2Status').textContent = spo2Label(sv);
-  document.getElementById('spo2Status').style.color = sc;
-  document.getElementById('spo2R').textContent      = sp.r_ratio != null ? sp.r_ratio.toFixed(4) : '—';
 }
 
 // ── SQI bar ──
@@ -1172,40 +1128,9 @@ function renderPwa(p, analysis) {
   analysis = analysis || {};
   const ar = analysis.red  || {};
   const ai = analysis.ir   || {};
-  const sp = analysis.spo2 || {};
 
   const noteEl = document.getElementById('pwaNote');
   noteEl.innerHTML = p.note ? `<div class="note">⚠️ ${p.note}</div>` : '';
-
-  // SpO2 tile (RED+IR)
-  const spo2El = document.getElementById('spo2Tile');
-  if (spo2El) {
-    const sv  = sp.spo2;
-    const sc  = spo2Color(sv);
-    const sl  = spo2Label(sv);
-    const bar = sv != null
-      ? `<div style="height:6px;border-radius:3px;margin-top:10px;background:var(--surface2);overflow:hidden">
-           <div style="height:100%;width:${Math.round((sv-80)/20*100)}%;background:${sc};border-radius:3px;transition:width .4s"></div>
-         </div>`
-      : '';
-    spo2El.innerHTML = `<div class="tile" style="border-color:rgba(57,135,229,.35);display:flex;gap:20px;align-items:center;flex-wrap:wrap">
-      <div style="flex:1;min-width:140px">
-        <div class="lbl">SpO2 — Saturasi Oksigen</div>
-        <div style="display:flex;align-items:baseline;gap:4px;margin:4px 0">
-          <span class="val" style="font-size:48px;color:${sc}">${sv != null ? sv.toFixed(1) : '—'}</span>
-          <span style="font-size:20px;color:var(--muted)">%</span>
-        </div>
-        <div class="unit" style="color:${sc};font-size:12px;font-weight:600">${sl || '—'}</div>
-        ${bar}
-      </div>
-      <div style="font-size:11px;color:var(--muted);line-height:1.7;flex-shrink:0">
-        <div>R = <b style="color:var(--text2)">${sp.r_ratio != null ? sp.r_ratio.toFixed(4) : '—'}</b></div>
-        <div>SpO₂ = 110 − 25 × R</div>
-        <div style="margin-top:4px">AC<sub>red</sub>/DC<sub>red</sub> ÷ AC<sub>ir</sub>/DC<sub>ir</sub></div>
-        <div style="color:rgba(255,255,255,.3);margin-top:2px;font-size:10px">≥97% Normal · 95–97% Batas · &lt;95% Rendah</div>
-      </div>
-    </div>`;
-  }
 
   // Grafik RED AC (baseline dibuang)
   if (ar.ac && ar.ac.length) {
@@ -1331,13 +1256,11 @@ function renderCalibTable(rows) {
       <td style="color:var(--muted)">${r.kondisi||'—'}</td>
       <td style="font-family:monospace">${fmtI(r.ir_dc_mean)}</td>
       <td>${fmt(r.bpm)}</td>
-      <td>${fmt(r.spo2_sensor)}</td>
       <td style="color:var(--c1);font-weight:600">${fmt(r.gula_darah_mg_dl)}</td>
       <td style="color:var(--c2);font-weight:600">${fmt(r.kolesterol_mg_dl)}</td>
       <td style="color:var(--c3);font-weight:600">${fmt(r.asam_urat_mg_dl)}</td>
       <td>${fmt(r.sistolik_mmhg)}</td>
       <td>${fmt(r.diastolik_mmhg)}</td>
-      <td>${fmt(r.spo2_ref_pct)}</td>
       <td style="color:var(--muted);font-size:10px">${new Date(r.session_ts).toLocaleString('id')}</td>
       <td><button class="btn-sec btn-sm" style="font-size:11px;padding:2px 7px" onclick="calibEdit(${r.id})">✎</button></td>
       <td><button class="btn-del" onclick="calibDelete(${r.id})">✕</button></td>
@@ -1369,7 +1292,6 @@ async function calibSave() {
   addOpt('clAU',   'asam_urat_mg_dl');
   addOpt('clSis',  'sistolik_mmhg');
   addOpt('clDia',  'diastolik_mmhg');
-  addOpt('clSpo2', 'spo2_ref_pct');
 
   show('Menyimpan…', 'var(--muted)');
   try {
@@ -1381,7 +1303,7 @@ async function calibSave() {
     show('✓ Sesi tersimpan!', 'var(--good)');
     calibLoad();
     // Reset form
-    ['clSubject','clGula','clKol','clAU','clSis','clDia','clSpo2'].forEach(id => document.getElementById(id).value = '');
+    ['clSubject','clGula','clKol','clAU','clSis','clDia'].forEach(id => document.getElementById(id).value = '');
     setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
   } catch (e) {
     show(`Error: ${e.message}`, 'var(--critical)');
@@ -1419,7 +1341,6 @@ async function calibEdit(id) {
   document.getElementById('editAU').value      = rec.asam_urat_mg_dl   ?? '';
   document.getElementById('editSis').value     = rec.sistolik_mmhg     ?? '';
   document.getElementById('editDia').value     = rec.diastolik_mmhg    ?? '';
-  document.getElementById('editSpo2').value    = rec.spo2_ref_pct      ?? '';
   document.getElementById('editMsg').style.display = 'none';
 
   const modal = document.getElementById('calibEditModal');
@@ -1450,7 +1371,6 @@ async function calibSaveEdit() {
   addOpt('editAU',   'asam_urat_mg_dl');
   addOpt('editSis',  'sistolik_mmhg');
   addOpt('editDia',  'diastolik_mmhg');
-  addOpt('editSpo2', 'spo2_ref_pct');
 
   show('Menyimpan…', 'var(--muted)');
   try {

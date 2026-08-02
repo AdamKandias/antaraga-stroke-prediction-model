@@ -751,7 +751,7 @@ _SQI_F_MOTION    = 0x08  # artefak gerak
 _SQI_F_PPG_BAD   = 0x10  # kanal SON1303 buruk
 _SQI_F_SHORT     = 0x20  # batch terlalu pendek
 
-# Flag yang membuat data IR/RED tidak dapat dipakai untuk SpO2 dan BPM
+# Flag yang membuat data IR/RED tidak dapat dipakai untuk BPM dan analisis sinyal
 _SQI_DISCARD = _SQI_F_NO_FINGER | _SQI_F_SATURATED | _SQI_F_FLAT | _SQI_F_MOTION
 
 
@@ -956,7 +956,7 @@ def _compute_ppg_analysis(
     """
     try:
         from api.ppg_analysis import (
-            analyze_channel, channel_stats, compute_spo2, compute_linreg_vitals,
+            analyze_channel, channel_stats, compute_linreg_vitals,
         )
 
         def _proc(sig: list, fs: float, ch: str) -> dict:
@@ -969,11 +969,10 @@ def _compute_ppg_analysis(
 
         fs_m = float(fs_max or 200)
         result = {
-            "green":        _proc(ppg, float(fs_ppg or 200), "green"),
-            "red":          _proc(red, fs_m, "red"),
-            "ir":           _proc(ir,  fs_m, "ir"),
-            "spo2":         compute_spo2(red, ir, fs_m),
-            "linreg":       compute_linreg_vitals(ir, fs_m),
+            "green":  _proc(ppg, float(fs_ppg or 200), "green"),
+            "red":    _proc(red, fs_m, "red"),
+            "ir":     _proc(ir,  fs_m, "ir"),
+            "linreg": compute_linreg_vitals(ir, fs_m),
         }
         return result
     except Exception as exc:
@@ -981,7 +980,6 @@ def _compute_ppg_analysis(
             "green":  _empty_ac(str(exc)),
             "red":    _empty_ac(),
             "ir":     _empty_ac(),
-            "spo2":   {"spo2": None, "r_ratio": None, "valid": False},
             "linreg": {"available": False},
         }
 
@@ -1078,7 +1076,6 @@ def calibrate_create(
     asam_urat_mg_dl: float | None = None,
     sistolik_mmhg: float | None = None,
     diastolik_mmhg: float | None = None,
-    spo2_ref_pct: float | None = None,
     db: Session = Depends(get_db),
 ) -> dict:
     """Rekam satu sesi kalibrasi.
@@ -1091,7 +1088,6 @@ def calibrate_create(
         raise HTTPException(status_code=404, detail=f"Belum ada sinyal dari '{device_id}' — pastikan firmware sedang berjalan")
 
     latest = batches[-1]
-    fs_ppg = float(latest.get("fs_ppg", 200))
     fs_max = float(latest.get("fs_max", 200))
 
     all_green = [float(v) for b in batches for v in b.get("ppg", [])]
@@ -1099,11 +1095,10 @@ def calibrate_create(
     all_ir    = [float(v) for b in batches for v in b.get("ir", [])]
 
     # Ekstrak fitur sinyal
-    from api.ppg_analysis import channel_stats, bpm_autocorr, compute_spo2
+    from api.ppg_analysis import channel_stats, bpm_autocorr
     ir_st  = channel_stats(all_ir,  fs_max, "ir")
     red_st = channel_stats(all_red, fs_max, "red")
     bpm_val, _ = bpm_autocorr(np.array(all_ir, dtype=float), fs_max) if all_ir else (None, 0.0)
-    spo2_res   = compute_spo2(all_red, all_ir, fs_max)
 
     def _join(arr: list) -> str:
         return ";".join(str(round(v)) for v in arr)
@@ -1123,13 +1118,11 @@ def calibrate_create(
         red_dc_mean  = red_st.get("dc"),
         red_ac_p2p   = red_st.get("ac_p2p"),
         bpm          = bpm_val,
-        spo2_sensor  = spo2_res.get("spo2"),
         gula_darah_mg_dl = gula_darah_mg_dl,
         kolesterol_mg_dl  = kolesterol_mg_dl,
         asam_urat_mg_dl   = asam_urat_mg_dl,
         sistolik_mmhg     = sistolik_mmhg,
         diastolik_mmhg    = diastolik_mmhg,
-        spo2_ref_pct      = spo2_ref_pct,
     )
     db.add(rec)
     db.commit()
@@ -1164,7 +1157,6 @@ def calibrate_update(
     asam_urat_mg_dl: float | None = None,
     sistolik_mmhg: float | None = None,
     diastolik_mmhg: float | None = None,
-    spo2_ref_pct: float | None = None,
     db: Session = Depends(get_db),
 ) -> dict:
     """Perbarui nilai ground truth atau metadata satu rekaman kalibrasi."""
@@ -1180,7 +1172,6 @@ def calibrate_update(
     if asam_urat_mg_dl   is not None: rec.asam_urat_mg_dl   = asam_urat_mg_dl
     if sistolik_mmhg     is not None: rec.sistolik_mmhg     = sistolik_mmhg
     if diastolik_mmhg    is not None: rec.diastolik_mmhg    = diastolik_mmhg
-    if spo2_ref_pct      is not None: rec.spo2_ref_pct      = spo2_ref_pct
     db.commit()
     db.refresh(rec)
     return _calib_to_dict(rec)
@@ -1225,9 +1216,9 @@ def calibrate_export(
     headers = [
         "id", "device_id", "subject_id", "session_ts", "age_years", "gender", "kondisi",
         "fs_hz", "green_raw", "red_raw", "infrared_raw",
-        "ir_dc_mean", "ir_ac_p2p", "red_dc_mean", "red_ac_p2p", "bpm", "spo2_sensor",
+        "ir_dc_mean", "ir_ac_p2p", "red_dc_mean", "red_ac_p2p", "bpm",
         "gula_darah_mg_dl", "kolesterol_mg_dl", "asam_urat_mg_dl",
-        "sistolik_mmhg", "diastolik_mmhg", "spo2_ref_pct",
+        "sistolik_mmhg", "diastolik_mmhg",
         # Alias kompatibel train_ppg_vitals.py
         "blood_glucose_mg_dl", "systolic_bp_mmhg", "diastolic_bp_mmhg",
     ]
@@ -1251,13 +1242,11 @@ def calibrate_export(
             "red_dc_mean": r.red_dc_mean or "",
             "red_ac_p2p": r.red_ac_p2p or "",
             "bpm": r.bpm or "",
-            "spo2_sensor": r.spo2_sensor or "",
             "gula_darah_mg_dl": r.gula_darah_mg_dl or "",
             "kolesterol_mg_dl": r.kolesterol_mg_dl or "",
             "asam_urat_mg_dl": r.asam_urat_mg_dl or "",
             "sistolik_mmhg": r.sistolik_mmhg or "",
             "diastolik_mmhg": r.diastolik_mmhg or "",
-            "spo2_ref_pct": r.spo2_ref_pct or "",
             # Alias
             "blood_glucose_mg_dl": r.gula_darah_mg_dl or "",
             "systolic_bp_mmhg": r.sistolik_mmhg or "",
@@ -1306,7 +1295,6 @@ def calibrate_summary(
         "sistolik":    _stats([r.sistolik_mmhg       for r in rows]),
         "diastolik":   _stats([r.diastolik_mmhg      for r in rows]),
         "bpm":         _stats([r.bpm                for r in rows]),
-        "spo2_sensor": _stats([r.spo2_sensor        for r in rows]),
     }
 
 
@@ -1317,13 +1305,12 @@ def _calib_to_dict(r: models_db.CalibrationRecord) -> dict:
         "gender": r.gender, "kondisi": r.kondisi,
         "session_ts": r.created_at.isoformat(),
         "ir_dc_mean": r.ir_dc_mean, "ir_ac_p2p": r.ir_ac_p2p,
-        "red_dc_mean": r.red_dc_mean, "bpm": r.bpm, "spo2_sensor": r.spo2_sensor,
+        "red_dc_mean": r.red_dc_mean, "bpm": r.bpm,
         "gula_darah_mg_dl": r.gula_darah_mg_dl,
         "kolesterol_mg_dl":  r.kolesterol_mg_dl,
         "asam_urat_mg_dl":   r.asam_urat_mg_dl,
         "sistolik_mmhg":     r.sistolik_mmhg,
         "diastolik_mmhg":    r.diastolik_mmhg,
-        "spo2_ref_pct":      r.spo2_ref_pct,
     }
 
 

@@ -12,7 +12,7 @@ Output:
   reports/kalibrasi/training_report.txt    — ringkasan teks
 
 Setiap parameter vital dilatih sebagai model MLPRegressor terpisah.
-Fitur input: [ir_dc_mean, ir_ac_p2p, red_dc_mean, red_ac_p2p, bpm, spo2_sensor, age_years, gender_code]
+Fitur input: [ir_dc_mean, ir_ac_p2p, red_dc_mean, red_ac_p2p, bpm, age_years, gender_code]
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ TARGETS = {
 
 FEATURES = [
     "ir_dc_mean", "ir_ac_p2p", "red_dc_mean", "red_ac_p2p",
-    "bpm", "spo2_sensor", "age_years", "gender_code",
+    "bpm", "age_years", "gender_code",
 ]
 
 MIN_ROWS = 10   # minimum untuk mulai training (idealnya ≥20)
@@ -79,7 +79,6 @@ def load_from_db() -> pd.DataFrame:
             "red_dc_mean":     r.red_dc_mean,
             "red_ac_p2p":      r.red_ac_p2p,
             "bpm":             r.bpm,
-            "spo2_sensor":     r.spo2_sensor,
             "gula_darah_mg_dl": r.gula_darah_mg_dl,
             "kolesterol_mg_dl":  r.kolesterol_mg_dl,
             "asam_urat_mg_dl":   r.asam_urat_mg_dl,
@@ -221,7 +220,7 @@ def main():
 
     # Statistik dataset
     print("\nStatistik fitur sinyal:")
-    for col in ["ir_dc_mean", "bpm", "spo2_sensor", "age_years"]:
+    for col in ["ir_dc_mean", "bpm", "age_years"]:
         if col in df.columns and df[col].notna().any():
             s = df[col].dropna()
             print(f"  {col:15s}: n={len(s):3d}  mean={s.mean():.1f}  min={s.min():.1f}  max={s.max():.1f}")
