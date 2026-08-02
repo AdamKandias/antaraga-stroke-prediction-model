@@ -759,10 +759,21 @@ _SQI_F_SHORT     = 0x20  # batch terlalu pendek
 # Flag yang membuat data IR/RED tidak dapat dipakai untuk BPM dan analisis sinyal
 _SQI_DISCARD = _SQI_F_NO_FINGER | _SQI_F_SATURATED | _SQI_F_FLAT | _SQI_F_MOTION
 
+# Untuk kanal hijau (SON1303): MOTION dari IR tidak ikut — kanal hijau punya flag
+# PPG_BAD sendiri. Gerakan ringan yang men-trigger tortuosity IR tidak harus
+# memblokir green, karena bandpass 0.5–5 Hz sudah meredam sebagian besar artefak.
+_SQI_DISCARD_GREEN = _SQI_F_NO_FINGER | _SQI_F_SATURATED | _SQI_F_FLAT | _SQI_F_PPG_BAD
+
 
 def _filter_good_batches(batches: list[dict]) -> list[dict]:
-    """Kembalikan batch tanpa flag kritis; jika semua buruk, kembalikan semua (fallback)."""
+    """Kembalikan batch tanpa flag kritis (IR/RED); jika semua buruk, kembalikan semua (fallback)."""
     good = [b for b in batches if not (b.get("sqi_flags", 0) & _SQI_DISCARD)]
+    return good if good else batches
+
+
+def _filter_good_batches_green(batches: list[dict]) -> list[dict]:
+    """Filter khusus kanal hijau: abaikan MOTION dari IR, hanya buang PPG_BAD/FLAT/NO_FINGER."""
+    good = [b for b in batches if not (b.get("sqi_flags", 0) & _SQI_DISCARD_GREEN)]
     return good if good else batches
 
 
@@ -832,7 +843,9 @@ def ingest_latest_dashboard(
 
     # Filter batch berkualitas buruk sebelum analisis
     good_batches = _filter_good_batches(batches)
-    all_ppg = [float(v) for b in good_batches for v in b.get("ppg", [])]
+    # Green pakai filter tersendiri: MOTION dari IR tidak mem-blokir kanal hijau
+    good_green_batches = _filter_good_batches_green(batches)
+    all_ppg = [float(v) for b in good_green_batches for v in b.get("ppg", [])]
     all_red = [float(v) for b in good_batches for v in b.get("red", [])]
     all_ir  = [float(v) for b in good_batches for v in b.get("ir", [])]
 
