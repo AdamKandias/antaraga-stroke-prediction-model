@@ -1572,15 +1572,26 @@ def calibrate_train(db: Session = Depends(get_db)) -> dict:
 
         scaler = StandardScaler()
         Xs = scaler.fit_transform(X)
-        mlp = MLPRegressor(hidden_layer_sizes=(64, 32), activation="relu",
-                           solver="lbfgs", alpha=0.01, max_iter=2000, random_state=42)
+
+        # lbfgs untuk dataset kecil (<30), adam+early_stopping untuk dataset lebih besar
+        # (adam jauh lebih cepat dan tidak timeout di production)
+        if n < 30:
+            _mlp_kwargs = dict(hidden_layer_sizes=(64, 32), activation="relu",
+                               solver="lbfgs", alpha=0.01, max_iter=3000, random_state=42)
+        else:
+            _mlp_kwargs = dict(hidden_layer_sizes=(64, 32), activation="relu",
+                               solver="adam", alpha=0.01, max_iter=500, random_state=42,
+                               learning_rate_init=0.01, early_stopping=True,
+                               n_iter_no_change=15, validation_fraction=0.1)
+
         cv_scheme = LeaveOneOut() if n < 30 else 5
-        y_cv = cross_val_predict(
-            MLPRegressor(hidden_layer_sizes=(64, 32), activation="relu",
-                         solver="lbfgs", alpha=0.01, max_iter=2000, random_state=42),
-            Xs, y, cv=cv_scheme,
-        )
-        mlp.fit(Xs, y)
+
+        import warnings as _w
+        with _w.catch_warnings():
+            _w.simplefilter("ignore")
+            y_cv = cross_val_predict(MLPRegressor(**_mlp_kwargs), Xs, y, cv=cv_scheme)
+            mlp = MLPRegressor(**_mlp_kwargs)
+            mlp.fit(Xs, y)
 
         mae  = float(mean_absolute_error(y, y_cv))
         rmse = float(np.sqrt(np.mean((y - y_cv) ** 2)))

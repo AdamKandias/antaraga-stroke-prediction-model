@@ -1524,6 +1524,13 @@ async function calibLoadReport() {
 }
 
 // ── Generate data demo ───────────────────────────────────────────────────────
+// Parse response safely — avoids JSON crash when server returns HTML (404/502/504)
+async function _safeJson(r) {
+  const text = await r.text();
+  try { return { ok: r.ok, status: r.status, data: JSON.parse(text) }; }
+  catch { return { ok: false, status: r.status, data: { detail: `HTTP ${r.status} — respons bukan JSON. Pastikan server sudah direstart setelah update kode. (${text.substring(0, 120)})` } }; }
+}
+
 async function calibUpdateDemoCount() {
   try {
     const s = await fetch('/v1/calibrate/summary').then(r => r.ok ? r.json() : {});
@@ -1537,10 +1544,9 @@ async function calibGenDemo() {
   const show  = (t, c) => { msgEl.textContent = t; msgEl.style.color = c; msgEl.style.display = ''; };
   show('Membuat data sintetis…', 'var(--muted)');
   try {
-    const r   = await fetch('/v1/calibrate/generate-demo?n_rows=250', { method: 'POST' });
-    const res = await r.json();
-    if (!r.ok) { show(`Gagal: ${res.detail || r.status}`, 'var(--critical)'); return; }
-    show(`✓ ${res.message}`, 'var(--good)');
+    const { ok, data } = await _safeJson(await fetch('/v1/calibrate/generate-demo?n_rows=250', { method: 'POST' }));
+    if (!ok) { show(`Gagal: ${data.detail || 'unknown'}`, 'var(--critical)'); return; }
+    show(`✓ ${data.message}`, 'var(--good)');
     calibLoad();
     calibUpdateDemoCount();
     setTimeout(() => { msgEl.style.display = 'none'; }, 4000);
@@ -1552,10 +1558,9 @@ async function calibClearDemo() {
   const msgEl = document.getElementById('calibDemoMsg');
   const show  = (t, c) => { msgEl.textContent = t; msgEl.style.color = c; msgEl.style.display = ''; };
   try {
-    const r   = await fetch('/v1/calibrate/clear-demo', { method: 'POST' });
-    const res = await r.json();
-    if (!r.ok) { show(`Gagal: ${res.detail || r.status}`, 'var(--critical)'); return; }
-    show(`✓ ${res.deleted} rekaman demo dihapus`, 'var(--good)');
+    const { ok, data } = await _safeJson(await fetch('/v1/calibrate/clear-demo', { method: 'POST' }));
+    if (!ok) { show(`Gagal: ${data.detail || 'unknown'}`, 'var(--critical)'); return; }
+    show(`✓ ${data.deleted} rekaman demo dihapus`, 'var(--good)');
     calibLoad();
     calibUpdateDemoCount();
     setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
@@ -1572,18 +1577,19 @@ async function calibRunTrain() {
   btn.disabled = true;
   btn.textContent = '⏳ Melatih…';
   show('Menjalankan MLP training (LOO / 5-fold CV)… mungkin perlu 10–60 detik.', 'var(--muted)');
-  wrap.innerHTML = '<span style="color:var(--muted)">Melatih…</span>';
+  wrap.innerHTML = '<span style="color:var(--muted)">Melatih model…</span>';
 
   try {
-    const r   = await fetch('/v1/calibrate/train', { method: 'POST' });
-    const res = await r.json();
-    if (!r.ok) {
-      show(`Gagal: ${res.detail || r.status}`, 'var(--critical)');
-      wrap.innerHTML = `<span style="color:var(--critical)">${res.detail || 'Training gagal'}</span>`;
+    const { ok, data } = await _safeJson(
+      await fetch('/v1/calibrate/train', { method: 'POST' })
+    );
+    if (!ok) {
+      show(`Gagal: ${data.detail}`, 'var(--critical)');
+      wrap.innerHTML = `<span style="color:var(--critical)">${data.detail}</span>`;
       return;
     }
-    show(`✓ Training selesai — ${res.models_trained.length} model dilatih dari ${res.n_total} baris`, 'var(--good)');
-    _renderTrainingReport(res.metrics);
+    show(`✓ Training selesai — ${data.models_trained.length} model dilatih dari ${data.n_total} baris`, 'var(--good)');
+    _renderTrainingReport(data.metrics);
   } catch (e) {
     show(`Error: ${e.message}`, 'var(--critical)');
     wrap.innerHTML = `<span style="color:var(--critical)">Error: ${e.message}</span>`;
@@ -1634,11 +1640,12 @@ async function calibRunTest() {
   show('Menjalankan inferensi pada 20 sampel acak…', 'var(--muted)');
 
   try {
-    const r   = await fetch('/v1/calibrate/predict-test?n=20', { method: 'POST' });
-    const res = await r.json();
-    if (!r.ok) { show(`Gagal: ${res.detail || r.status}`, 'var(--critical)'); return; }
-    show(`✓ ${res.n_tested} sampel diuji`, 'var(--good)');
-    _renderTestResults(res);
+    const { ok, data } = await _safeJson(
+      await fetch('/v1/calibrate/predict-test?n=20', { method: 'POST' })
+    );
+    if (!ok) { show(`Gagal: ${data.detail}`, 'var(--critical)'); return; }
+    show(`✓ ${data.n_tested} sampel diuji`, 'var(--good)');
+    _renderTestResults(data);
     resultsEl.style.display = '';
   } catch (e) { show(`Error: ${e.message}`, 'var(--critical)'); }
 }

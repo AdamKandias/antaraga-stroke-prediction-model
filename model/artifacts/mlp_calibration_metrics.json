@@ -1,0 +1,52 @@
+{
+  "gula_darah_mg_dl": {
+    "label": "Gula Darah (mg/dL)",
+    "n": 240,
+    "cv": "5-fold",
+    "mae": 36.83,
+    "rmse": 46.62,
+    "r2": -1.0855,
+    "mean_pct_error": 28.42,
+    "accuracy_pct": 71.58
+  },
+  "kolesterol_mg_dl": {
+    "label": "Kolesterol (mg/dL)",
+    "n": 240,
+    "cv": "5-fold",
+    "mae": 28.29,
+    "rmse": 35.1,
+    "r2": -0.5901,
+    "mean_pct_error": 13.7,
+    "accuracy_pct": 86.3
+  },
+  "asam_urat_mg_dl": {
+    "label": "Asam Urat (mg/dL)",
+    "n": 240,
+    "cv": "5-fold",
+    "mae": 1.28,
+    "rmse": 1.67,
+    "r2": -0.5207,
+    "mean_pct_error": 26.62,
+    "accuracy_pct": 73.38
+  },
+  "sistolik_mmhg": {
+    "label": "Sistolik (mmHg)",
+    "n": 240,
+    "cv": "5-fold",
+    "mae": 11.5,
+    "rmse": 14.4,
+    "r2": -0.2136,
+    "mean_pct_error": 7.87,
+    "accuracy_pct": 92.13
+  },
+  "diastolik_mmhg": {
+    "label": "Diastolik (mmHg)",
+    "n": 240,
+    "cv": "5-fold",
+    "mae": 8.78,
+    "rmse": 11.33,
+    "r2": -0.3741,
+    "mean_pct_error": 11.47,
+    "accuracy_pct": 88.53
+  }
+}
