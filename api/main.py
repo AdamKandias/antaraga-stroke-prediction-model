@@ -1503,8 +1503,16 @@ def calibrate_clear_demo(db: Session = Depends(get_db)) -> dict:
 # ---------------------------------------------------------------------------
 
 @app.post("/v1/calibrate/train")
-def calibrate_train(db: Session = Depends(get_db)) -> dict:
-    """Latih model MLP kalibrasi dari calibration_records di DB, simpan artifact."""
+def calibrate_train(
+    mode: str = Query("all", description="all | real | demo"),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Latih model MLP kalibrasi dari calibration_records di DB, simpan artifact.
+
+    mode='real'  — hanya rekaman nyata (bukan demo-device)
+    mode='demo'  — hanya rekaman demo (device_id = demo-device)
+    mode='all'   — semua rekaman (default)
+    """
     import pathlib as _pl, json as _json
     import joblib
     import pandas as pd
@@ -1513,9 +1521,15 @@ def calibrate_train(db: Session = Depends(get_db)) -> dict:
     from sklearn.neural_network import MLPRegressor
     from sklearn.preprocessing import StandardScaler
 
-    rows = db.query(models_db.CalibrationRecord).all()
+    q = db.query(models_db.CalibrationRecord)
+    if mode == "real":
+        q = q.filter(models_db.CalibrationRecord.device_id != "demo-device")
+    elif mode == "demo":
+        q = q.filter(models_db.CalibrationRecord.device_id == "demo-device")
+    rows = q.all()
     if not rows:
-        raise HTTPException(status_code=400, detail="Belum ada data kalibrasi")
+        label = {"real": "data asli", "demo": "demo data"}.get(mode, "kalibrasi")
+        raise HTTPException(status_code=400, detail=f"Belum ada {label} di database")
 
     FEATURES_T = ["ir_dc_mean", "ir_ac_p2p", "red_dc_mean", "red_ac_p2p",
                   "bpm", "age_years", "gender_code"]
@@ -1557,6 +1571,9 @@ def calibrate_train(db: Session = Depends(get_db)) -> dict:
         raise HTTPException(status_code=400,
                             detail=f"Data terlalu sedikit ({len(df)}/{MIN_ROWS_T} minimum)")
 
+    n_subjects = df["subject_id"].nunique() if "subject_id" in df.columns else "?"
+    trained_at = datetime.now(timezone.utc).isoformat()
+
     all_metrics: dict = {}
     all_models:  dict = {}
 
@@ -1573,8 +1590,7 @@ def calibrate_train(db: Session = Depends(get_db)) -> dict:
         scaler = StandardScaler()
         Xs = scaler.fit_transform(X)
 
-        # lbfgs untuk dataset kecil (<30), adam+early_stopping untuk dataset lebih besar
-        # (adam jauh lebih cepat dan tidak timeout di production)
+        # lbfgs untuk dataset kecil (<30), adam+early_stopping untuk yang lebih besar
         if n < 30:
             _mlp_kwargs = dict(hidden_layer_sizes=(64, 32), activation="relu",
                                solver="lbfgs", alpha=0.01, max_iter=3000, random_state=42)
@@ -1607,6 +1623,9 @@ def calibrate_train(db: Session = Depends(get_db)) -> dict:
             "r2": round(r2, 4),
             "mean_pct_error": round(pct_err, 2),
             "accuracy_pct": acc,
+            # Simpan prediksi CV agar laporan bisa plot scatter tanpa re-train
+            "cv_y_true": [round(float(v), 2) for v in y],
+            "cv_y_pred": [round(float(v), 2) for v in y_cv],
         }
 
     if not all_models:
@@ -1618,8 +1637,17 @@ def calibrate_train(db: Session = Depends(get_db)) -> dict:
     artifact_path = artifact_dir / "mlp_calibration.joblib"
     metrics_path  = artifact_dir / "mlp_calibration_metrics.json"
 
+    meta = {
+        "_meta": {
+            "trained_at": trained_at,
+            "n_total": len(df),
+            "n_subjects": n_subjects,
+            "mode": mode,
+        }
+    }
+    metrics_with_meta = {**meta, **all_metrics}
     joblib.dump(all_models, artifact_path)
-    metrics_path.write_text(_json.dumps(all_metrics, indent=2, ensure_ascii=False))
+    metrics_path.write_text(_json.dumps(metrics_with_meta, indent=2, ensure_ascii=False))
 
     # Invalidate lru_cache di ml_calibration.py agar prediksi berikutnya pakai model baru
     try:
@@ -1630,7 +1658,294 @@ def calibrate_train(db: Session = Depends(get_db)) -> dict:
 
     return {"success": True, "metrics": all_metrics,
             "models_trained": list(all_models.keys()),
-            "n_total": len(df)}
+            "n_total": len(df), "n_subjects": n_subjects, "mode": mode}
+
+
+# ---------------------------------------------------------------------------
+# /v1/calibrate/report.html  — laporan lengkap, dapat diunduh
+# ---------------------------------------------------------------------------
+
+@app.get("/v1/calibrate/report.html")
+def calibrate_report_html() -> StreamingResponse:
+    """Hasilkan laporan HTML lengkap (scatter plots, metrik, interpretasi) — siap diunduh."""
+    import pathlib as _pl, json as _json, base64, io
+
+    metrics_path = _pl.Path(__file__).resolve().parent.parent / "model" / "artifacts" / "mlp_calibration_metrics.json"
+    if not metrics_path.exists():
+        raise HTTPException(status_code=404,
+                            detail="Model belum dilatih — klik 'Jalankan Training' dulu")
+
+    full = _json.loads(metrics_path.read_text())
+    meta = full.get("_meta", {})
+    targets_data = {k: v for k, v in full.items() if k != "_meta"}
+
+    LABELS = {
+        "gula_darah_mg_dl": "Gula Darah",
+        "kolesterol_mg_dl":  "Kolesterol",
+        "asam_urat_mg_dl":   "Asam Urat",
+        "sistolik_mmhg":     "Sistolik",
+        "diastolik_mmhg":    "Diastolik",
+    }
+    UNITS = {
+        "gula_darah_mg_dl": "mg/dL",
+        "kolesterol_mg_dl":  "mg/dL",
+        "asam_urat_mg_dl":   "mg/dL",
+        "sistolik_mmhg":     "mmHg",
+        "diastolik_mmhg":    "mmHg",
+    }
+    # Nilai MAE referensi klinis yang dianggap "baik"
+    MAE_OK = {
+        "gula_darah_mg_dl": 15.0,
+        "kolesterol_mg_dl":  20.0,
+        "asam_urat_mg_dl":   0.8,
+        "sistolik_mmhg":     12.0,
+        "diastolik_mmhg":    8.0,
+    }
+
+    def _acc_label(acc: float) -> tuple[str, str]:
+        if acc >= 90:  return ("Sangat Baik", "#16a34a")
+        if acc >= 80:  return ("Baik",        "#0ea5e9")
+        if acc >= 70:  return ("Cukup",        "#d97706")
+        return ("Perlu Data Lebih",            "#dc2626")
+
+    def _r2_label(r2: float) -> str:
+        if r2 >= 0.8:  return "Sangat kuat"
+        if r2 >= 0.5:  return "Kuat"
+        if r2 >= 0.0:  return "Sedang (lebih baik dari rata-rata)"
+        return "Di bawah rata-rata — perlu data lebih banyak"
+
+    # ── Scatter plots as base64 PNG ───────────────────────────────────────
+    def _scatter_b64(key: str, data: dict) -> str | None:
+        y_true = data.get("cv_y_true")
+        y_pred = data.get("cv_y_pred")
+        if not y_true or not y_pred:
+            return None
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+
+            yt = np.array(y_true); yp = np.array(y_pred)
+            fig, ax = plt.subplots(figsize=(4.2, 4.2))
+            ax.scatter(yt, yp, color="#3987e5", alpha=0.65, s=30, zorder=3)
+            lo = min(yt.min(), yp.min()) * 0.93
+            hi = max(yt.max(), yp.max()) * 1.07
+            ax.plot([lo, hi], [lo, hi], "k--", lw=1, alpha=0.45)
+            acc, mae, r2v = data["accuracy_pct"], data["mae"], data["r2"]
+            lbl = LABELS.get(key, key)
+            unit = UNITS.get(key, "")
+            ax.set_xlabel(f"Referensi Invasif ({unit})", fontsize=9)
+            ax.set_ylabel(f"Prediksi Sensor ({unit})", fontsize=9)
+            ax.set_title(f"{lbl}\nAkurasi {acc}%  |  MAE {mae}  |  R² {r2v}", fontsize=8.5)
+            ax.grid(True, alpha=0.25)
+            fig.tight_layout()
+            buf = io.BytesIO()
+            fig.savefig(buf, format="png", dpi=130)
+            plt.close(fig)
+            buf.seek(0)
+            return base64.b64encode(buf.read()).decode()
+        except Exception:
+            return None
+
+    # ── Build rows & plots ────────────────────────────────────────────────
+    table_rows = ""
+    scatter_html = ""
+    for key in ["gula_darah_mg_dl", "kolesterol_mg_dl", "asam_urat_mg_dl", "sistolik_mmhg", "diastolik_mmhg"]:
+        if key not in targets_data:
+            continue
+        d = targets_data[key]
+        lbl = LABELS.get(key, key)
+        unit = UNITS.get(key, "")
+        acc_text, acc_color = _acc_label(d["accuracy_pct"])
+        r2_text = _r2_label(d["r2"])
+        mae_ok = d["mae"] <= MAE_OK.get(key, 999)
+        mae_color = "#16a34a" if mae_ok else "#d97706"
+
+        table_rows += f"""
+        <tr>
+          <td><b>{lbl}</b><br><span style="color:#888;font-size:11px">{d['label']}</span></td>
+          <td style="text-align:center"><b>{d['n']}</b></td>
+          <td style="text-align:center">{d['cv']}</td>
+          <td style="text-align:center;font-weight:700;color:{acc_color}">{d['accuracy_pct']}%<br>
+            <span style="font-size:10px;font-weight:400">{acc_text}</span></td>
+          <td style="text-align:center;color:{mae_color};font-weight:600">{d['mae']} {unit}</td>
+          <td style="text-align:center">{d['rmse']} {unit}</td>
+          <td style="text-align:center">{d['r2']}<br>
+            <span style="font-size:10px;color:#888">{r2_text}</span></td>
+          <td style="text-align:center">{d['mean_pct_error']}%</td>
+        </tr>"""
+
+        b64 = _scatter_b64(key, d)
+        if b64:
+            scatter_html += f"""
+            <div class="scatter-card">
+              <div class="scatter-title">{lbl}</div>
+              <img src="data:image/png;base64,{b64}" alt="scatter {lbl}" style="width:100%;max-width:320px">
+              <div class="scatter-meta">Akurasi <b style="color:{acc_color}">{d['accuracy_pct']}%</b>
+                &nbsp;·&nbsp; MAE <b>{d['mae']} {unit}</b>
+                &nbsp;·&nbsp; n={d['n']}
+              </div>
+            </div>"""
+
+    trained_at_str = meta.get("trained_at", "—")
+    try:
+        from datetime import datetime as _dt
+        trained_at_str = _dt.fromisoformat(trained_at_str).strftime("%d %b %Y, %H:%M UTC")
+    except Exception:
+        pass
+
+    mode_label = {"real": "Data Asli", "demo": "Data Demo", "all": "Semua Data"}.get(
+        meta.get("mode", "all"), "Semua Data")
+
+    html = f"""<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Laporan Kalibrasi MLP — ANTARAGA</title>
+<style>
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ font-family:'Segoe UI',Arial,sans-serif; font-size:13px; color:#1a1a2e;
+    background:#f8f9fb; padding:32px 24px; }}
+  .cover {{ text-align:center; padding:40px 0 32px; border-bottom:2px solid #3987e5; margin-bottom:28px; }}
+  .cover h1 {{ font-size:24px; color:#3987e5; font-weight:800; letter-spacing:-.3px; }}
+  .cover .subtitle {{ color:#555; margin-top:6px; font-size:13px; }}
+  .meta-grid {{ display:flex; gap:20px; flex-wrap:wrap; justify-content:center; margin-top:18px; }}
+  .meta-chip {{ background:#e8f0fe; border-radius:20px; padding:5px 16px;
+    font-size:12px; font-weight:600; color:#1a56db; }}
+  h2 {{ font-size:16px; font-weight:700; color:#1a1a2e; margin:28px 0 12px;
+    padding-bottom:6px; border-bottom:1px solid #dde3ed; }}
+  h3 {{ font-size:13px; font-weight:700; margin:16px 0 8px; }}
+  p {{ line-height:1.65; color:#444; margin-bottom:10px; }}
+  table {{ width:100%; border-collapse:collapse; font-size:12px; margin-bottom:16px; }}
+  th {{ background:#3987e5; color:#fff; padding:8px 10px; text-align:left; font-weight:600; }}
+  td {{ padding:7px 10px; border-bottom:1px solid #e5e9f0; vertical-align:top; }}
+  tr:nth-child(even) td {{ background:#f4f7fb; }}
+  .scatter-grid {{ display:flex; flex-wrap:wrap; gap:20px; margin:16px 0; }}
+  .scatter-card {{ background:#fff; border:1px solid #dde3ed; border-radius:10px;
+    padding:14px; flex:1 1 280px; max-width:340px; text-align:center; }}
+  .scatter-title {{ font-weight:700; font-size:13px; margin-bottom:8px; }}
+  .scatter-meta {{ font-size:11px; color:#555; margin-top:8px; }}
+  .legend-box {{ background:#fff; border:1px solid #dde3ed; border-radius:8px;
+    padding:14px 18px; margin-bottom:14px; }}
+  .legend-row {{ display:flex; gap:8px; align-items:flex-start; margin-bottom:7px; }}
+  .badge {{ display:inline-block; padding:2px 10px; border-radius:12px; font-size:11px;
+    font-weight:700; color:#fff; white-space:nowrap; }}
+  .badge-green {{ background:#16a34a; }}
+  .badge-blue  {{ background:#0ea5e9; }}
+  .badge-amber {{ background:#d97706; }}
+  .badge-red   {{ background:#dc2626; }}
+  .footer {{ text-align:center; color:#999; font-size:11px; margin-top:40px;
+    padding-top:16px; border-top:1px solid #dde3ed; }}
+  @media print {{
+    body {{ background:#fff; padding:16px; }}
+    .scatter-card {{ break-inside:avoid; }}
+  }}
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div style="font-size:11px;font-weight:700;letter-spacing:.12em;color:#3987e5;text-transform:uppercase;margin-bottom:6px">
+    ANTARAGA · Stroke Prediction Model</div>
+  <h1>Laporan Kalibrasi Model MLP</h1>
+  <div class="subtitle">Estimasi Non-Invasif Vital Sign melalui Sensor PPG</div>
+  <div class="meta-grid">
+    <span class="meta-chip">📅 Dilatih: {trained_at_str}</span>
+    <span class="meta-chip">📊 Sumber: {mode_label}</span>
+    <span class="meta-chip">👥 {meta.get('n_subjects', '?')} Subjek</span>
+    <span class="meta-chip">📋 {meta.get('n_total', '?')} Rekaman Total</span>
+  </div>
+</div>
+
+<h2>Apa yang Diukur Model Ini?</h2>
+<p>Model MLP (Multi-Layer Perceptron) ANTARAGA menggunakan sinyal cahaya sensor PPG di pergelangan tangan untuk
+memperkirakan 5 parameter vital secara non-invasif — tanpa tusuk jarum, tanpa alat laboratorium.
+Model ini dilatih dari data kalibrasi berpasangan: sinyal sensor vs hasil alat medis standar.</p>
+<p>Berikut adalah ringkasan seberapa akurat model saat ini berdasarkan <b>{meta.get('n_total', '?')} rekaman</b>
+dari <b>{meta.get('n_subjects', '?')} subjek</b>, divalidasi dengan metode <i>cross-validation</i>.</p>
+
+<h2>Ringkasan Akurasi per Parameter</h2>
+<table>
+  <thead><tr>
+    <th>Parameter</th>
+    <th style="text-align:center">Jumlah Data</th>
+    <th style="text-align:center">Validasi</th>
+    <th style="text-align:center">Akurasi (%)</th>
+    <th style="text-align:center">MAE</th>
+    <th style="text-align:center">RMSE</th>
+    <th style="text-align:center">R² (Korelasi)</th>
+    <th style="text-align:center">Rata-rata Error</th>
+  </tr></thead>
+  <tbody>{table_rows}</tbody>
+</table>
+
+<h2>Visualisasi Prediksi vs Referensi</h2>
+<p>Setiap titik mewakili satu rekaman kalibrasi. Semakin dekat titik-titik ke garis diagonal putus-putus,
+semakin akurat model. Garis diagonal = prediksi sempurna.</p>
+<div class="scatter-grid">
+{scatter_html if scatter_html else '<p style="color:#888">Tidak ada data visualisasi (data cv_data tidak tersimpan — latih ulang model).</p>'}
+</div>
+
+<h2>Cara Membaca Laporan Ini</h2>
+<div class="legend-box">
+  <h3>Akurasi (%)</h3>
+  <p>Persentase ketepatan prediksi dibandingkan nilai referensi (alat medis). Semakin tinggi semakin baik.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+    <span class="badge badge-green">≥ 90% — Sangat Baik</span>
+    <span class="badge badge-blue">80–89% — Baik</span>
+    <span class="badge badge-amber">70–79% — Cukup</span>
+    <span class="badge badge-red">&lt; 70% — Perlu Data Lebih</span>
+  </div>
+</div>
+<div class="legend-box">
+  <div class="legend-row">
+    <div style="min-width:90px;font-weight:700">MAE</div>
+    <div><i>Mean Absolute Error</i> — rata-rata selisih absolut antara prediksi dan referensi dalam satuan asli
+    (mis. mg/dL untuk gula darah). MAE 10 mg/dL berarti prediksi rata-rata meleset ±10 mg/dL.</div>
+  </div>
+  <div class="legend-row">
+    <div style="min-width:90px;font-weight:700">RMSE</div>
+    <div><i>Root Mean Squared Error</i> — serupa MAE namun menghukum kesalahan besar lebih berat.
+    Berguna untuk melihat seberapa buruk outlier terparah.</div>
+  </div>
+  <div class="legend-row">
+    <div style="min-width:90px;font-weight:700">R² (Korelasi)</div>
+    <div>Seberapa kuat hubungan antara prediksi dan referensi. Nilai 1.0 = sempurna, 0.0 = model tidak lebih baik
+    dari sekadar menerka rata-rata, &lt;0 = model lebih buruk dari rata-rata.</div>
+  </div>
+  <div class="legend-row">
+    <div style="min-width:90px;font-weight:700">LOO / 5-fold</div>
+    <div><i>Leave-One-Out</i> (untuk data kecil &lt;30) atau <i>5-fold Cross-Validation</i> (data ≥30):
+    tiap rekaman diuji oleh model yang tidak melihat rekaman tersebut saat training — hasilnya lebih jujur
+    dari sekadar memeriksa data training.</div>
+  </div>
+</div>
+
+<h2>Konfigurasi Teknis Model</h2>
+<table>
+  <tr><th>Aspek</th><th>Detail</th></tr>
+  <tr><td>Arsitektur</td><td>MLP 2 lapisan tersembunyi: 64 neuron → 32 neuron, aktivasi ReLU</td></tr>
+  <tr><td>Solver</td><td>L-BFGS untuk &lt;30 data; Adam + Early Stopping untuk ≥30 data</td></tr>
+  <tr><td>Regularisasi</td><td>L2 (alpha=0.01)</td></tr>
+  <tr><td>Fitur Input (7)</td><td>ir_dc_mean, ir_ac_p2p, red_dc_mean, red_ac_p2p, bpm, age_years, gender_code</td></tr>
+  <tr><td>Target Output (5)</td><td>Gula Darah, Kolesterol, Asam Urat, Sistolik, Diastolik</td></tr>
+  <tr><td>Normalisasi</td><td>StandardScaler (per target)</td></tr>
+  <tr><td>Model terpisah</td><td>Satu MLPRegressor per parameter vital (total 5 model)</td></tr>
+</table>
+
+<div class="footer">
+  Laporan ini digenerate otomatis oleh sistem ANTARAGA · {datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC")}
+</div>
+
+</body>
+</html>"""
+
+    return StreamingResponse(
+        iter([html]),
+        media_type="text/html; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="laporan_kalibrasi_mlp.html"'},
+    )
 
 
 # ---------------------------------------------------------------------------

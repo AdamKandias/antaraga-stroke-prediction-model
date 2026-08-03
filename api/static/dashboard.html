@@ -694,17 +694,24 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 
   <!-- Pelatihan MLP -->
   <div class="card" style="border-color:rgba(57,135,229,.3)">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-      <div class="card-ttl" style="margin:0">🧠 Pelatihan MLP</div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-ok" onclick="calibRunTrain()" id="calibTrainBtn">▶ Jalankan Training</button>
-        <button class="btn-sec btn-sm" onclick="calibLoadReport()">↺ Muat Laporan</button>
-      </div>
+    <div class="card-ttl" style="margin-bottom:10px">🧠 Pelatihan MLP</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">
+      Pilih sumber data training: data asli (rekaman dari sensor nyata) atau data demo sintetis yang baru digenerate.
+      Setelah training selesai, unduh laporan lengkap dalam format HTML.
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <button class="btn btn-ok" onclick="calibRunTrain('real')" id="calibTrainBtnReal">🏥 Latih dari Data Asli</button>
+      <button class="btn-sec" onclick="calibRunTrain('demo')" id="calibTrainBtnDemo" style="font-size:12px;padding:6px 14px">⚡ Latih dari Demo Data</button>
+      <a id="calibReportDlLink" href="/v1/calibrate/report.html" download="laporan_kalibrasi_mlp.html"
+         style="display:none;font-size:12px;padding:6px 14px;border-radius:6px;background:var(--surface2);
+                border:1px solid var(--border);color:var(--fg);text-decoration:none;font-weight:600">
+        ⬇ Unduh Laporan HTML
+      </a>
+      <button class="btn-sec btn-sm" onclick="calibLoadReport()">↺ Muat Laporan</button>
     </div>
     <div id="calibTrainMsg" style="font-size:12px;color:var(--muted);margin-bottom:8px;display:none"></div>
     <div id="calibReportWrap" style="font-size:12px;color:var(--muted)">
-      Klik "Jalankan Training" untuk melatih MLP dari data di atas, atau "Muat Laporan" jika sudah dilatih via
-      <code style="background:var(--surface2);padding:1px 5px;border-radius:4px">python model/train_mlp_calibration.py</code>
+      Klik salah satu tombol training di atas, atau "Muat Laporan" jika sudah dilatih sebelumnya.
     </div>
   </div>
 
@@ -714,6 +721,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
       <div class="card-ttl" style="margin:0">🔬 Tes Prediksi Acak</div>
       <div style="display:flex;gap:8px;align-items:center">
         <button class="btn btn-ok" onclick="calibRunTest()">🔬 Tes 20 Sampel Acak</button>
+        <button class="btn-sec btn-sm" onclick="calibExportTest()" id="calibExportTestBtn" style="display:none">⬇ Export CSV</button>
       </div>
     </div>
     <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">
@@ -1479,7 +1487,8 @@ document.getElementById('calibEditModal').addEventListener('click', e => {
 
 // ── Laporan hasil pelatihan MLP ──────────────────────────────────────────────
 async function calibLoadReport() {
-  const wrap = document.getElementById('calibReportWrap');
+  const wrap   = document.getElementById('calibReportWrap');
+  const dlLink = document.getElementById('calibReportDlLink');
   wrap.innerHTML = '<span style="color:var(--muted)">Memuat…</span>';
   try {
     const data = await fetch('/v1/calibrate/training-report').then(r => r.json());
@@ -1516,8 +1525,9 @@ async function calibLoadReport() {
         <tbody>${rows}</tbody>
       </table>
       <div style="font-size:11px;color:var(--muted);margin-top:8px">
-        Scatter plots tersimpan di <code style="background:var(--surface2);padding:1px 5px;border-radius:4px">reports/kalibrasi/scatter_*.png</code>
+        Laporan lengkap: <a href="/v1/calibrate/report.html" download style="color:var(--c2)">⬇ Unduh Laporan HTML (dengan scatter plot)</a>
       </div>`;
+    if (dlLink) dlLink.style.display = '';
   } catch (e) {
     wrap.innerHTML = `<span style="color:var(--critical)">Gagal memuat: ${e.message}</span>`;
   }
@@ -1568,34 +1578,40 @@ async function calibClearDemo() {
 }
 
 // ── Jalankan training MLP ────────────────────────────────────────────────────
-async function calibRunTrain() {
-  const btn   = document.getElementById('calibTrainBtn');
-  const msgEl = document.getElementById('calibTrainMsg');
-  const wrap  = document.getElementById('calibReportWrap');
-  const show  = (t, c) => { msgEl.textContent = t; msgEl.style.color = c; msgEl.style.display = ''; };
+async function calibRunTrain(mode) {
+  const btnReal = document.getElementById('calibTrainBtnReal');
+  const btnDemo = document.getElementById('calibTrainBtnDemo');
+  const msgEl   = document.getElementById('calibTrainMsg');
+  const wrap    = document.getElementById('calibReportWrap');
+  const dlLink  = document.getElementById('calibReportDlLink');
+  const show    = (t, c) => { msgEl.textContent = t; msgEl.style.color = c; msgEl.style.display = ''; };
 
-  btn.disabled = true;
-  btn.textContent = '⏳ Melatih…';
-  show('Menjalankan MLP training (LOO / 5-fold CV)… mungkin perlu 10–60 detik.', 'var(--muted)');
+  const modeLabel = mode === 'demo' ? 'Demo Data' : 'Data Asli';
+  if (btnReal) btnReal.disabled = true;
+  if (btnDemo) btnDemo.disabled = true;
+  show(`Melatih dari ${modeLabel} (LOO / 5-fold CV)… mungkin perlu beberapa detik.`, 'var(--muted)');
   wrap.innerHTML = '<span style="color:var(--muted)">Melatih model…</span>';
+  if (dlLink) dlLink.style.display = 'none';
 
   try {
     const { ok, data } = await _safeJson(
-      await fetch('/v1/calibrate/train', { method: 'POST' })
+      await fetch(`/v1/calibrate/train?mode=${mode}`, { method: 'POST' })
     );
     if (!ok) {
       show(`Gagal: ${data.detail}`, 'var(--critical)');
       wrap.innerHTML = `<span style="color:var(--critical)">${data.detail}</span>`;
       return;
     }
-    show(`✓ Training selesai — ${data.models_trained.length} model dilatih dari ${data.n_total} baris`, 'var(--good)');
+    const src = data.mode === 'demo' ? 'Demo Data' : data.mode === 'real' ? 'Data Asli' : 'Semua Data';
+    show(`✓ Training selesai — ${data.models_trained.length} model dari ${data.n_total} baris (${data.n_subjects} subjek, ${src})`, 'var(--good)');
     _renderTrainingReport(data.metrics);
+    if (dlLink) dlLink.style.display = '';
   } catch (e) {
     show(`Error: ${e.message}`, 'var(--critical)');
     wrap.innerHTML = `<span style="color:var(--critical)">Error: ${e.message}</span>`;
   } finally {
-    btn.disabled = false;
-    btn.textContent = '▶ Jalankan Training';
+    if (btnReal) { btnReal.disabled = false; }
+    if (btnDemo) { btnDemo.disabled = false; }
   }
 }
 
@@ -1647,6 +1663,8 @@ async function calibRunTest() {
     show(`✓ ${data.n_tested} sampel diuji`, 'var(--good)');
     _renderTestResults(data);
     resultsEl.style.display = '';
+    const exportBtn = document.getElementById('calibExportTestBtn');
+    if (exportBtn) { exportBtn.style.display = ''; exportBtn._testData = data; }
   } catch (e) { show(`Error: ${e.message}`, 'var(--critical)'); }
 }
 
@@ -1693,6 +1711,44 @@ function _renderTestResults(res) {
       <td>${a('diastolik_mmhg')}</td><td>${p('diastolik_mmhg')}</td>${fe(e('diastolik_mmhg'))}
     </tr>`;
   }).join('');
+}
+
+// ── Export hasil test sebagai CSV ────────────────────────────────────────────
+function calibExportTest() {
+  const btn = document.getElementById('calibExportTestBtn');
+  const res = btn && btn._testData;
+  if (!res || !res.samples || !res.samples.length) { alert('Jalankan tes dulu.'); return; }
+
+  const TARGETS = ['gula_darah_mg_dl','kolesterol_mg_dl','asam_urat_mg_dl','sistolik_mmhg','diastolik_mmhg'];
+  const LABELS  = ['Gula Darah','Kolesterol','Asam Urat','Sistolik','Diastolik'];
+
+  // Header summary per target
+  let csv = 'RINGKASAN AKURASI PER TARGET\n';
+  csv += 'Target,N,Mean Error%,Akurasi%,MAE\n';
+  TARGETS.forEach((t, i) => {
+    const s = res.summary[t];
+    if (!s) return;
+    csv += `${LABELS[i]},${s.n},${s.mean_error_pct},${s.accuracy_pct},${s.mae}\n`;
+  });
+
+  csv += '\nDETAIL SAMPEL\n';
+  const cols = ['No','ID','Usia','Gender'];
+  TARGETS.forEach((_, i) => cols.push(`${LABELS[i]}_Ref`, `${LABELS[i]}_Pred`, `${LABELS[i]}_Err%`));
+  csv += cols.join(',') + '\n';
+
+  res.samples.forEach((s, i) => {
+    const row = [i+1, s.subject_id, s.age_years, s.gender];
+    TARGETS.forEach(t => {
+      row.push(s.actual[t] ?? '', s.predicted[t] ?? '', s.error_pct[t] ?? '');
+    });
+    csv += row.join(',') + '\n';
+  });
+
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `test_prediksi_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(url);
 }
 
 // ── Regresi linier (placeholder gula darah / kolesterol / asam urat) ──
