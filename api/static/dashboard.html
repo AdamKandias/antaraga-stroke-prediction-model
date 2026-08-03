@@ -1307,7 +1307,7 @@ async function calibLoad() {
   const devFilter = devId ? `?device_id=${encodeURIComponent(devId)}` : '';
   try {
     const [rows, summary] = await Promise.all([
-      fetch(`/v1/calibrate${devFilter}&limit=200`).then(r => r.ok ? r.json() : []),
+      fetch(`/v1/calibrate${devFilter}${devFilter ? '&' : '?'}limit=200`).then(r => r.ok ? r.json() : []),
       fetch(`/v1/calibrate/summary${devFilter}`).then(r => r.ok ? r.json() : {}),
     ]);
     renderCalibSummary(summary);
@@ -1470,12 +1470,19 @@ async function calibSaveEdit() {
   show('Menyimpan…', 'var(--muted)');
   try {
     const r = await fetch(`/v1/calibrate/${_calibEditId}?${p}`, { method: 'PATCH' });
+    const saved = await r.json().catch(() => null);
     if (!r.ok) {
-      const e = await r.json().catch(() => ({}));
-      show(`Gagal: ${e.detail || r.status}`, 'var(--critical)'); return;
+      show(`Gagal: ${saved?.detail || r.status}`, 'var(--critical)'); return;
     }
-    show('✓ Tersimpan', 'var(--good)');
-    setTimeout(() => calibCloseEdit(), 800);
+    // Show what was actually saved so user can verify
+    const parts = [];
+    if (saved?.gula_darah_mg_dl != null) parts.push(`Gula: ${saved.gula_darah_mg_dl} mg/dL`);
+    if (saved?.kolesterol_mg_dl  != null) parts.push(`Kol: ${saved.kolesterol_mg_dl} mg/dL`);
+    if (saved?.asam_urat_mg_dl   != null) parts.push(`AU: ${saved.asam_urat_mg_dl} mg/dL`);
+    if (saved?.sistolik_mmhg     != null) parts.push(`Sis: ${saved.sistolik_mmhg} mmHg`);
+    if (saved?.diastolik_mmhg    != null) parts.push(`Dia: ${saved.diastolik_mmhg} mmHg`);
+    show(`✓ Tersimpan${parts.length ? ' — ' + parts.join(' | ') : ''}`, 'var(--good)');
+    setTimeout(() => calibCloseEdit(), 1800);
     calibLoad();
   } catch (e) {
     show(`Error: ${e.message}`, 'var(--critical)');
