@@ -1413,7 +1413,8 @@ async function calibDelete(id) {
 
 function calibExport() {
   const devFilter = devId ? `?device_id=${encodeURIComponent(devId)}` : '';
-  window.location.href = `/v1/calibrate/export.csv${devFilter}`;
+  const sep = devFilter ? '&' : '?';
+  window.location.href = `/v1/calibrate/export.csv${devFilter}${sep}_t=${Date.now()}`;
 }
 
 // ── Edit rekaman kalibrasi ──────────────────────────────────────────────────
