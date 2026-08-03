@@ -675,17 +675,67 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
     </div>
   </div>
 
-  <!-- Hasil Pelatihan MLP terakhir -->
+  <!-- Generate Data Demo -->
+  <div class="card" style="border-color:rgba(249,115,22,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+      <div class="card-ttl" style="margin:0">⚡ Generate Data Demo</div>
+      <span id="calibDemoCountBadge" style="font-size:11px;font-weight:600;color:var(--muted);background:var(--surface2);padding:2px 10px;border-radius:20px">Memuat…</span>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">
+      Generate ratusan rekaman sinyal PPG sintetis dengan korelasi fisiologis realistis (multi-subjek, usia 45–80, L/P, kondisi berbeda)
+      untuk menguji pipeline pelatihan MLP tanpa perlu data kalibrasi nyata.
+    </p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-ok" onclick="calibGenDemo()">⚡ Generate 250 Baris Demo</button>
+      <button class="btn-del" onclick="calibClearDemo()" style="font-size:12px;padding:5px 12px">🗑 Hapus Data Demo</button>
+      <span id="calibDemoMsg" style="font-size:12px;display:none"></span>
+    </div>
+  </div>
+
+  <!-- Pelatihan MLP -->
   <div class="card" style="border-color:rgba(57,135,229,.3)">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-      <div class="card-ttl" style="margin:0">Hasil Pelatihan MLP Terakhir</div>
+      <div class="card-ttl" style="margin:0">🧠 Pelatihan MLP</div>
       <div style="display:flex;gap:8px">
+        <button class="btn btn-ok" onclick="calibRunTrain()" id="calibTrainBtn">▶ Jalankan Training</button>
         <button class="btn-sec btn-sm" onclick="calibLoadReport()">↺ Muat Laporan</button>
-        <button class="btn btn-sm" onclick="tab('mlp',document.querySelectorAll(\'.tab\')[2])">→ Ke Tab MLP</button>
       </div>
     </div>
+    <div id="calibTrainMsg" style="font-size:12px;color:var(--muted);margin-bottom:8px;display:none"></div>
     <div id="calibReportWrap" style="font-size:12px;color:var(--muted)">
-      Klik "Muat Laporan" setelah menjalankan <code style="background:var(--surface2);padding:1px 5px;border-radius:4px">python model/train_mlp_calibration.py</code>
+      Klik "Jalankan Training" untuk melatih MLP dari data di atas, atau "Muat Laporan" jika sudah dilatih via
+      <code style="background:var(--surface2);padding:1px 5px;border-radius:4px">python model/train_mlp_calibration.py</code>
+    </div>
+  </div>
+
+  <!-- Tes Prediksi Acak -->
+  <div class="card" style="border-color:rgba(168,85,247,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+      <div class="card-ttl" style="margin:0">🔬 Tes Prediksi Acak</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-ok" onclick="calibRunTest()">🔬 Tes 20 Sampel Acak</button>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">
+      Ambil 20 sampel acak dari database, jalankan inferensi MLP, dan bandingkan prediksi dengan nilai referensi.
+      Pastikan model sudah dilatih dulu.
+    </p>
+    <span id="calibTestMsg" style="font-size:12px;display:none"></span>
+    <div id="calibTestResults" style="display:none;margin-top:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Ringkasan Akurasi per Target</div>
+      <div id="calibTestSummary" style="margin-bottom:16px"></div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Detail Sampel</div>
+      <div style="overflow-x:auto"><table class="ftbl" id="calibTestTable" style="min-width:700px;width:100%">
+        <thead><tr>
+          <th>#</th><th>Subjek</th><th>Usia</th><th>G</th>
+          <th style="color:var(--c1)">Gula Ref</th><th style="color:var(--c1)">Pred</th><th style="color:var(--c1)">Err%</th>
+          <th style="color:var(--c2)">Kol Ref</th><th style="color:var(--c2)">Pred</th><th style="color:var(--c2)">Err%</th>
+          <th style="color:var(--c3)">AU Ref</th><th style="color:var(--c3)">Pred</th><th style="color:var(--c3)">Err%</th>
+          <th>Sis Ref</th><th>Pred</th><th>Err%</th>
+          <th>Dia Ref</th><th>Pred</th><th>Err%</th>
+        </tr></thead>
+        <tbody id="calibTestBody"></tbody>
+      </table></div>
     </div>
   </div>
 
@@ -1473,6 +1523,171 @@ async function calibLoadReport() {
   }
 }
 
+// ── Generate data demo ───────────────────────────────────────────────────────
+async function calibUpdateDemoCount() {
+  try {
+    const s = await fetch('/v1/calibrate/summary').then(r => r.ok ? r.json() : {});
+    const el = document.getElementById('calibDemoCountBadge');
+    if (el) el.textContent = s.total ? `${s.total} baris total` : 'Belum ada data';
+  } catch {}
+}
+
+async function calibGenDemo() {
+  const msgEl = document.getElementById('calibDemoMsg');
+  const show  = (t, c) => { msgEl.textContent = t; msgEl.style.color = c; msgEl.style.display = ''; };
+  show('Membuat data sintetis…', 'var(--muted)');
+  try {
+    const r   = await fetch('/v1/calibrate/generate-demo?n_rows=250', { method: 'POST' });
+    const res = await r.json();
+    if (!r.ok) { show(`Gagal: ${res.detail || r.status}`, 'var(--critical)'); return; }
+    show(`✓ ${res.message}`, 'var(--good)');
+    calibLoad();
+    calibUpdateDemoCount();
+    setTimeout(() => { msgEl.style.display = 'none'; }, 4000);
+  } catch (e) { show(`Error: ${e.message}`, 'var(--critical)'); }
+}
+
+async function calibClearDemo() {
+  if (!confirm('Hapus semua rekaman demo (device_id = demo-device)?')) return;
+  const msgEl = document.getElementById('calibDemoMsg');
+  const show  = (t, c) => { msgEl.textContent = t; msgEl.style.color = c; msgEl.style.display = ''; };
+  try {
+    const r   = await fetch('/v1/calibrate/clear-demo', { method: 'POST' });
+    const res = await r.json();
+    if (!r.ok) { show(`Gagal: ${res.detail || r.status}`, 'var(--critical)'); return; }
+    show(`✓ ${res.deleted} rekaman demo dihapus`, 'var(--good)');
+    calibLoad();
+    calibUpdateDemoCount();
+    setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
+  } catch (e) { show(`Error: ${e.message}`, 'var(--critical)'); }
+}
+
+// ── Jalankan training MLP ────────────────────────────────────────────────────
+async function calibRunTrain() {
+  const btn   = document.getElementById('calibTrainBtn');
+  const msgEl = document.getElementById('calibTrainMsg');
+  const wrap  = document.getElementById('calibReportWrap');
+  const show  = (t, c) => { msgEl.textContent = t; msgEl.style.color = c; msgEl.style.display = ''; };
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Melatih…';
+  show('Menjalankan MLP training (LOO / 5-fold CV)… mungkin perlu 10–60 detik.', 'var(--muted)');
+  wrap.innerHTML = '<span style="color:var(--muted)">Melatih…</span>';
+
+  try {
+    const r   = await fetch('/v1/calibrate/train', { method: 'POST' });
+    const res = await r.json();
+    if (!r.ok) {
+      show(`Gagal: ${res.detail || r.status}`, 'var(--critical)');
+      wrap.innerHTML = `<span style="color:var(--critical)">${res.detail || 'Training gagal'}</span>`;
+      return;
+    }
+    show(`✓ Training selesai — ${res.models_trained.length} model dilatih dari ${res.n_total} baris`, 'var(--good)');
+    _renderTrainingReport(res.metrics);
+  } catch (e) {
+    show(`Error: ${e.message}`, 'var(--critical)');
+    wrap.innerHTML = `<span style="color:var(--critical)">Error: ${e.message}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶ Jalankan Training';
+  }
+}
+
+function _renderTrainingReport(m) {
+  const wrap = document.getElementById('calibReportWrap');
+  if (!wrap) return;
+  const targets = {
+    gula_darah_mg_dl: 'Gula Darah', kolesterol_mg_dl: 'Kolesterol',
+    asam_urat_mg_dl: 'Asam Urat',   sistolik_mmhg: 'Sistolik',
+    diastolik_mmhg: 'Diastolik',
+  };
+  const rows = Object.entries(targets).map(([k, label]) => {
+    if (!m[k]) return `<tr><td>${label}</td><td colspan="5" style="color:var(--muted)">Data tidak cukup</td></tr>`;
+    const v = m[k];
+    const ac = v.accuracy_pct >= 90 ? 'var(--good)' : v.accuracy_pct >= 80 ? 'var(--warn)' : 'var(--critical)';
+    return `<tr>
+      <td style="font-weight:600">${label}</td>
+      <td style="font-family:monospace">${v.n}</td>
+      <td style="font-family:monospace">${v.cv}</td>
+      <td style="font-family:monospace">${v.r2}</td>
+      <td style="font-family:monospace">${v.mae}</td>
+      <td style="font-family:monospace;color:${ac};font-weight:600">${v.accuracy_pct}%</td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML = `
+    <table class="ftbl" style="width:100%">
+      <thead><tr><th>Target</th><th>N</th><th>CV</th><th>R²</th><th>MAE</th><th>Akurasi</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px">
+      Artifact: <code style="background:var(--surface2);padding:1px 5px;border-radius:4px">model/artifacts/mlp_calibration.joblib</code>
+    </div>`;
+}
+
+// ── Tes prediksi acak ────────────────────────────────────────────────────────
+async function calibRunTest() {
+  const msgEl   = document.getElementById('calibTestMsg');
+  const resultsEl = document.getElementById('calibTestResults');
+  const show    = (t, c) => { msgEl.textContent = t; msgEl.style.color = c; msgEl.style.display = ''; };
+
+  resultsEl.style.display = 'none';
+  show('Menjalankan inferensi pada 20 sampel acak…', 'var(--muted)');
+
+  try {
+    const r   = await fetch('/v1/calibrate/predict-test?n=20', { method: 'POST' });
+    const res = await r.json();
+    if (!r.ok) { show(`Gagal: ${res.detail || r.status}`, 'var(--critical)'); return; }
+    show(`✓ ${res.n_tested} sampel diuji`, 'var(--good)');
+    _renderTestResults(res);
+    resultsEl.style.display = '';
+  } catch (e) { show(`Error: ${e.message}`, 'var(--critical)'); }
+}
+
+function _renderTestResults(res) {
+  // Summary per target
+  const sumEl = document.getElementById('calibTestSummary');
+  const LABELS = {
+    gula_darah_mg_dl: 'Gula Darah', kolesterol_mg_dl: 'Kolesterol',
+    asam_urat_mg_dl: 'Asam Urat',   sistolik_mmhg: 'Sistolik',
+    diastolik_mmhg: 'Diastolik',
+  };
+  const sumCards = Object.entries(res.summary).map(([t, s]) => {
+    const ac = s.accuracy_pct >= 90 ? '#22c55e' : s.accuracy_pct >= 75 ? '#f59e0b' : '#ef4444';
+    return `<div style="background:var(--surface2);border-radius:8px;padding:10px 14px;min-width:110px;text-align:center">
+      <div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">${s.label}</div>
+      <div style="font-size:22px;font-weight:700;color:${ac};font-variant-numeric:tabular-nums">${s.accuracy_pct}%</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">MAE ${s.mae} · n=${s.n}</div>
+    </div>`;
+  }).join('');
+  sumEl.innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap">${sumCards}</div>`;
+
+  // Sample table
+  const tbody = document.getElementById('calibTestBody');
+  const fv = v => v != null ? Number(v).toFixed(1) : '—';
+  const fe = (ep) => {
+    if (ep == null) return '<td>—</td>';
+    const c = ep <= 10 ? 'var(--good)' : ep <= 20 ? 'var(--warn)' : 'var(--critical)';
+    return `<td style="color:${c};font-weight:600">${ep}%</td>`;
+  };
+  tbody.innerHTML = res.samples.map((s, i) => {
+    const t = (k) => k === 'asam_urat_mg_dl' ? 2 : 1;
+    const a = (k) => s.actual[k] != null ? Number(s.actual[k]).toFixed(t(k)) : '—';
+    const p = (k) => s.predicted[k] != null ? Number(s.predicted[k]).toFixed(t(k)) : '—';
+    const e = (k) => s.error_pct[k];
+    return `<tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td style="font-weight:600">${s.subject_id}</td>
+      <td>${s.age_years}</td>
+      <td>${s.gender}</td>
+      <td style="color:var(--c1)">${a('gula_darah_mg_dl')}</td><td style="color:var(--c1)">${p('gula_darah_mg_dl')}</td>${fe(e('gula_darah_mg_dl'))}
+      <td style="color:var(--c2)">${a('kolesterol_mg_dl')}</td><td style="color:var(--c2)">${p('kolesterol_mg_dl')}</td>${fe(e('kolesterol_mg_dl'))}
+      <td style="color:var(--c3)">${a('asam_urat_mg_dl')}</td><td style="color:var(--c3)">${p('asam_urat_mg_dl')}</td>${fe(e('asam_urat_mg_dl'))}
+      <td>${a('sistolik_mmhg')}</td><td>${p('sistolik_mmhg')}</td>${fe(e('sistolik_mmhg'))}
+      <td>${a('diastolik_mmhg')}</td><td>${p('diastolik_mmhg')}</td>${fe(e('diastolik_mmhg'))}
+    </tr>`;
+  }).join('');
+}
+
 // ── Regresi linier (placeholder gula darah / kolesterol / asam urat) ──
 function renderLinreg(lr) {
   const tilesEl = document.getElementById('linregTiles');
@@ -1624,7 +1839,7 @@ function tab(name, btn) {
   if (name === 'fw')         fwInit();
   if (name === 'pwa-cfg')    pwaSettingsInit();
   if (name === 'access-log') alConnect();
-  if (name === 'calib')      calibLoad();
+  if (name === 'calib')      { calibLoad(); calibUpdateDemoCount(); }
 }
 
 // ═══════════════════════════════════════════════

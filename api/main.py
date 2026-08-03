@@ -1400,6 +1400,324 @@ def _calib_to_dict(r: models_db.CalibrationRecord) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# /v1/calibrate/generate-demo  — data sintetis realistis untuk uji pipeline
+# ---------------------------------------------------------------------------
+
+@app.post("/v1/calibrate/generate-demo")
+def calibrate_generate_demo(
+    n_rows: int = Query(250, ge=50, le=1000),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Generate data kalibrasi sintetis (multi-subjek, korelasi fisiologis realistis)
+    dan masukkan ke calibration_records dengan device_id='demo-device'."""
+
+    rng = np.random.default_rng(seed=int(time.time()) % (2**31))
+
+    SUBJECTS = [
+        {"id": f"S{i:03d}", "age": int(rng.integers(45, 82)),
+         "gender": "L" if i <= 13 else "P",
+         "dc_base": float(np.clip(rng.normal(145_000, 28_000), 80_000, 210_000))}
+        for i in range(1, 21)
+    ]
+    KONDISI = ["sewaktu", "puasa", "2j_setelah_makan"]
+    rows_each = max(1, n_rows // len(SUBJECTS))
+    inserted = 0
+
+    for s in SUBJECTS:
+        age   = s["age"]
+        gc    = 1.0 if s["gender"] == "L" else 0.0
+        dc_b  = s["dc_base"]
+
+        # Subject-level baseline vitals (individual variation)
+        sis_b = 100.0 + age * 0.70 + gc * 5.0 + float(rng.normal(0, 8))
+        dia_b =  60.0 + age * 0.30 + gc * 3.0 + float(rng.normal(0, 5))
+        bpm_b =  80.0 - age * 0.18               + float(rng.normal(0, 5))
+
+        for _ in range(rows_each):
+            kondisi = str(rng.choice(KONDISI))
+
+            sis = float(np.clip(rng.normal(sis_b, 10), 90, 180))
+            dia = float(np.clip(rng.normal(dia_b,  7), 55, 110))
+            if sis <= dia + 20:
+                sis = dia + 20.0 + float(rng.uniform(5, 15))
+            bpm = float(np.clip(rng.normal(bpm_b,  8), 48, 102))
+
+            if kondisi == "puasa":
+                gula = float(np.clip(rng.normal(85 + age * 0.30, 12), 70, 126))
+            elif kondisi == "2j_setelah_makan":
+                gula = float(np.clip(rng.normal(140 + age * 0.40, 25), 90, 280))
+            else:
+                gula = float(np.clip(rng.normal(105 + age * 0.35, 20), 70, 200))
+
+            kol  = float(np.clip(rng.normal(160 + age * 0.80, 25) + (0 if gc else float(rng.uniform(0, 15))), 130, 290))
+            au   = float(np.clip(rng.normal(6.0 if gc else 4.5, 1.2 if gc else 1.0), 2.0, 9.5))
+
+            # PPG features: IR DC stable per subject; AC p2p driven by pulse pressure
+            ir_dc  = float(np.clip(rng.normal(dc_b, dc_b * 0.03), dc_b * 0.85, dc_b * 1.15))
+            pp     = sis - dia  # pulse pressure 30-70
+            ac_r   = (pp / 40.0) * 0.018 + float(rng.normal(0, 0.003))
+            ir_ac  = float(max(ir_dc * 0.005, ir_dc * max(ac_r, 0.003)))
+            red_dc = float(np.clip(rng.normal(ir_dc * 0.73, ir_dc * 0.025), ir_dc * 0.60, ir_dc * 0.86))
+            red_ac = float(max(ir_ac * 0.3, ir_ac * 0.87 + float(rng.normal(0, ir_ac * 0.05))))
+
+            rec = models_db.CalibrationRecord(
+                device_id        = "demo-device",
+                subject_id       = s["id"],
+                age_years        = float(age),
+                gender           = s["gender"],
+                kondisi          = kondisi,
+                fs_hz            = 200.0,
+                ir_dc_mean       = round(ir_dc, 1),
+                ir_ac_p2p        = round(ir_ac, 1),
+                red_dc_mean      = round(red_dc, 1),
+                red_ac_p2p       = round(red_ac, 1),
+                bpm              = round(bpm, 1),
+                gula_darah_mg_dl = round(gula, 1),
+                kolesterol_mg_dl  = round(kol,  1),
+                asam_urat_mg_dl   = round(au,   2),
+                sistolik_mmhg     = round(sis,  1),
+                diastolik_mmhg    = round(dia,  1),
+            )
+            db.add(rec)
+            inserted += 1
+
+    db.commit()
+    total = db.query(models_db.CalibrationRecord).count()
+    return {"inserted": inserted, "total": total,
+            "message": f"✓ {inserted} rekaman demo berhasil ditambahkan"}
+
+
+@app.post("/v1/calibrate/clear-demo")
+def calibrate_clear_demo(db: Session = Depends(get_db)) -> dict:
+    """Hapus semua rekaman dengan device_id='demo-device'."""
+    deleted = db.query(models_db.CalibrationRecord).filter(
+        models_db.CalibrationRecord.device_id == "demo-device"
+    ).delete(synchronize_session=False)
+    db.commit()
+    total = db.query(models_db.CalibrationRecord).count()
+    return {"deleted": deleted, "total": total}
+
+
+# ---------------------------------------------------------------------------
+# /v1/calibrate/train  — latih MLP inline dari data di DB
+# ---------------------------------------------------------------------------
+
+@app.post("/v1/calibrate/train")
+def calibrate_train(db: Session = Depends(get_db)) -> dict:
+    """Latih model MLP kalibrasi dari calibration_records di DB, simpan artifact."""
+    import pathlib as _pl, json as _json
+    import joblib
+    import pandas as pd
+    from sklearn.metrics import mean_absolute_error, r2_score
+    from sklearn.model_selection import LeaveOneOut, cross_val_predict
+    from sklearn.neural_network import MLPRegressor
+    from sklearn.preprocessing import StandardScaler
+
+    rows = db.query(models_db.CalibrationRecord).all()
+    if not rows:
+        raise HTTPException(status_code=400, detail="Belum ada data kalibrasi")
+
+    FEATURES_T = ["ir_dc_mean", "ir_ac_p2p", "red_dc_mean", "red_ac_p2p",
+                  "bpm", "age_years", "gender_code"]
+    TARGETS_T = {
+        "gula_darah_mg_dl": "Gula Darah (mg/dL)",
+        "kolesterol_mg_dl":  "Kolesterol (mg/dL)",
+        "asam_urat_mg_dl":   "Asam Urat (mg/dL)",
+        "sistolik_mmhg":     "Sistolik (mmHg)",
+        "diastolik_mmhg":    "Diastolik (mmHg)",
+    }
+    MIN_ROWS_T = 10
+
+    records = [
+        {
+            "subject_id":       r.subject_id,
+            "age_years":        r.age_years,
+            "gender":           r.gender,
+            "ir_dc_mean":       r.ir_dc_mean,
+            "ir_ac_p2p":        r.ir_ac_p2p,
+            "red_dc_mean":      r.red_dc_mean,
+            "red_ac_p2p":       r.red_ac_p2p,
+            "bpm":              r.bpm,
+            "gula_darah_mg_dl": r.gula_darah_mg_dl,
+            "kolesterol_mg_dl":  r.kolesterol_mg_dl,
+            "asam_urat_mg_dl":   r.asam_urat_mg_dl,
+            "sistolik_mmhg":     r.sistolik_mmhg,
+            "diastolik_mmhg":    r.diastolik_mmhg,
+        }
+        for r in rows
+    ]
+    df = pd.DataFrame(records)
+    df["gender_code"] = (df["gender"].str.upper() == "L").astype(float)
+    for col in FEATURES_T:
+        if col not in df.columns:
+            df[col] = float("nan")
+    df[FEATURES_T] = df[FEATURES_T].apply(pd.to_numeric, errors="coerce")
+
+    if len(df) < MIN_ROWS_T:
+        raise HTTPException(status_code=400,
+                            detail=f"Data terlalu sedikit ({len(df)}/{MIN_ROWS_T} minimum)")
+
+    all_metrics: dict = {}
+    all_models:  dict = {}
+
+    for target_col, target_label in TARGETS_T.items():
+        sub = df[df[target_col].notna()].copy()
+        sub = sub[sub[FEATURES_T].notna().all(axis=1)]
+        if len(sub) < MIN_ROWS_T:
+            continue
+
+        X = sub[FEATURES_T].values.astype(float)
+        y = sub[target_col].values.astype(float)
+        n = len(y)
+
+        scaler = StandardScaler()
+        Xs = scaler.fit_transform(X)
+        mlp = MLPRegressor(hidden_layer_sizes=(64, 32), activation="relu",
+                           solver="lbfgs", alpha=0.01, max_iter=2000, random_state=42)
+        cv_scheme = LeaveOneOut() if n < 30 else 5
+        y_cv = cross_val_predict(
+            MLPRegressor(hidden_layer_sizes=(64, 32), activation="relu",
+                         solver="lbfgs", alpha=0.01, max_iter=2000, random_state=42),
+            Xs, y, cv=cv_scheme,
+        )
+        mlp.fit(Xs, y)
+
+        mae  = float(mean_absolute_error(y, y_cv))
+        rmse = float(np.sqrt(np.mean((y - y_cv) ** 2)))
+        r2   = float(r2_score(y, y_cv))
+        pct_err = float(np.mean(np.abs(y - y_cv) / np.maximum(np.abs(y), 1e-9)) * 100)
+        acc  = round(100 - pct_err, 2)
+
+        all_models[target_col] = {"scaler": scaler, "mlp": mlp, "features": FEATURES_T}
+        all_metrics[target_col] = {
+            "label": target_label, "n": n,
+            "cv": "LOO" if n < 30 else "5-fold",
+            "mae": round(mae, 2), "rmse": round(rmse, 2),
+            "r2": round(r2, 4),
+            "mean_pct_error": round(pct_err, 2),
+            "accuracy_pct": acc,
+        }
+
+    if not all_models:
+        raise HTTPException(status_code=400,
+                            detail="Tidak ada target yang cukup datanya untuk dilatih")
+
+    artifact_dir = _pl.Path(__file__).resolve().parent.parent / "model" / "artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    artifact_path = artifact_dir / "mlp_calibration.joblib"
+    metrics_path  = artifact_dir / "mlp_calibration_metrics.json"
+
+    joblib.dump(all_models, artifact_path)
+    metrics_path.write_text(_json.dumps(all_metrics, indent=2, ensure_ascii=False))
+
+    # Invalidate lru_cache di ml_calibration.py agar prediksi berikutnya pakai model baru
+    try:
+        from api.ml_calibration import _load_artifact
+        _load_artifact.cache_clear()
+    except Exception:
+        pass
+
+    return {"success": True, "metrics": all_metrics,
+            "models_trained": list(all_models.keys()),
+            "n_total": len(df)}
+
+
+# ---------------------------------------------------------------------------
+# /v1/calibrate/predict-test  — uji prediksi pada sampel acak dari DB
+# ---------------------------------------------------------------------------
+
+@app.post("/v1/calibrate/predict-test")
+def calibrate_predict_test(
+    n: int = Query(20, ge=5, le=200),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Ambil n rekaman acak dari DB (dengan ground truth), jalankan inferensi MLP,
+    kembalikan perbandingan prediksi vs referensi per sampel dan per target."""
+    from api.ml_calibration import is_calibration_model_available, predict_vitals
+
+    if not is_calibration_model_available():
+        raise HTTPException(status_code=400,
+                            detail="Model belum dilatih — klik 'Jalankan Training' dulu")
+
+    rows = (
+        db.query(models_db.CalibrationRecord)
+        .filter(
+            models_db.CalibrationRecord.ir_dc_mean.isnot(None),
+            models_db.CalibrationRecord.bpm.isnot(None),
+        )
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status_code=400, detail="Belum ada rekaman dengan fitur PPG lengkap")
+
+    rng = np.random.default_rng()
+    idx = rng.choice(len(rows), size=min(n, len(rows)), replace=False)
+    sampled = [rows[int(i)] for i in idx]
+
+    TARGETS_T = ["gula_darah_mg_dl", "kolesterol_mg_dl", "asam_urat_mg_dl",
+                 "sistolik_mmhg", "diastolik_mmhg"]
+    target_errs: dict[str, list[float]] = {t: [] for t in TARGETS_T}
+    target_abs:  dict[str, list[float]] = {t: [] for t in TARGETS_T}
+
+    results = []
+    for rec in sampled:
+        try:
+            pred = predict_vitals(
+                ir_dc_mean  = float(rec.ir_dc_mean),
+                ir_ac_p2p   = float(rec.ir_ac_p2p or 0),
+                red_dc_mean = float(rec.red_dc_mean or 0),
+                red_ac_p2p  = float(rec.red_ac_p2p or 0),
+                bpm         = float(rec.bpm),
+                age_years   = float(rec.age_years),
+                gender_code = 1.0 if rec.gender == "L" else 0.0,
+            )
+        except Exception:
+            continue
+
+        row: dict = {
+            "id": rec.id, "subject_id": rec.subject_id,
+            "age_years": rec.age_years, "gender": rec.gender,
+            "predicted": {}, "actual": {}, "error_pct": {},
+        }
+        for t in TARGETS_T:
+            actual_val = getattr(rec, t, None)
+            pred_val   = pred.get(t)
+            if actual_val is None or pred_val is None:
+                continue
+            a  = float(actual_val)
+            p  = float(pred_val)
+            ep = abs(a - p) / max(abs(a), 1e-9) * 100
+            ae = abs(a - p)
+            row["actual"][t]    = round(a,  1)
+            row["predicted"][t] = round(p,  1)
+            row["error_pct"][t] = round(ep, 1)
+            target_errs[t].append(ep)
+            target_abs[t].append(ae)
+        results.append(row)
+
+    LABELS = {
+        "gula_darah_mg_dl": "Gula Darah", "kolesterol_mg_dl": "Kolesterol",
+        "asam_urat_mg_dl": "Asam Urat",   "sistolik_mmhg": "Sistolik",
+        "diastolik_mmhg": "Diastolik",
+    }
+    summary = {}
+    for t in TARGETS_T:
+        errs = target_errs[t]
+        abs_e = target_abs[t]
+        if not errs:
+            continue
+        summary[t] = {
+            "label": LABELS[t],
+            "n": len(errs),
+            "mean_error_pct": round(float(np.mean(errs)), 1),
+            "accuracy_pct":   round(100 - float(np.mean(errs)), 1),
+            "mae": round(float(np.mean(abs_e)), 2),
+        }
+
+    return {"samples": results, "summary": summary, "n_tested": len(results)}
+
+
+# ---------------------------------------------------------------------------
 # /serial — monitor port serial firmware via WebSocket
 # ---------------------------------------------------------------------------
 
