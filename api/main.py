@@ -825,6 +825,28 @@ def list_devices() -> list[str]:
     return ingest_buffer.list_devices()
 
 
+@app.get("/v1/devices/{device_id}/check")
+def check_device_exists(device_id: str, db: Session = Depends(get_db)) -> dict:
+    """Cek apakah perangkat dengan device_id ini pernah mengirim data ke server.
+
+    Dua sumber diperiksa:
+    - Buffer in-memory: device mengirim data sejak server terakhir start.
+    - Tabel users: device sudah pernah di-pair (data historis di DB).
+
+    Mobile app memanggil ini sebelum /device/pair untuk memastikan device nyata.
+    """
+    in_buffer = device_id in ingest_buffer.list_devices()
+    if in_buffer:
+        return {"found": True}
+
+    in_db = (
+        db.query(models_db.User)
+        .filter(models_db.User.device_key == device_id)
+        .first()
+    ) is not None
+    return {"found": in_db}
+
+
 @app.get("/v1/ingest/latest")
 def ingest_latest_dashboard(
     device_id: str,
