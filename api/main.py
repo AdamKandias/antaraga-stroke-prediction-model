@@ -857,7 +857,9 @@ def ingest_latest_dashboard(
     raw → PWA → MLP → XGBoost. Dipakai oleh /dashboard."""
     batches = ingest_buffer.get_window_s(device_id, window_s)
     if not batches:
-        raise HTTPException(status_code=404, detail=f"Belum ada data dari device '{device_id}'")
+        # Kembalikan 200 (bukan 404) agar log tidak penuh "error" untuk kondisi normal
+        # (device belum kirim data / buffer habis masa).  Dashboard cek has_data: false.
+        return {"has_data": False, "device_id": device_id}
 
     latest  = batches[-1]
     fs_ppg  = int(latest.get("fs_ppg", 200))

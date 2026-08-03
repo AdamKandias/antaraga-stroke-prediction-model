@@ -1036,11 +1036,13 @@ async function poll() {
   if (!devId) return;
   try {
     const r = await fetch(`/v1/ingest/latest?device_id=${encodeURIComponent(devId)}&window_s=${winS}`);
-    if (!r.ok) {
-      setStatus('err', r.status === 404 ? `Belum ada data dari "${devId}"` : `HTTP ${r.status}`);
+    if (!r.ok) { setStatus('err', `HTTP ${r.status}`); return; }
+    const d = await r.json();
+    if (d.has_data === false) {
+      setStatus('err', `Belum ada data dari "${devId}"`);
       return;
     }
-    updateAll(await r.json());
+    updateAll(d);
   } catch (e) {
     setStatus('err', 'Server tidak terjangkau');
   }
