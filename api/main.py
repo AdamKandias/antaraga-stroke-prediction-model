@@ -783,12 +783,29 @@ def ingest_firmware_batch(
     result = predict_stroke_risk(features)
 
     # --- Simpan reading -------------------------------------------------
+    # BPM ikut disimpan — kolom heart_rate_bpm sudah ada di VitalReading tapi
+    # sebelumnya tidak pernah diisi, sehingga kartu "Detak Jantung" di mobile
+    # app selamanya menampilkan "--".
+    _hr = vitals.get("heart_rate_bpm")
+    if _hr is None:
+        try:
+            from api.ppg_analysis import bpm_autocorr
+            if batch.ir:
+                _raw, _cf = bpm_autocorr(
+                    np.array([float(v) for v in batch.ir], dtype=float),
+                    float(batch.fs_max or 400),
+                )
+                _hr = bpm_filter.filter_bpm(batch.id, _raw, _cf)["bpm"]
+        except Exception:
+            _hr = None
+
     record_vital_reading(
         db,
         profile.id,
         systolic_bp=vitals.get("systolic_bp_mmhg", 120.0),
         diastolic_bp=vitals.get("diastolic_bp_mmhg"),
         blood_glucose_mg_dl=vitals.get("blood_glucose_mg_dl", 100.0),
+        heart_rate_bpm=_hr,
     )
 
     latency_ms = (time.perf_counter() - start) * 1000
@@ -1189,6 +1206,10 @@ def _compute_mlp(ppg: list, red: list, ir: list, fs_ppg: int) -> dict:
             out["calib_vitals"] = calib_vitals
             out["risk_flags"]   = compute_risk_flags_from_vitals(calib_vitals)
             out["available"]    = True
+            out["source"]       = "mlp_calibration.joblib"
+            # Pesan "belum dilatih" dari model lama menyesatkan begitu MLP
+            # kalibrasi berhasil — buang supaya UI tidak menampilkan keduanya.
+            out.pop("message", None)
         except Exception:
             out.setdefault("risk_flags", [])
     else:
