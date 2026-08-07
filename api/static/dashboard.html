@@ -1255,7 +1255,26 @@ function renderPwa(p, analysis) {
     const bpmI = ai.bpm, confI = ai.conf ?? 0;
     const colR = confColor(confR), colI = confColorIr(confI);
 
+    // BPM siap-tampil: sudah lolos filter lonjakan + tahan nilai terakhir
+    const bd = (d && d.bpm_display) || {};
+    const bdHeld = bd.held === true;
+    const bdCol  = bd.bpm == null ? '#888' : (bdHeld ? '#e0a020' : 'var(--good)');
+    const bdNote = {
+      OK: 'pembacaan baru', OKTAF_DIKOREKSI: 'oktaf dikoreksi',
+      DITAHAN_LONJAKAN: 'lonjakan ditahan', DITAHAN_DERAU: 'sinyal berderau',
+      DITAHAN_KOSONG: 'sinyal hilang', KEDALUWARSA: 'terlalu lama — dilepas',
+      MENUNGGU: 'menunggu sinyal',
+    }[bd.status] || '—';
+
     tilesEl.innerHTML = `<div class="tiles" style="margin-bottom:12px">
+      <div class="tile" style="border-color:${bdHeld ? 'rgba(224,160,32,.45)' : 'rgba(58,190,120,.35)'}">
+        <div class="lbl">BPM · Tersaring${bdHeld ? ' <span style="color:#e0a020">· ditahan</span>' : ''}</div>
+        <div class="val" style="font-size:40px;color:${bdCol};${bdHeld ? 'opacity:.75' : ''}">${bd.bpm != null ? Number(bd.bpm).toFixed(1) : '—'}</div>
+        <div class="unit" style="color:${bdCol}">${bdNote}</div>
+        <div class="unit" style="font-size:10px;opacity:.6;margin-top:2px">
+          mentah ${bd.raw != null ? Number(bd.raw).toFixed(1) : '—'} · sumber ${bd.source || '—'}
+        </div>
+      </div>
       <div class="tile" style="border-color:rgba(230,103,103,.3)">
         <div class="lbl">BPM · Merah 660 nm</div>
         <div class="val" style="font-size:40px;color:${colR}">${bpmR != null ? bpmR.toFixed(1) : '—'}</div>

@@ -900,8 +900,26 @@ def ingest_latest_dashboard(
     # --- Analisis plotter: buang baseline + BPM autokorelasi (ketiga kanal) ---
     stage_analysis = _compute_ppg_analysis(all_ppg, all_red, all_ir, fs_ppg, fs_max)
 
+    # --- BPM siap-tampil: disaring dari lonjakan + tahan nilai terakhir ------
+    # Kanal IR dipakai sebagai sumber utama (perfusinya paling stabil), merah
+    # sebagai cadangan.  Kanal hijau TIDAK dipakai di sini: sambungan antar-batch
+    # membuatnya mengunci di 1 Hz (≈60 bpm) — lihat catatan di ppg_analysis.py.
+    _ir_a, _red_a = stage_analysis.get("ir", {}), stage_analysis.get("red", {})
+    _src_bpm, _src_conf, _src_name = _ir_a.get("bpm"), _ir_a.get("conf", 0.0), "ir"
+    if _src_bpm is None or _src_conf < 0.30:
+        if _red_a.get("bpm") is not None and _red_a.get("conf", 0.0) >= _src_conf:
+            _src_bpm, _src_conf, _src_name = _red_a["bpm"], _red_a.get("conf", 0.0), "red"
+
+    from api.bpm_filter import filter_bpm
+    stage_bpm_display = {
+        **filter_bpm(device_id, _src_bpm, _src_conf),
+        "source": _src_name,
+        "conf": round(float(_src_conf), 3),
+    }
+
     return {
         "device_id": device_id,
+        "bpm_display": stage_bpm_display,
         "seq": latest.get("seq", 0),
         "received_at": latest.get("_received_at", ""),
         "batt_pct": latest.get("batt_pct", 0),
@@ -1185,7 +1203,14 @@ def calibrate_create(
     from api.ppg_analysis import channel_stats, bpm_autocorr
     ir_st  = channel_stats(all_ir,  fs_max, "ir")
     red_st = channel_stats(all_red, fs_max, "red")
-    bpm_val, _ = bpm_autocorr(np.array(all_ir, dtype=float), fs_max) if all_ir else (None, 0.0)
+    bpm_raw, bpm_conf = bpm_autocorr(np.array(all_ir, dtype=float), fs_max) if all_ir else (None, 0.0)
+
+    # Saring sebelum disimpan.  Rekaman kalibrasi adalah SATU cuplikan — bila
+    # cuplikan itu kebetulan jatuh saat octave error, baris latihnya tercemar
+    # permanen.  Dengan dataset sekecil ini, satu baris rusak = 20% data.
+    from api.bpm_filter import filter_bpm
+    _bpm_f  = filter_bpm(device_id, bpm_raw, bpm_conf)
+    bpm_val = _bpm_f["bpm"] if _bpm_f["bpm"] is not None else bpm_raw
 
     def _join(arr: list) -> str:
         return ";".join(str(round(v)) for v in arr)
@@ -1420,12 +1445,25 @@ def calibrate_generate_demo(
 
     rng = np.random.default_rng(seed=int(time.time()) % (2**31))
 
-    SUBJECTS = [
-        {"id": f"S{i:03d}", "age": int(rng.integers(45, 82)),
-         "gender": "L" if i <= 13 else "P",
-         "dc_base": float(np.clip(rng.normal(145_000, 28_000), 80_000, 210_000))}
-        for i in range(1, 21)
-    ]
+    # Awalan "DEMO-" wajib: subjek asli memakai S001, S002, ... — tanpa awalan
+    # keduanya bertabrakan dan pengelompokan CV per-subjek menganggapnya orang
+    # yang sama.
+    #
+    # Komposisi usia sengaja dibentangkan 20–82 th dan tiap kelompok usia diberi
+    # subjek sehat MAUPUN berisiko.  Kalau semua subjek tua sekaligus sakit,
+    # usia berkonfounding dengan seluruh target dan model hanya belajar umur,
+    # bukan sinyal PPG.
+    _AGE_BANDS = [(20, 35), (35, 50), (50, 65), (65, 82)]
+    SUBJECTS = []
+    for i in range(1, 21):
+        lo, hi = _AGE_BANDS[(i - 1) % 4]           # rata di keempat rentang usia
+        SUBJECTS.append({
+            "id":      f"DEMO-S{i:03d}",
+            "age":     int(rng.integers(lo, hi)),
+            "gender":  "L" if i % 2 else "P",       # 10 L / 10 P
+            "sehat":   (i % 2 == 0),                # 50% sehat di TIAP rentang usia
+            "dc_base": float(np.clip(rng.normal(145_000, 28_000), 80_000, 210_000)),
+        })
     KONDISI = ["sewaktu", "puasa", "2j_setelah_makan"]
     rows_each = max(1, n_rows // len(SUBJECTS))
     inserted = 0
@@ -1435,10 +1473,16 @@ def calibrate_generate_demo(
         gc    = 1.0 if s["gender"] == "L" else 0.0
         dc_b  = s["dc_base"]
 
+        # Status sehat/berisiko dipilih BEBAS dari usia (lihat _AGE_BANDS di atas),
+        # jadi ada lansia bertekanan normal dan orang muda bertekanan tinggi.
+        # Inilah yang memaksa model membaca sinyal PPG, bukan sekadar menghafal umur.
+        sehat = s["sehat"]
+        risk  = 0.0 if sehat else 1.0
+
         # Subject-level baseline vitals (individual variation)
-        sis_b = 100.0 + age * 0.70 + gc * 5.0 + float(rng.normal(0, 8))
-        dia_b =  60.0 + age * 0.30 + gc * 3.0 + float(rng.normal(0, 5))
-        bpm_b =  80.0 - age * 0.18               + float(rng.normal(0, 5))
+        sis_b = 100.0 + age * 0.35 + gc * 5.0 + risk * 26.0 + float(rng.normal(0, 8))
+        dia_b =  60.0 + age * 0.15 + gc * 3.0 + risk * 14.0 + float(rng.normal(0, 5))
+        bpm_b =  80.0 - age * 0.18                          + float(rng.normal(0, 5))
 
         for _ in range(rows_each):
             kondisi = str(rng.choice(KONDISI))
@@ -1450,14 +1494,18 @@ def calibrate_generate_demo(
             bpm = float(np.clip(rng.normal(bpm_b,  8), 48, 102))
 
             if kondisi == "puasa":
-                gula = float(np.clip(rng.normal(85 + age * 0.30, 12), 70, 126))
+                gula = float(np.clip(rng.normal(85 + age * 0.15 + risk * 22, 12), 70, 126))
             elif kondisi == "2j_setelah_makan":
-                gula = float(np.clip(rng.normal(140 + age * 0.40, 25), 90, 280))
+                gula = float(np.clip(rng.normal(130 + age * 0.20 + risk * 45, 25), 90, 280))
             else:
-                gula = float(np.clip(rng.normal(105 + age * 0.35, 20), 70, 200))
+                gula = float(np.clip(rng.normal(100 + age * 0.18 + risk * 32, 20), 70, 200))
 
-            kol  = float(np.clip(rng.normal(160 + age * 0.80, 25) + (0 if gc else float(rng.uniform(0, 15))), 130, 290))
-            au   = float(np.clip(rng.normal(6.0 if gc else 4.5, 1.2 if gc else 1.0), 2.0, 9.5))
+            # Sehat → 150–199 (normal), berisiko → 200+ .  Data asli saat ini
+            # 5/5 di atas 200, jadi kelompok normal ini yang belum terwakili.
+            kol  = float(np.clip(rng.normal(168 + age * 0.30 + risk * 48, 22)
+                                 + (0 if gc else float(rng.uniform(0, 15))), 130, 290))
+            au   = float(np.clip(rng.normal((5.6 if gc else 4.2) + risk * 1.1,
+                                            1.2 if gc else 1.0), 2.0, 9.5))
 
             # PPG features: IR DC stable per subject; AC p2p driven by pulse pressure
             ir_dc  = float(np.clip(rng.normal(dc_b, dc_b * 0.03), dc_b * 0.85, dc_b * 1.15))
@@ -1524,7 +1572,9 @@ def calibrate_train(
     import joblib
     import pandas as pd
     from sklearn.metrics import mean_absolute_error, r2_score
-    from sklearn.model_selection import LeaveOneOut, cross_val_predict
+    from sklearn.model_selection import (
+        GroupKFold, LeaveOneGroupOut, LeaveOneOut, cross_val_predict,
+    )
     from sklearn.neural_network import MLPRegressor
     from sklearn.preprocessing import StandardScaler
 
@@ -1547,7 +1597,10 @@ def calibrate_train(
         "sistolik_mmhg":     "Sistolik (mmHg)",
         "diastolik_mmhg":    "Diastolik (mmHg)",
     }
-    MIN_ROWS_T = 10
+    # 5 = batas bawah teknis (LOO butuh minimal 3, di bawah 5 tidak ada sisa
+    # untuk diuji sama sekali).  Metrik di bawah 30 subjek TIDAK bermakna —
+    # lihat field "reliability" pada tiap target.
+    MIN_ROWS_T = 5
 
     records = [
         {
@@ -1593,26 +1646,47 @@ def calibrate_train(
         X = sub[FEATURES_T].values.astype(float)
         y = sub[target_col].values.astype(float)
         n = len(y)
+        groups  = sub["subject_id"].values
+        n_subj  = int(sub["subject_id"].nunique())
 
         scaler = StandardScaler()
         Xs = scaler.fit_transform(X)
 
-        # lbfgs untuk dataset kecil (<30), adam+early_stopping untuk yang lebih besar
-        if n < 30:
-            _mlp_kwargs = dict(hidden_layer_sizes=(64, 32), activation="relu",
-                               solver="lbfgs", alpha=0.01, max_iter=3000, random_state=42)
+        # Kapasitas model diskalakan ke jumlah data.  MLP (64,32) = 2.625 parameter;
+        # memaksakannya ke 5 baris hanya menghasilkan hafalan, bukan model.
+        if n < 10:
+            # ~37 parameter + alpha besar → praktis mendekati regresi teregularisasi
+            _mlp_kwargs = dict(hidden_layer_sizes=(4,), activation="relu",
+                               solver="lbfgs", alpha=1.0, max_iter=5000, random_state=42)
+        elif n < 30:
+            _mlp_kwargs = dict(hidden_layer_sizes=(16, 8), activation="relu",
+                               solver="lbfgs", alpha=0.1, max_iter=3000, random_state=42)
         else:
             _mlp_kwargs = dict(hidden_layer_sizes=(64, 32), activation="relu",
                                solver="adam", alpha=0.01, max_iter=500, random_state=42,
                                learning_rate_init=0.01, early_stopping=True,
                                n_iter_no_change=15, validation_fraction=0.1)
 
-        cv_scheme = LeaveOneOut() if n < 30 else 5
+        # Skema CV: bila satu subjek punya >1 rekaman, kelompokkan per subjek.
+        # Tanpa ini, rekaman orang yang sama masuk ke data latih DAN data uji —
+        # metrik jadi optimistis palsu (leakage), model terlihat akurat padahal menghafal.
+        cv_groups = None
+        if n_subj < n and n_subj >= 2:
+            if n_subj >= 5:
+                cv_scheme, cv_label = GroupKFold(n_splits=min(5, n_subj)), f"GroupKFold/subjek"
+            else:
+                cv_scheme, cv_label = LeaveOneGroupOut(), "LOGO/subjek"
+            cv_groups = groups
+        elif n < 30:
+            cv_scheme, cv_label = LeaveOneOut(), "LOO"
+        else:
+            cv_scheme, cv_label = 5, "5-fold"
 
         import warnings as _w
         with _w.catch_warnings():
             _w.simplefilter("ignore")
-            y_cv = cross_val_predict(MLPRegressor(**_mlp_kwargs), Xs, y, cv=cv_scheme)
+            y_cv = cross_val_predict(MLPRegressor(**_mlp_kwargs), Xs, y,
+                                     cv=cv_scheme, groups=cv_groups)
             mlp = MLPRegressor(**_mlp_kwargs)
             mlp.fit(Xs, y)
 
@@ -1622,10 +1696,29 @@ def calibrate_train(
         pct_err = float(np.mean(np.abs(y - y_cv) / np.maximum(np.abs(y), 1e-9)) * 100)
         acc  = round(100 - pct_err, 2)
 
+        # Status keterandalan — dilaporkan apa adanya agar angka di bawah ini
+        # tidak dibaca sebagai validasi alat.
+        if n_subj < 10:
+            reliability = "TIDAK VALID"
+            reliability_note = (
+                f"Hanya {n_subj} subjek. Metrik di bawah ini hasil undian sampel, "
+                "bukan ukuran akurasi alat. Butuh ≥30 subjek agar bermakna."
+            )
+        elif n_subj < 30:
+            reliability = "LEMAH"
+            reliability_note = (
+                f"{n_subj} subjek — metrik masih sangat goyah. "
+                "Target ≥30 subjek untuk angka yang bisa dipertanggungjawabkan."
+            )
+        else:
+            reliability = "MEMADAI"
+            reliability_note = f"{n_subj} subjek — metrik dapat dilaporkan."
+
         all_models[target_col] = {"scaler": scaler, "mlp": mlp, "features": FEATURES_T}
         all_metrics[target_col] = {
-            "label": target_label, "n": n,
-            "cv": "LOO" if n < 30 else "5-fold",
+            "label": target_label, "n": n, "n_subjects": n_subj,
+            "reliability": reliability, "reliability_note": reliability_note,
+            "cv": cv_label,
             "mae": round(mae, 2), "rmse": round(rmse, 2),
             "r2": round(r2, 4),
             "mean_pct_error": round(pct_err, 2),
