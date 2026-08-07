@@ -97,7 +97,11 @@ def compute_risk_flags_from_vitals(vitals: dict[str, float]) -> list[str]:
     sistolik = vitals.get("sistolik_mmhg")
     diastolik = vitals.get("diastolik_mmhg")
     if sistolik is not None and (sistolik >= 140 or (diastolik is not None and diastolik >= 90)):
-        flags.append(f"Tekanan darah tinggi ({sistolik:.0f}/{diastolik:.0f if diastolik else '?'} mmHg)")
+        # Format diastolik disiapkan terpisah: menaruh kondisional di dalam
+        # format-spec f-string ("{d:.0f if d else '?'}") bukan sintaks yang sah
+        # dan melempar ValueError saat dijalankan.
+        dia_txt = f"{diastolik:.0f}" if diastolik is not None else "?"
+        flags.append(f"Tekanan darah tinggi ({sistolik:.0f}/{dia_txt} mmHg)")
 
     gula = vitals.get("gula_darah_mg_dl")
     if gula is not None and gula > 200:

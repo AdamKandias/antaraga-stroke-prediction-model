@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session
 
-from api import ingest_buffer, models_db, schemas
+from api import bpm_filter, ingest_buffer, models_db, schemas
 from api.auth import create_access_token, get_current_user_id, get_ingest_user_id
 from api.config import DEV_MODE
 from api.firmware import router as firmware_router
@@ -711,7 +711,52 @@ def ingest_firmware_batch(
             pass  # model belum dilatih atau sinyal terlalu pendek
 
     if not vitals:
-        # MLP belum tersedia: ambil vital terakhir yang sudah ada di DB
+        # Jatuh ke MLP KALIBRASI (mlp_calibration.joblib) — model yang dilatih
+        # lewat tab Kalibrasi.  Tanpa cabang ini, model hasil latihan tidak
+        # pernah terpakai di alur ingest: ml_vitals mencari artefak lain
+        # (ppg_vitals_model.joblib) yang belum tentu ada, sehingga vitals tetap
+        # kosong dan seluruh tahap hilir (XGBoost, simpan reading, FCM) dilewati.
+        #
+        # Usia dan jenis kelamin diambil dari PROFIL yang di-pair via mobile app,
+        # bukan nilai bawaan — keduanya fitur masukan model.
+        from api.ml_calibration import is_calibration_model_available, predict_vitals
+        if is_calibration_model_available() and batch.ir and batch.red:
+            try:
+                from api.ppg_analysis import bpm_autocorr, channel_stats
+                fs_m   = float(batch.fs_max or 400)
+                ir_f   = [float(v) for v in batch.ir]
+                red_f  = [float(v) for v in batch.red]
+                ir_st  = channel_stats(ir_f,  fs_m, "ir")
+                red_st = channel_stats(red_f, fs_m, "red")
+
+                bpm_raw, bpm_conf = bpm_autocorr(np.array(ir_f, dtype=float), fs_m)
+                bpm_use = bpm_filter.filter_bpm(batch.id, bpm_raw, bpm_conf)["bpm"] or bpm_raw or 70.0
+
+                gender_code = {"L": 1.0, "M": 1.0, "P": 0.0, "F": 0.0}.get(
+                    str(getattr(profile, "gender", "") or "").strip().upper()[:1], 0.5
+                )
+                cv = predict_vitals(
+                    ir_dc_mean  = ir_st.get("dc") or 0.0,
+                    ir_ac_p2p   = ir_st.get("ac_p2p") or 0.0,
+                    red_dc_mean = red_st.get("dc") or 0.0,
+                    red_ac_p2p  = red_st.get("ac_p2p") or 0.0,
+                    bpm         = bpm_use,
+                    age_years   = age_from_birthday(profile.birthday) or 60.0,
+                    gender_code = gender_code,
+                )
+                # Petakan ke nama kolom yang dipakai tahap hilir
+                if cv.get("sistolik_mmhg") is not None:
+                    vitals["systolic_bp_mmhg"] = cv["sistolik_mmhg"]
+                if cv.get("diastolik_mmhg") is not None:
+                    vitals["diastolic_bp_mmhg"] = cv["diastolik_mmhg"]
+                if cv.get("gula_darah_mg_dl") is not None:
+                    vitals["blood_glucose_mg_dl"] = cv["gula_darah_mg_dl"]
+                vitals.update({k: v for k, v in cv.items() if k not in vitals})
+            except Exception as exc:
+                logger.warning("[INGEST] MLP kalibrasi gagal untuk %s: %s", batch.id, exc)
+
+    if not vitals:
+        # Masih kosong: ambil vital terakhir yang sudah ada di DB
         last = (
             db.query(models_db.VitalReading)
             .filter(models_db.VitalReading.profile_id == profile.id)
