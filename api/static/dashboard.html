@@ -207,6 +207,11 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
     </select>
     <input id="devIn" type="text" placeholder="atau ketik DEVICE_ID" />
     <button class="btn" onclick="connect()">Hubungkan</button>
+    <button class="btn-sec" id="simBtn" onclick="simToggle()"
+            title="Kirim data sensor sintetis ke pipeline yang sama dengan perangkat asli">
+      🔌 Aktifkan Demo Hardware
+    </button>
+    <span id="simInfo" style="font-size:11px;color:var(--muted)"></span>
   </div>
 </header>
 
@@ -1017,6 +1022,56 @@ function setWin(s, btn) {
   btn.classList.add('on');
   if (devId) poll();
 }
+
+// ── Simulator perangkat keras ───────────────────────────────────────────────
+const SIM_DEV = 'antaraga-demo';
+let _simOn = false;
+
+function _simRender(st) {
+  _simOn = !!(st && st.running);
+  const btn  = document.getElementById('simBtn');
+  const info = document.getElementById('simInfo');
+  if (!btn) return;
+  btn.textContent = _simOn ? '⏹ Matikan Demo Hardware' : '🔌 Aktifkan Demo Hardware';
+  btn.className   = _simOn ? 'btn btn-ok' : 'btn-sec';
+  if (info) {
+    info.textContent = _simOn
+      ? `▶ ${st.device_id} · ${st.batches_sent} batch · ${st.bpm} bpm`
+      : '';
+    info.style.color = st && st.last_error ? 'var(--critical)' : 'var(--muted)';
+    if (st && st.last_error) info.textContent = `⚠ ${st.last_error}`;
+  }
+}
+
+async function simToggle() {
+  const btn = document.getElementById('simBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Memproses…'; }
+  try {
+    const url = _simOn ? '/v1/sim/stop'
+                       : `/v1/sim/start?device_id=${encodeURIComponent(SIM_DEV)}&bpm=78`;
+    const { ok, data } = await _safeJson(await fetch(url, { method: 'POST' }));
+    if (!ok) { alert(`Gagal: ${data.detail || 'tidak diketahui'}`); return; }
+    _simRender(data);
+    // Baru dinyalakan → langsung sambungkan dashboard ke perangkat virtual
+    if (data.running) {
+      document.getElementById('devIn').value = data.device_id;
+      setTimeout(() => connect(), 1200);   // beri jeda 1 batch pertama terkirim
+    }
+  } catch (e) {
+    alert(`Error: ${e.message}`);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function simPoll() {
+  try {
+    const r = await fetch('/v1/sim/status');
+    if (r.ok) _simRender(await r.json());
+  } catch {}
+}
+setInterval(simPoll, 3000);
+simPoll();
 
 function connect() {
   const v = (document.getElementById('devIn').value || document.getElementById('devSel').value).trim();

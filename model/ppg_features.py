@@ -27,6 +27,14 @@ MAX_HEART_RATE_BPM = 200
 _HR_BAND_LO = 0.67
 _HR_BAND_HI = 3.33
 
+# Sub-harmonic (octave) guard.  A PPG pulse has a sharp systolic upstroke, so
+# its 2nd harmonic often carries MORE power than the fundamental: for 78 BPM
+# (1.3 Hz) the harmonic sits at 2.6 Hz = 156 BPM, still inside the band above.
+# A plain argmax then reports double the true rate.  If the half-frequency bin
+# holds at least this fraction of the dominant's power, treat the dominant as
+# the harmonic and take the half-frequency as the fundamental.
+_SUBHARMONIC_MIN_RATIO = 0.25
+
 
 @dataclass
 class PulseEvent:
@@ -60,7 +68,37 @@ def bpm_from_spectrum(filtered: np.ndarray, fs: float) -> float | None:
     band = (freqs >= _HR_BAND_LO) & (freqs <= _HR_BAND_HI)
     if not band.any():
         return None
-    dominant_hz = freqs[band][np.argmax(psd[band])]
+
+    bf, bp = freqs[band], psd[band]
+    k = int(np.argmax(bp))
+
+    # --- Octave guard: is the peak actually the 2nd harmonic? --------------
+    half_hz = bf[k] / 2.0
+    if half_hz >= _HR_BAND_LO:
+        # Welch bins are coarse (fs/nperseg), so search a small neighbourhood
+        # around the half-frequency rather than trusting one exact bin.
+        j = int(np.argmin(np.abs(bf - half_hz)))
+        lo, hi = max(0, j - 1), min(len(bp), j + 2)
+        j = lo + int(np.argmax(bp[lo:hi]))
+        if bp[j] >= _SUBHARMONIC_MIN_RATIO * bp[k]:
+            k = j
+
+    # --- Parabolic interpolation ------------------------------------------
+    # Bin width is fs/nperseg — at 400 Hz over 8 s that is 0.125 Hz = 7.5 BPM.
+    # Fitting a parabola across the peak and its neighbours recovers sub-bin
+    # resolution, so the reported rate is not quantised to 7.5 BPM steps.
+    if 0 < k < len(bp) - 1:
+        y0, y1, y2 = float(bp[k - 1]), float(bp[k]), float(bp[k + 1])
+        den = y0 - 2.0 * y1 + y2
+        frac = 0.5 * (y0 - y2) / den if den < -1e-20 else 0.0
+        frac = max(-0.5, min(0.5, frac))
+    else:
+        frac = 0.0
+
+    bin_hz = float(bf[1] - bf[0]) if len(bf) > 1 else 0.0
+    dominant_hz = float(bf[k]) + frac * bin_hz
+    if not (_HR_BAND_LO <= dominant_hz <= _HR_BAND_HI):
+        return None
     return float(dominant_hz * 60.0)
 
 

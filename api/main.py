@@ -508,6 +508,37 @@ def estimate_vitals_from_ppg(
     return response
 
 
+# ---------------------------------------------------------------------------
+# /v1/sim — simulator perangkat keras (uji alur ujung-ke-ujung tanpa alat)
+# ---------------------------------------------------------------------------
+
+@app.post("/v1/sim/start")
+async def sim_start(
+    device_id: str = Query("antaraga-demo", description="ID perangkat virtual"),
+    bpm: float = Query(78.0, ge=45, le=150, description="Detak awal simulasi"),
+) -> dict:
+    """Nyalakan simulator: batch PPG sintetis dikirim tiap detik ke /v1/ingest.
+
+    Alur hilirnya identik dengan perangkat asli — MLP vital, XGBoost risiko,
+    penyimpanan reading, sampai notifikasi FCM ke mobile app.
+    """
+    from api import hw_simulator
+    return await hw_simulator.start(device_id, bpm)
+
+
+@app.post("/v1/sim/stop")
+async def sim_stop() -> dict:
+    """Matikan simulator."""
+    from api import hw_simulator
+    return await hw_simulator.stop()
+
+
+@app.get("/v1/sim/status")
+def sim_status() -> dict:
+    from api import hw_simulator
+    return hw_simulator.get_state()
+
+
 @app.get("/v1/access-log")
 def access_log(lines: int = 500) -> list[str]:
     """Baca N baris terakhir dari logs/access.log (fallback non-streaming)."""
@@ -1377,6 +1408,111 @@ def calibrate_export(
             "Expires": "0",
         },
     )
+
+
+@app.post("/v1/calibrate/recompute-bpm")
+def calibrate_recompute_bpm(
+    apply: bool = Query(False, description="False = pratinjau saja (default), True = tulis ke DB"),
+    threshold_pct: float = Query(25.0, ge=5.0, le=100.0,
+                                 description="Selisih antar-metode yang dianggap mencurigakan (%)"),
+    device_id: str | None = Query(None, description="Batasi ke satu perangkat"),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Hitung ulang HANYA kolom `bpm` dari sinyal mentah yang tersimpan.
+
+    Yang TIDAK disentuh:
+      - Nilai alat ukur medis (gula darah, kolesterol, asam urat, sistolik,
+        diastolik) — itu diketik peneliti dari hasil lab, bukan hasil hitung.
+      - Sinyal mentah (green_raw, red_raw, infrared_raw) — rekaman sensor apa adanya.
+      - Fitur turunan lain (ir_dc_mean, ir_ac_p2p, red_dc_mean, red_ac_p2p).
+
+    Kolom `bpm` adalah hasil hitung server atas sinyal mentah, bukan hasil ukur.
+    Bila autokorelasi salah mengunci oktaf (mis. terbaca 42,9 padahal 84), nilai
+    itu bisa dipulihkan dari sinyal yang masih utuh — dan hasilnya bisa diaudit
+    ulang kapan saja karena sinyalnya tetap tersimpan.
+
+    Konservatif secara sengaja: sebuah baris hanya diperbaiki bila selisihnya
+    melewati threshold DAN rasionya memang mendekati 2× atau ½× (ciri kesalahan
+    oktaf).  Selisih karena sebab lain hanya dilaporkan, tidak diubah.
+    """
+    from model.ppg_features import bandpass_filter, bpm_from_spectrum
+
+    q = db.query(models_db.CalibrationRecord)
+    if device_id:
+        q = q.filter(models_db.CalibrationRecord.device_id == device_id)
+    rows = q.order_by(models_db.CalibrationRecord.id).all()
+
+    diperiksa, diperbaiki, ditandai, dilewati = [], [], [], 0
+
+    for r in rows:
+        if not r.infrared_raw or r.bpm is None:
+            dilewati += 1
+            continue
+        try:
+            ir = np.array([float(v) for v in r.infrared_raw.split(";") if v != ""])
+            fs = float(r.fs_hz or 400.0)
+            if len(ir) < int(fs * 4):
+                dilewati += 1
+                continue
+            bpm_baru = bpm_from_spectrum(bandpass_filter(ir, fs), fs)
+        except Exception:
+            dilewati += 1
+            continue
+
+        if bpm_baru is None:
+            dilewati += 1
+            continue
+
+        lama = float(r.bpm)
+        selisih_pct = abs(bpm_baru - lama) / lama * 100.0 if lama else 0.0
+        rasio = bpm_baru / lama if lama else 0.0
+        # Ciri kesalahan oktaf: rasio mendekati 2 atau 0,5 (toleransi 15%)
+        oktaf = abs(rasio - 2.0) < 0.30 or abs(rasio - 0.5) < 0.075
+
+        item = {
+            "id": r.id, "subject_id": r.subject_id,
+            "bpm_lama": round(lama, 1), "bpm_baru": round(bpm_baru, 1),
+            "selisih_pct": round(selisih_pct, 1), "rasio": round(rasio, 3),
+        }
+        diperiksa.append(item)
+
+        if selisih_pct <= threshold_pct:
+            continue
+        if oktaf:
+            item["alasan"] = "kesalahan oktaf — dipulihkan dari sinyal mentah"
+            diperbaiki.append(item)
+            if apply:
+                r.bpm = round(bpm_baru, 1)
+        else:
+            item["alasan"] = "selisih besar tapi bukan kelipatan oktaf — TIDAK diubah, periksa manual"
+            ditandai.append(item)
+
+    if apply and diperbaiki:
+        db.commit()
+
+    for it in diperbaiki:
+        logger.warning(
+            "[KALIBRASI] %s bpm %.1f -> %.1f (%s)",
+            it["subject_id"], it["bpm_lama"], it["bpm_baru"],
+            "DITULIS" if apply else "pratinjau",
+        )
+
+    return {
+        "apply": apply,
+        "threshold_pct": threshold_pct,
+        "n_diperiksa": len(diperiksa),
+        "n_diperbaiki": len(diperbaiki),
+        "n_ditandai": len(ditandai),
+        "n_dilewati": dilewati,
+        "diperbaiki": diperbaiki,
+        "ditandai": ditandai,
+        "semua": diperiksa,
+        "catatan": (
+            "Hanya kolom bpm yang diubah. Nilai alat ukur medis dan sinyal mentah "
+            "tidak tersentuh." if apply else
+            "PRATINJAU — belum ada yang ditulis. Ulangi dengan apply=true untuk menerapkan."
+        ),
+    }
 
 
 @app.get("/v1/calibrate/summary")
