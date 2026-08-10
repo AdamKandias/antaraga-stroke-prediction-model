@@ -27,10 +27,29 @@ def load_artifact() -> dict:
     return joblib.load(ARTIFACT_PATH)
 
 
-def _risk_level(probability: float, threshold: float) -> str:
-    if probability >= threshold:
+def _risk_level(
+    probability: float, threshold: float, high_threshold: float | None = None
+) -> str:
+    """Tiga tingkat risiko dari dua ambang yang tugasnya berbeda.
+
+      p <  threshold                    -> rendah  (tidak perlu tindak lanjut)
+      threshold <= p < high_threshold   -> sedang  (perlu pemeriksaan lanjutan)
+      p >= high_threshold               -> tinggi  (segera periksa)
+
+    `threshold` adalah ambang deteksi yang sengaja dipasang rendah agar hampir
+    tidak ada penderita yang terlewat.  `high_threshold` adalah titik F1 terbaik,
+    tempat presisi dan recall paling seimbang.
+
+    Keduanya WAJIB terpisah.  Sebelumnya batas "sedang" dihitung sebagai
+    threshold * 0.5; begitu ambang deteksi diturunkan demi mengejar recall,
+    batas itu ikut jatuh dan tidak seorang pun lagi mendapat label "rendah".
+    Artefak lama yang belum punya high_threshold ditangani lewat fallback.
+    """
+    if high_threshold is None or high_threshold <= threshold:
+        high_threshold = max(threshold, 0.5)      # perilaku lama, untuk artefak lama
+    if probability >= high_threshold:
         return "high"
-    if probability >= threshold * 0.5:
+    if probability >= threshold:
         return "medium"
     return "low"
 
@@ -57,6 +76,7 @@ def _build_row(features: dict, artifact: dict) -> pd.DataFrame:
 def predict_stroke_risk(features: dict) -> StrokeRiskPrediction:
     artifact = load_artifact()
     threshold = artifact["threshold"]
+    high_threshold = artifact.get("high_threshold")
     model = artifact["model"]
 
     frame = _build_row(features, artifact)
@@ -64,7 +84,7 @@ def predict_stroke_risk(features: dict) -> StrokeRiskPrediction:
 
     return StrokeRiskPrediction(
         probability=probability,
-        risk_level=_risk_level(probability, threshold),
+        risk_level=_risk_level(probability, threshold, high_threshold),
         threshold=threshold,
         model_name=artifact["model_name"],
     )

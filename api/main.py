@@ -1395,6 +1395,28 @@ def calibrate_delete(record_id: int, db: Session = Depends(get_db)) -> None:
     db.commit()
 
 
+@app.get("/v1/calibrate/{record_id}/laporan.html")
+def calibrate_record_report(
+    record_id: int,
+    autoprint: bool = True,
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    """Laporan hasil pemeriksaan A4 untuk satu rekaman — dibuka lalu disimpan PDF.
+
+    Sengaja HTML, bukan PDF biner: dialog cetak browser sudah menghasilkan PDF
+    A4 yang rapi tanpa menambah dependensi (reportlab/weasyprint) ke image
+    produksi, dan tipografinya jauh lebih mudah dikontrol lewat CSS.
+    """
+    rec = db.get(models_db.CalibrationRecord, record_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail=f"Rekaman kalibrasi #{record_id} tidak ditemukan")
+
+    from api.calib_report import build_record_report_html
+
+    html = build_record_report_html(rec, autoprint=autoprint)
+    return StreamingResponse(iter([html]), media_type="text/html; charset=utf-8")
+
+
 @app.get("/v1/calibrate/training-report")
 def calibrate_training_report() -> dict:
     """Baca hasil pelatihan MLP terakhir dari artifacts (jika sudah dilatih)."""

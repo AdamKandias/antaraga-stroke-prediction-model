@@ -655,11 +655,11 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
             <th style="color:var(--c2)">Kol ↓</th>
             <th style="color:var(--c3)">AU ↓</th>
             <th>Sis ↓</th><th>Dia ↓</th>
-            <th>Waktu</th><th></th><th></th>
+            <th>Waktu</th><th>Laporan</th><th></th><th></th>
           </tr>
         </thead>
         <tbody id="calibBody">
-          <tr><td colspan="15" style="text-align:center;color:var(--muted);padding:20px">Belum ada data — rekam sesi pertama di atas</td></tr>
+          <tr><td colspan="16" style="text-align:center;color:var(--muted);padding:20px">Belum ada data — rekam sesi pertama di atas</td></tr>
         </tbody>
       </table>
     </div>
@@ -1402,7 +1402,7 @@ function renderCalibTable(rows) {
   const tbody = document.getElementById('calibBody');
   if (!tbody) return;
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="17" style="text-align:center;color:var(--muted);padding:20px">Belum ada data</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;color:var(--muted);padding:20px">Belum ada data</td></tr>';
     return;
   }
   const fmt = v => v != null ? Number(v).toFixed(1) : '—';
@@ -1422,6 +1422,8 @@ function renderCalibTable(rows) {
       <td>${fmt(r.sistolik_mmhg)}</td>
       <td>${fmt(r.diastolik_mmhg)}</td>
       <td style="color:var(--muted);font-size:10px">${new Date(r.session_ts).toLocaleString('id')}</td>
+      <td><button class="btn-sec btn-sm" style="font-size:11px;padding:2px 8px;white-space:nowrap"
+            title="Cetak laporan pemeriksaan (PDF)" onclick="calibPrint(${r.id})">🖨 PDF</button></td>
       <td><button class="btn-sec btn-sm" style="font-size:11px;padding:2px 7px" onclick="calibEdit(${r.id})">✎</button></td>
       <td><button class="btn-del" onclick="calibDelete(${r.id})">✕</button></td>
     </tr>`).join('');
@@ -1474,6 +1476,12 @@ async function calibDelete(id) {
   if (!confirm(`Hapus rekaman kalibrasi #${id}?`)) return;
   await fetch(`/v1/calibrate/${id}`, { method: 'DELETE' });
   calibLoad();
+}
+
+// Laporan A4 dibuka di tab baru dan langsung memanggil window.print(),
+// sehingga user tinggal memilih "Save as PDF" di dialog cetak browser.
+function calibPrint(id) {
+  window.open(`/v1/calibrate/${id}/laporan.html`, '_blank', 'noopener');
 }
 
 function calibExport() {

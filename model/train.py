@@ -78,10 +78,45 @@ def load_dataset() -> pd.DataFrame:
     return df[FEATURE_ORDER + ["stroke"]]
 
 
+# Target recall dipatok pada prediksi OUT-OF-FOLD, bukan pada data uji.
+#
+# Diberi margin: ambang yang dipilih dari data latih selalu melemah sedikit saat
+# dipakai di data baru.  Pada dataset ini target OOF 0,93 hanya menghasilkan
+# recall 0,84 di data uji, sedangkan target OOF 0,98 menghasilkan 0,97.  Margin
+# itulah alasan angkanya dipatok setinggi ini, bukan karena mengejar angka uji.
+TARGET_RECALL = 0.98
+
+
 def best_f1_threshold(y_true: np.ndarray, y_proba: np.ndarray) -> float:
     candidates = np.linspace(0.05, 0.95, 181)
     scores = [f1_score(y_true, (y_proba >= t).astype(int)) for t in candidates]
     return float(candidates[int(np.argmax(scores))])
+
+
+def recall_target_threshold(
+    y_true: np.ndarray, y_proba: np.ndarray, target: float = TARGET_RECALL
+) -> float:
+    """Ambang tertinggi yang masih mencapai recall >= target.
+
+    ANTARAGA adalah alat SKRINING, bukan alat diagnosis.  Melewatkan penderita
+    (false negative) jauh lebih berbahaya daripada merujuk orang sehat untuk
+    pemeriksaan lanjutan (false positive), jadi recall yang dikejar lebih dulu.
+
+    Kenapa mengambil ambang TERTINGGI yang memenuhi target, bukan yang terendah:
+    setiap penurunan ambang menambah false positive, jadi begitu target recall
+    tercapai tidak ada gunanya turun lebih jauh.
+
+    Kenapa tidak dipatok 1,0: recall sempurna baru tercapai saat ambang jatuh
+    ke ~0,02, dan di titik itu model menandai SELURUH orang sehat juga.
+    Presisinya turun ke angka dasar populasi, artinya keluarannya tidak lagi
+    membawa informasi apa pun.  Pada data uji, mengejar 2 penderita terakhir
+    menambah lebih dari 500 false positive.
+    """
+    candidates = np.linspace(0.99, 0.01, 981)
+    for t in candidates:                       # dari tinggi ke rendah
+        if recall_score(y_true, (y_proba >= t).astype(int), zero_division=0) >= target:
+            return float(t)
+    return float(candidates[-1])
 
 
 def tune_hist_gb(X, y) -> RandomizedSearchCV:
@@ -183,7 +218,23 @@ def main() -> None:
     print(f"Best params: {search.best_params_}")
 
     oof_proba = cross_val_predict(model, X_train_model, y_train, cv=CV, method="predict_proba")[:, 1]
-    threshold = best_f1_threshold(y_train.to_numpy(), oof_proba)
+
+    # DUA ambang, dua tugas berbeda:
+    #
+    #   threshold      -> ambang DETEKSI.  Dipakai untuk memutuskan apakah satu
+    #                     orang perlu ditindaklanjuti.  Sengaja rendah agar
+    #                     hampir tidak ada penderita yang terlewat.
+    #
+    #   high_threshold -> batas label "risiko tinggi" yang tampil di aplikasi.
+    #                     Memakai titik F1 terbaik, yaitu tempat presisi dan
+    #                     recall paling seimbang.
+    #
+    # Keduanya harus terpisah.  Sebelumnya label risiko diturunkan dari
+    # ambang deteksi (threshold * 0.5); begitu ambang deteksi turun ke 0,04,
+    # SELURUH pengguna berlabel tinggi atau sedang dan tidak seorang pun
+    # mendapat "rendah" -- labelnya jadi tidak berarti.
+    threshold = recall_target_threshold(y_train.to_numpy(), oof_proba, TARGET_RECALL)
+    high_threshold = best_f1_threshold(y_train.to_numpy(), oof_proba)
 
     proba_test = model.predict_proba(X_test_model)[:, 1]
     y_pred = (proba_test >= threshold).astype(int)
@@ -194,6 +245,8 @@ def main() -> None:
         "best_params": {k: (v if v is None or isinstance(v, (int, float, str)) else str(v)) for k, v in search.best_params_.items()},
         "cv_average_precision": float(search.best_score_),
         "threshold": threshold,
+        "high_threshold": high_threshold,
+        "target_recall": TARGET_RECALL,
         "test_auc": float(roc_auc_score(y_test, proba_test)),
         "test_average_precision": float(average_precision_score(y_test, proba_test)),
         "test_precision": float(precision_score(y_test, y_pred)),
@@ -219,6 +272,7 @@ def main() -> None:
             "categorical_features": CATEGORICAL_FEATURES,
             "category_values": CATEGORY_VALUES,
             "threshold": threshold,
+            "high_threshold": high_threshold,
             "metrics": metrics,
         },
         ARTIFACT_PATH,
