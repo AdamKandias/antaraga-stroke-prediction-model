@@ -187,38 +187,6 @@ def _uric_ref(gender: str) -> str:
     return "3,4 – 7,0 (pria)" if gender == "L" else "2,4 – 6,0 (wanita)"
 
 
-def _classify_map(m: float | None) -> tuple[str, str]:
-    if m is None:
-        return ("Tidak dihitung", "na")
-    if m < 70:
-        return ("Rendah — perfusi organ berisiko", "high")
-    if m <= 100:
-        return ("Normal", "ok")
-    if m <= 110:
-        return ("Batas Atas", "watch")
-    return ("Tinggi", "high")
-
-
-def _classify_pp(pp: float | None) -> tuple[str, str]:
-    if pp is None:
-        return ("Tidak dihitung", "na")
-    if pp < 30:
-        return ("Sempit", "watch")
-    if pp <= 60:
-        return ("Normal", "ok")
-    return ("Melebar — indikasi kekakuan arteri", "watch")
-
-
-def _classify_pi(pi: float | None) -> tuple[str, str]:
-    if pi is None:
-        return ("Tidak terukur", "na")
-    if pi < 0.3:
-        return ("Lemah — perfusi jari rendah", "watch")
-    if pi < 1.0:
-        return ("Cukup", "ok")
-    return ("Kuat", "ok")
-
-
 # ── Utilitas format (locale Indonesia: koma desimal, titik ribuan) ─────────
 
 def _num(v: float | None, dec: int = 1) -> str:
@@ -538,23 +506,11 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
     sis, dia, bpm = rec.sistolik_mmhg, rec.diastolik_mmhg, rec.bpm
     gula, kol, au = rec.gula_darah_mg_dl, rec.kolesterol_mg_dl, rec.asam_urat_mg_dl
 
-    # Turunan hemodinamik
-    mapv = (sis + 2 * dia) / 3.0 if sis is not None and dia is not None else None
-    pp = (sis - dia) if sis is not None and dia is not None else None
-
     st_bp = _classify_bp(sis, dia)
     st_bpm = _classify_bpm(bpm)
     st_gula = _classify_glucose(gula, rec.kondisi)
     st_kol = _classify_chol(kol)
     st_au = _classify_uric(au, gender)
-    st_map = _classify_map(mapv)
-    st_pp = _classify_pp(pp)
-
-    # Indeks perfusi (%) — konvensi klinis; channel_stats menyimpannya permil.
-    pi = None
-    if rec.ir_ac_p2p and rec.ir_dc_mean and rec.ir_dc_mean > 1:
-        pi = 100.0 * rec.ir_ac_p2p / rec.ir_dc_mean
-    st_pi = _classify_pi(pi)
 
     # Rasio-of-ratios merah/inframerah — indeks teknis mutu sinyal dua kanal,
     # bukan nilai SpO2 (sensor belum dikalibrasi terhadap ko-oksimeter).
@@ -574,7 +530,7 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
         _tile("gauge", "Tekanan Darah", bp_val, "mmHg", st_bp[0], st_bp[1]),
         _tile("heart", "Denyut Jantung", _num(bpm, 0), "bpm", st_bpm[0], st_bpm[1]),
         _tile("droplet", "Gula Darah", _num(gula, 0), "mg/dL", st_gula[0], st_gula[1]),
-        _tile("wave", "Indeks Perfusi", _num(pi, 2), "%", st_pi[0], st_pi[1]),
+        _tile("molecule", "Asam Urat", _num(au, 1), "mg/dL", st_au[0], st_au[1]),
     ])
 
     # ── Tabel hasil ──────────────────────────────────────────────────────
@@ -606,9 +562,7 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
          st_au[1] == "high"),
         ("Aritmia / laju tidak normal", "Denyut di luar rentang 60–100 bpm",
          st_bpm[1] in ("watch", "high")),
-        ("Usia lanjut", "Usia ≥ 55 tahun — faktor risiko non-modifikasi", usia >= 55),
     ]
-    n_risiko = sum(1 for *_, on in faktor if on)
     risk_html = "".join(
         f'<div class="rk {"on" if on else "off"}">{_icon("alert" if on else "check", 13)}'
         f'<div><b>{nm}</b><span>{desc}</span></div></div>'
@@ -619,8 +573,7 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
     poin: list[str] = []
     if sis is not None and dia is not None:
         poin.append(
-            f"Tekanan darah tercatat <b>{_int(sis)}/{_int(dia)} mmHg</b> "
-            f"(MAP {_num(mapv, 1)} mmHg, tekanan nadi {_num(pp, 0)} mmHg) — "
+            f"Tekanan darah tercatat <b>{_int(sis)}/{_int(dia)} mmHg</b> — "
             f"masuk kategori <b>{st_bp[0]}</b>."
         )
     if bpm is not None:
@@ -638,17 +591,17 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
         poin.append(f"Kolesterol total <b>{_num(kol, 0)} mg/dL</b> — <b>{st_kol[0]}</b>.")
     if au is not None:
         poin.append(f"Asam urat <b>{_num(au, 1)} mg/dL</b> — <b>{st_au[0]}</b>.")
-    if pi is not None:
+    if durasi:
         poin.append(
-            f"Mutu sinyal sensor: indeks perfusi <b>{_num(pi, 2)}%</b> ({st_pi[0].lower()})"
-            + (f", durasi rekaman {_num(durasi, 1)} detik pada {_num(fs, 0)} Hz." if durasi else ".")
+            f"Sinyal PPG pendamping direkam <b>{_num(durasi, 1)} detik</b> "
+            f"pada laju cuplik {_num(fs, 0)} Hz."
         )
-    poin.append(
-        f"Terdeteksi <b>{n_risiko} dari {len(faktor)}</b> faktor risiko stroke pada sesi ini. "
-        + ("Tidak ditemukan temuan yang memerlukan tindak lanjut segera dari nilai di atas."
-           if n_risiko == 0 else
-           "Disarankan konfirmasi ulang oleh tenaga medis serta pemantauan berkala.")
-    )
+    if not poin:
+        # Semua nilai rujukan kosong — jangan cetak kotak interpretasi melompong.
+        poin.append(
+            "Tidak ada nilai alat rujukan yang terisi pada sesi ini. Laporan hanya "
+            "memuat identitas subjek dan parameter teknis sensor."
+        )
     interp = "".join(f"<li>{p}</li>" for p in poin)
 
     # ── Panel teknis sensor ──────────────────────────────────────────────
@@ -657,11 +610,12 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
         _kv("IR — AC p-p", _int(rec.ir_ac_p2p)),
         _kv("Merah — DC", _int(rec.red_dc_mean)),
         _kv("Merah — AC p-p", _int(rec.red_ac_p2p)),
-        _kv("Indeks Perfusi (PI)", f"{_num(pi, 2)} %" if pi is not None else "—"),
         _kv("Rasio R (merah/IR)", _num(ratio_r, 3)),
         _kv("Laju Cuplik", f"{_num(fs, 0)} Hz"),
-        _kv("Durasi · Sampel",
-            f"{_num(durasi, 1)} dtk · {_int(ir.size)}" if durasi else "—"),
+        # Dipecah jadi dua sel supaya grid tetap genap 4 kolom — aturan border
+        # .tech mengandalkan jumlah sel kelipatan empat.
+        _kv("Durasi Rekaman", f"{_num(durasi, 1)} dtk" if durasi else "—"),
+        _kv("Jumlah Sampel", _int(ir.size) if ir.size else "—"),
     ])
 
     strip = _ppg_strip_svg(ir, fs)
@@ -738,25 +692,7 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
       <th>Nilai Rujukan</th>
       <th style="text-align:right">Interpretasi</th>
     </tr></thead>
-    <tbody>
-      {rows}
-      <tr>
-        <td class="p-name"><span class="p-ic">{_icon("gauge")}</span>
-          <span><b>Tekanan Arteri Rerata (MAP)</b><em>Turunan: (SIS + 2×DIA) ÷ 3</em></span></td>
-        <td class="p-val">{_num(mapv, 1)}</td>
-        <td class="p-unit">mmHg</td>
-        <td class="p-ref">70 – 100</td>
-        <td class="p-st">{_badge(st_map[0], st_map[1])}</td>
-      </tr>
-      <tr>
-        <td class="p-name"><span class="p-ic">{_icon("heart")}</span>
-          <span><b>Tekanan Nadi (Pulse Pressure)</b><em>Turunan: SIS − DIA</em></span></td>
-        <td class="p-val">{_num(pp, 0)}</td>
-        <td class="p-unit">mmHg</td>
-        <td class="p-ref">40 – 60</td>
-        <td class="p-st">{_badge(st_pp[0], st_pp[1])}</td>
-      </tr>
-    </tbody>
+    <tbody>{rows}</tbody>
   </table>
 
   {strip_block}
