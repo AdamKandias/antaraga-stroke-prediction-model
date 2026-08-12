@@ -4,19 +4,26 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
+from urllib.parse import quote
 
 import os
 
 import numpy as np
-from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session
 
-from api import bpm_filter, ingest_buffer, models_db, schemas
+from api import bpm_filter, dashboard_auth, ingest_buffer, models_db, schemas
 from api.auth import create_access_token, get_current_user_id, get_ingest_user_id
-from api.config import DEV_MODE
+from api.config import DASHBOARD_SESSION_DAYS, DEV_MODE
 from api.firmware import router as firmware_router
 from api.ota import router as ota_router
 from api.pwa_config import get_pwa_config, router as pwa_router
@@ -57,6 +64,31 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def dashboard_session_middleware(request: Request, call_next):
+    """Tutup seluruh permukaan dashboard bagi pengunjung yang belum login.
+
+    Dipasang sebagai middleware, bukan Depends per-endpoint, supaya endpoint
+    baru yang ditambahkan di bawah prefix yang sama otomatis ikut terlindungi
+    dan tidak ada yang lupa dipasangi penjaga.
+    """
+    path = request.url.path
+    if request.method == "OPTIONS" or not dashboard_auth.needs_session(path):
+        return await call_next(request)
+
+    if dashboard_auth.verify_session(request.cookies.get(dashboard_auth.COOKIE_NAME)):
+        return await call_next(request)
+
+    # Navigasi browser diarahkan ke form login; panggilan fetch/XHR dibalas
+    # 401 supaya JS di dashboard tidak menelan HTML halaman login sebagai data.
+    if "text/html" in request.headers.get("accept", ""):
+        nxt = path + (f"?{request.url.query}" if request.url.query else "")
+        return RedirectResponse(
+            f"{dashboard_auth.LOGIN_PATH}?next={quote(nxt, safe='')}", status_code=303
+        )
+    return JSONResponse({"detail": "Sesi dashboard tidak valid — silakan login"}, status_code=401)
+
 
 @app.middleware("http")
 async def access_log_middleware(request, call_next):
@@ -909,7 +941,85 @@ _HOME_HTML = os.path.join(os.path.dirname(__file__), "static", "index.html")
 
 @app.get("/dashboard", include_in_schema=False)
 def serve_dashboard() -> FileResponse:
+    """Dijaga oleh dashboard_session_middleware — tanpa cookie sesi yang sah,
+    permintaan tidak pernah sampai ke sini."""
     return FileResponse(_DASHBOARD_HTML, media_type="text/html")
+
+
+# ---------------------------------------------------------------------------
+# /login — pintu masuk dashboard.  include_in_schema=False: tidak muncul di
+# /docs maupun openapi.json, dan tidak ditautkan dari halaman mana pun.
+# ---------------------------------------------------------------------------
+
+def _safe_next(raw: str | None) -> str:
+    """Terima hanya path internal.
+
+    Tanpa saringan ini "?next=https://situs-lain/..." akan mengubah /login jadi
+    open redirect — halaman login asli yang melempar korban ke situs penyerang.
+    """
+    if not raw or not raw.startswith("/") or raw.startswith("//"):
+        return "/dashboard"
+    return raw
+
+
+def _client_ip(request: Request) -> str:
+    return (request.headers.get("x-forwarded-for") or "").split(",")[0].strip() \
+        or (request.client.host if request.client else "-")
+
+
+@app.get("/login", include_in_schema=False)
+def login_form(request: Request, next: str | None = None) -> HTMLResponse:
+    from api.login_page import render_login
+
+    if dashboard_auth.verify_session(request.cookies.get(dashboard_auth.COOKIE_NAME)):
+        return RedirectResponse(_safe_next(next), status_code=303)
+    return HTMLResponse(render_login(next_path=_safe_next(next)))
+
+
+@app.post("/login", include_in_schema=False)
+def login_submit(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    next_path: str = Form("/dashboard"),
+) -> HTMLResponse:
+    from api.login_page import render_login
+
+    ip = _client_ip(request)
+    target = _safe_next(next_path)
+
+    if dashboard_auth.is_throttled(ip):
+        access_logger.info('%s "POST /login" 429 login-throttled', ip)
+        return HTMLResponse(
+            render_login("Terlalu banyak percobaan gagal. Coba lagi beberapa menit lagi.", target),
+            status_code=429,
+        )
+
+    if not dashboard_auth.check_credentials(email, password):
+        dashboard_auth.record_failure(ip)
+        access_logger.info('%s "POST /login" 401 login-failed email=%s', ip, email)
+        return HTMLResponse(render_login("Email atau kata sandi salah.", target), status_code=401)
+
+    dashboard_auth.reset_failures(ip)
+    resp = RedirectResponse(target, status_code=303)
+    resp.set_cookie(
+        dashboard_auth.COOKIE_NAME,
+        dashboard_auth.create_session(email),
+        max_age=DASHBOARD_SESSION_DAYS * 86400,
+        httponly=True,      # tidak terbaca document.cookie → aman dari pencurian lewat XSS
+        samesite="lax",
+        secure=not DEV_MODE,  # di produksi (HTTPS) cookie tidak pernah dikirim polos
+        path="/",
+    )
+    access_logger.info('%s "POST /login" 303 login-ok email=%s', ip, email)
+    return resp
+
+
+@app.get("/logout", include_in_schema=False)
+def logout() -> RedirectResponse:
+    resp = RedirectResponse(dashboard_auth.LOGIN_PATH, status_code=303)
+    resp.delete_cookie(dashboard_auth.COOKIE_NAME, path="/")
+    return resp
 
 
 @app.get("/v1/devices")

@@ -212,6 +212,8 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
       🔌 Aktifkan Demo Hardware
     </button>
     <span id="simInfo" style="font-size:11px;color:var(--muted)"></span>
+    <a href="/logout" class="btn-sec" style="margin-left:auto;text-decoration:none;
+       display:inline-flex;align-items:center;gap:5px" title="Akhiri sesi dashboard">⏻ Keluar</a>
   </div>
 </header>
 
@@ -871,6 +873,23 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 
 </div><!-- .app -->
 <script>
+// ═══════════════════════════════════════════════
+//  SESI
+// ═══════════════════════════════════════════════
+// Cookie sesi bisa kedaluwarsa saat tab dibiarkan terbuka semalaman. Tanpa
+// penanganan ini, polling akan diam-diam gagal terus dan grafik membeku tanpa
+// penjelasan — jadi begitu server menjawab 401, lempar balik ke halaman login.
+(function guardSession() {
+  const asli = window.fetch;
+  window.fetch = async (...args) => {
+    const r = await asli(...args);
+    if (r.status === 401 && !location.pathname.startsWith('/login')) {
+      location.href = '/login?next=' + encodeURIComponent(location.pathname);
+    }
+    return r;
+  };
+})();
+
 // ═══════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════
