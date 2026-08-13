@@ -11,6 +11,7 @@ services:
       - antaraga-models:/app/model/artifacts   # model joblib persists di sini
       - antaraga-ota:/app/api/ota_bins         # firmware .bin untuk OTA persists di sini
       - antaraga-logs:/app/logs                # access.log + api.log persists di sini
+      - antaraga-apk:/app/api/apk_files        # APK aplikasi mobile persists di sini
     env_file:
       - .env.production
     healthcheck:
@@ -25,3 +26,4 @@ volumes:
   antaraga-models:
   antaraga-ota:
   antaraga-logs:
+  antaraga-apk:

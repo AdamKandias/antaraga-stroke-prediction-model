@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from api import bpm_filter, dashboard_auth, ingest_buffer, models_db, schemas
 from api.auth import create_access_token, get_current_user_id, get_ingest_user_id
 from api.config import DASHBOARD_SESSION_DAYS, DEV_MODE
+from api.apk import router as apk_router
 from api.firmware import router as firmware_router
 from api.ota import router as ota_router
 from api.pwa_config import get_pwa_config, router as pwa_router
@@ -105,6 +106,7 @@ async def access_log_middleware(request, call_next):
     )
     return response
 
+app.include_router(apk_router)
 app.include_router(firmware_router)
 app.include_router(ota_router)
 app.include_router(pwa_router)

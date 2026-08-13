@@ -297,3 +297,6 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/windows,linux,visualstudiocode,macos,platformio,python,virtualenv,dotenv
+
+# APK aplikasi mobile (di-mount via Docker volume)
+api/apk_files/

@@ -51,3 +51,6 @@ logbook.md
 alur.md
 alur_model.md
 logs/
+
+# APK aplikasi mobile (di-mount via Docker volume)
+api/apk_files/

@@ -249,7 +249,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
   <button class="tab"     onclick="tab('access-log',this)">🔍 Log Akses</button>
 </div>
 
-<!-- ── Panel statistik — persisten di semua tab ── -->
+<!-- ── Panel statistik - persisten di semua tab ── -->
 <div class="stats-panel">
   <div class="stats-ttl">Statistik Jendela — DC &amp; AC Mentah · Perfusi = AC/DC · BPM = Autokorelasi</div>
   <div style="overflow-x:auto">
@@ -433,6 +433,61 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
       <button class="btn-sec btn-sm" onclick="fwLoadLibrary()">↺ Refresh</button>
     </div>
     <div id="fwLibrary"><div class="empty"><h3>Memuat…</h3></div></div>
+  </div>
+
+  <!-- Aplikasi mobile (APK) -->
+  <div class="card" style="border-color:rgba(58,190,120,.3)">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <span class="card-ttl" style="margin:0">📱 Aplikasi Mobile (APK)</span>
+      <span id="apkBadge" style="font-size:10px;padding:2px 8px;border-radius:10px;
+        background:var(--surface2);color:var(--muted);font-weight:600">memuat…</span>
+      <button class="btn-sec btn-sm" onclick="apkLoad()" style="margin-left:auto">↺ Refresh</button>
+    </div>
+    <p style="font-size:11.5px;color:var(--muted);margin-bottom:12px;line-height:1.6">
+      APK yang diunggah di sini langsung dipakai tombol unduh di
+      <a href="/" target="_blank" style="color:var(--c1)">halaman utama</a>.
+      Tautannya tetap <code style="font-size:11px">/download/app.apk</code>, jadi tautan
+      yang sudah tersebar tidak perlu diganti setiap kali ada rilis baru.
+    </p>
+
+    <div class="up-grid" style="margin-bottom:12px">
+      <div>
+        <label class="up-label">Berkas APK</label>
+        <input id="apkFile" class="up-input" type="file" accept=".apk">
+      </div>
+      <div>
+        <label class="up-label">Versi</label>
+        <input id="apkVersion" class="up-input" type="text" placeholder="mis. 1.0.0">
+      </div>
+      <div>
+        <label class="up-label">Catatan rilis</label>
+        <input id="apkCatatan" class="up-input" type="text" placeholder="mis. Perbaikan kartu detak jantung">
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+      <button class="btn btn-ok" onclick="apkUpload()" id="apkUploadBtn">⬆ Unggah APK</button>
+      <a href="/download/app.apk" target="_blank" class="btn-sec btn-sm">⬇ Uji unduh</a>
+      <span id="apkMsg" style="font-size:12px;display:none"></span>
+    </div>
+
+    <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Tautan Toko Aplikasi</div>
+    <p style="font-size:11.5px;color:var(--muted);margin-bottom:10px;line-height:1.6">
+      Kosongkan bila belum terbit. Tombol Play Store yang kosong otomatis jatuh ke
+      unduhan APK; tombol App Store dinonaktifkan karena iOS tidak dapat memasang APK.
+    </p>
+    <div class="up-grid" style="margin-bottom:10px">
+      <div>
+        <label class="up-label">URL App Store (iOS)</label>
+        <input id="apkAppStore" class="up-input" type="url" placeholder="https://apps.apple.com/…">
+      </div>
+      <div>
+        <label class="up-label">URL Play Store (Android)</label>
+        <input id="apkPlayStore" class="up-input" type="url" placeholder="https://play.google.com/…">
+      </div>
+    </div>
+    <button class="btn-sec" onclick="apkSaveLinks()">💾 Simpan Tautan Toko</button>
+
+    <div id="apkList" style="margin-top:16px"></div>
   </div>
 
   <!-- Upload firmware baru -->
@@ -1970,7 +2025,7 @@ function tab(name, btn) {
   btn.classList.add('on');
   document.getElementById('p-' + name).classList.add('on');
   Object.values(charts).forEach(c => { try { c.resize(); } catch {} });
-  if (name === 'fw')         fwInit();
+  if (name === 'fw')         { fwInit(); apkLoad(); }
   if (name === 'pwa-cfg')    pwaSettingsInit();
   if (name === 'access-log') alConnect();
   if (name === 'calib')      { calibLoad(); calibUpdateDemoCount(); }
@@ -2009,6 +2064,117 @@ async function fwInit() {
       fwLoadLocal();
     }
   } catch {}
+}
+
+// ── Aplikasi mobile (APK) ───────────────────────────────────────────────────
+function _apkMsg(txt, warna) {
+  const el = document.getElementById('apkMsg');
+  if (!el) return;
+  el.textContent = txt; el.style.color = warna; el.style.display = '';
+}
+const _apkMB = b => (b / 1048576).toFixed(1) + ' MB';
+
+async function apkLoad() {
+  try {
+    const { ok, data } = await _safeJson(await fetch('/v1/apk/list'));
+    if (!ok) return;
+    const builds = data.builds || [];
+    const tautan = data.store_links || {};
+
+    const badge = document.getElementById('apkBadge');
+    if (badge) {
+      const terbit = builds.length && builds[0].ada_berkas;
+      badge.textContent = terbit
+        ? `aktif · ${builds[0].version || 'tanpa versi'}`
+        : 'belum ada APK';
+      badge.style.background = terbit ? 'rgba(58,190,120,.15)' : 'var(--surface2)';
+      badge.style.color = terbit ? 'var(--good)' : 'var(--muted)';
+    }
+
+    const a = document.getElementById('apkAppStore');
+    const p = document.getElementById('apkPlayStore');
+    if (a && document.activeElement !== a) a.value = tautan.app_store || '';
+    if (p && document.activeElement !== p) p.value = tautan.play_store || '';
+
+    const wrap = document.getElementById('apkList');
+    if (!wrap) return;
+    if (!builds.length) {
+      wrap.innerHTML = '<div style="color:var(--muted);font-size:12px">Belum ada APK diunggah.</div>';
+      return;
+    }
+    wrap.innerHTML = `
+      <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Riwayat Unggahan</div>
+      <table class="tbl" style="font-size:11.5px"><thead><tr>
+        <th>Versi</th><th>Berkas</th><th>Ukuran</th><th>Diunggah</th><th>Catatan</th><th></th>
+      </tr></thead><tbody>
+      ${builds.map((b, i) => `
+        <tr${i === 0 ? ' style="background:rgba(58,190,120,.06)"' : ''}>
+          <td style="font-weight:600">${b.version || '—'}${i === 0 ? ' <span style="color:var(--good);font-size:10px">← aktif</span>' : ''}</td>
+          <td style="color:var(--muted)">${b.nama_asli || '—'}</td>
+          <td>${_apkMB(b.ukuran || 0)}</td>
+          <td style="color:var(--muted);font-size:10px">${b.diunggah ? new Date(b.diunggah * 1000).toLocaleString('id') : '—'}</td>
+          <td style="color:var(--muted)">${b.catatan || '—'}</td>
+          <td><button class="btn-del" onclick="apkDelete('${b.id}')">✕</button></td>
+        </tr>`).join('')}
+      </tbody></table>`;
+  } catch {}
+}
+
+async function apkUpload() {
+  const fileEl = document.getElementById('apkFile');
+  const f = fileEl && fileEl.files && fileEl.files[0];
+  if (!f) { _apkMsg('Pilih berkas .apk dulu', 'var(--warn)'); return; }
+  if (!f.name.toLowerCase().endsWith('.apk')) {
+    _apkMsg('Berkas harus berekstensi .apk', 'var(--critical)'); return;
+  }
+
+  const btn = document.getElementById('apkUploadBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Mengunggah…'; }
+  _apkMsg(`Mengunggah ${_apkMB(f.size)}…`, 'var(--muted)');
+
+  const q = new URLSearchParams({
+    version: document.getElementById('apkVersion').value.trim(),
+    catatan: document.getElementById('apkCatatan').value.trim(),
+  });
+  const fd = new FormData();
+  fd.append('file', f);
+
+  try {
+    const { ok, data } = await _safeJson(
+      await fetch(`/v1/apk/upload?${q}`, { method: 'POST', body: fd })
+    );
+    if (!ok) { _apkMsg(`Gagal: ${data.detail || 'tidak diketahui'}`, 'var(--critical)'); return; }
+    _apkMsg(`✓ ${data.message}`, 'var(--good)');
+    fileEl.value = '';
+    apkLoad();
+  } catch (e) {
+    _apkMsg(`Error: ${e.message}`, 'var(--critical)');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⬆ Unggah APK'; }
+  }
+}
+
+async function apkSaveLinks() {
+  const q = new URLSearchParams({
+    app_store: document.getElementById('apkAppStore').value.trim(),
+    play_store: document.getElementById('apkPlayStore').value.trim(),
+  });
+  const { ok, data } = await _safeJson(
+    await fetch(`/v1/apk/store-links?${q}`, { method: 'PUT' })
+  );
+  _apkMsg(ok ? '✓ Tautan toko tersimpan' : `Gagal: ${data.detail || ''}`,
+          ok ? 'var(--good)' : 'var(--critical)');
+  if (ok) apkLoad();
+}
+
+async function apkDelete(id) {
+  if (!confirm('Hapus versi APK ini?')) return;
+  const { ok, data } = await _safeJson(
+    await fetch(`/v1/apk/${id}`, { method: 'DELETE' })
+  );
+  if (!ok) { _apkMsg(`Gagal: ${data.detail || ''}`, 'var(--critical)'); return; }
+  _apkMsg('✓ APK dihapus', 'var(--good)');
+  apkLoad();
 }
 
 async function fwLoadLibrary() {
