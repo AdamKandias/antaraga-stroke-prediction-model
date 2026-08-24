@@ -716,7 +716,7 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
       tenaga medis berwenang beserta riwayat klinis subjek.
     </div>
     <div class="ttd">
-      <div>Bandung, {_tgl_panjang(terbit)}</div>
+      <div>Surabaya, {_tgl_panjang(terbit)}</div>
       <div class="sp"></div>
       <span class="nm">Penanggung Jawab Pengukuran</span>
       <span class="rl">Tim Riset ANTARAGA · PKM-KC 2026</span>

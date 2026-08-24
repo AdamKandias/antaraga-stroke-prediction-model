@@ -821,116 +821,134 @@ Implementasi endpoint `POST /v1/ingest` di backend — menerima batch data PPG m
 **Minggu, 19 Juli 2026 — 180 menit**
 
 **Kegiatan:**
-Implementasi sistem autentikasi khusus untuk firmware (`DEVICE_INGEST_KEY`) — key statis yang tidak expire, berbeda dengan JWT user. Backend menerima `Authorization: Bearer antaraga-hw-2026-01` dari firmware. Ketika device key cocok, backend otomatis menggunakan user yang paling terakhir aktif (most recently seen). Menambahkan `DEVICE_INGEST_KEY` ke `.env` backend.
+Mengevaluasi model XGBoost final pada data uji yang belum pernah dipelajari model, baik saat pelatihan maupun saat penentuan ambang. Ambang yang dipakai adalah F1 terbaik (0,705), yaitu titik di mana presisi dan recall paling seimbang.
 
 **Hasil:**
-- Fungsi `get_ingest_user_id()` di `auth.py`
-- Firmware dapat mengirim data tanpa JWT yang expire
-- Konfigurasi: `DEVICE_INGEST_KEY=antaraga-hw-2026-01`
+- Data uji 1.533 sampel, 75 di antaranya kasus stroke
+- ROC-AUC **0,823** · Akurasi 0,882 · Presisi 0,206 · F1 0,290
+- Recall **0,493** — matriks konfusi TP=37 · FN=38 · FP=143 · TN=1315
+- **Recall 0,493 berarti lebih dari separuh penderita stroke tidak terdeteksi (38 dari 75).** Untuk alat deteksi risiko stroke, ini yang menjadi persoalan: seseorang yang berisiko justru tidak menerima peringatan apa pun, padahal keterlambatan penanganan stroke berakibat disabilitas permanen atau kematian
+- Disimpulkan dibutuhkan metode lain agar tingkat recall-nya tinggi
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot terminal: firmware mengirim dengan key → backend menerima 200 OK (bukan 401)
-- Screenshot `.env` backend menampilkan `DEVICE_INGEST_KEY`
-- Screenshot kode `get_ingest_user_id()` di VSCode
+- `ADAM_evaluasi model pada ambang F1.png` — notebook `model/eval_19juli_ambang_f1.ipynb` bagian 3, metrik lengkap dan matriks konfusi
+- `ADAM_grafik matriks konfusi dan kurva ROC.png` — notebook yang sama, grafik tiga panel
+- `ADAM_pencarian ambang F1 out of fold.png` — notebook yang sama bagian 2
 
 ---
 
-### Minggu ke-10 — 22–26 Juli 2026
+**Senin, 21 Juli 2026 — 180 menit**
+
+**Kegiatan:**
+Mencari cara menaikkan recall. Percobaan pertama paling sederhana: menurunkan ambang sampai seluruh penderita tertangkap. Percobaan ini gagal, sehingga dilanjutkan dengan menghitung berapa salah positif yang harus dibayar untuk setiap penderita tambahan, lalu menetapkan aturan pemilihan ambang yang dapat dipertanggungjawabkan.
+
+**Hasil:**
+- **Percobaan recall 1,0 gagal.** Ambang harus turun ke 0,0245, dan pada titik itu model menandai **seluruh 1.458 orang sehat** sebagai berisiko. Tidak satu pun lolos. Presisinya 0,0489 — sama persis dengan proporsi penderita di populasi, artinya keluaran model tidak lagi membawa informasi apa pun
+- Analisis harga tiap penderita tambahan menunjukkan biaya relatif stabil sampai 73 penderita, lalu melonjak tajam: dari 73 ke 75 dibutuhkan tambahan **lebih dari 500 salah positif hanya untuk 2 penderita**
+- Disadari bahwa mencari ambang langsung dari data uji keliru secara metodologi — ambangnya ikut menyesuaikan jawaban sehingga evaluasi tampak lebih baik daripada kenyataan
+- Ambang dipindah pencariannya ke prediksi **out-of-fold pada data latih**, dan ditemukan pola bahwa recall di data uji selalu lebih rendah daripada di out-of-fold, sehingga targetnya perlu diberi margin:
+
+| Target OOF | Recall OOF | Recall uji | Selisih | TP uji |
+|---|---|---|---|---|
+| 0,93 | 0,931 | 0,840 | +0,091 | 63 |
+| 0,95 | 0,954 | 0,853 | +0,101 | 64 |
+| 0,97 | 0,971 | 0,880 | +0,091 | 66 |
+| **0,98** | **0,983** | **0,973** | **+0,009** | **73** |
+
+- Ditetapkan `TARGET_RECALL = 0,98` pada prediksi out-of-fold, dan ditulis fungsi `recall_target_threshold()` di `model/train.py` yang mengambil ambang **tertinggi** yang recall-nya masih memenuhi target — karena setiap penurunan di luar itu hanya menambah salah positif tanpa manfaat
+
+📸 **Bukti yang perlu dilampirkan:**
+- `ADAM_percobaan gagal recall satu penuh.png` — notebook `model/percobaan_ambang_21juli.ipynb` bagian 1, hasil percobaan menandai seluruh orang sehat
+- `ADAM_analisis harga tiap penderita tambahan.png` — notebook yang sama bagian 2, tabel TP berbanding FP
+- `ADAM_grafik kurva biaya dan harga per penderita.png` — notebook yang sama, grafik dua panel
+- `ADAM_pemilihan target recall out of fold.png` — notebook yang sama bagian 3, tabel target OOF berbanding hasil data uji
 
 ---
 
 **Rabu, 22 Juli 2026 — 180 menit**
 
 **Kegiatan:**
-Implementasi sistem pairing perangkat — menghubungkan `DEVICE_ID` firmware ke akun user tertentu. Menambahkan kolom `device_key` ke tabel `users`. Membuat endpoint `POST /device/pair` (user masukkan kode perangkat dari app) dan `GET /device/status`. Firmware yang mengirim batch dengan `"id": "antaraga-001"` akan otomatis terhubung ke akun yang sudah pairing.
+Menerapkan aturan ambang yang ditetapkan kemarin, lalu mengujinya pada data uji. Setelah hasilnya keluar, ditemukan masalah lanjutan pada label risiko yang tampil di aplikasi, sehingga perlu diperbaiki di hari yang sama.
 
 **Hasil:**
-- Endpoint `POST /device/pair` dan `GET /device/status`
-- Kolom `device_key` di tabel `users` (migration SQLite)
-- Endpoint `/v1/ingest` mengutamakan lookup user dari `device_key`
+- Ambang deteksi turun dari 0,705 menjadi **0,042**
+- **Penderita terdeteksi naik dari 37 menjadi 73 dari 75 (recall 0,973)**, yang terlewat turun dari 38 menjadi 2
+
+| | 19 Juli | 22 Juli | Perubahan |
+|---|---|---|---|
+| Penderita terdeteksi | 37 | **73** | +36 |
+| Penderita terlewat | 38 | **2** | −36 |
+| Salah positif | 143 | 905 | +762 |
+| Recall | 0,493 | **0,973** | +0,480 |
+| Presisi | 0,206 | 0,075 | −0,131 |
+
+- **Ditemukan masalah lanjutan**: label risiko di aplikasi ikut rusak. Karena batas "sedang" dihitung sebagai setengah ambang deteksi, setelah ambang turun ke 0,042 batas sedang jatuh ke 0,021 — akibatnya **tidak seorang pun memperoleh label "rendah"** dan 63,8% pengguna langsung berlabel risiko tinggi
+- Diperbaiki dengan memisahkan dua ambang berfungsi berbeda: **deteksi 0,042** untuk menentukan perlu tindak lanjut, dan **risiko tinggi 0,705** untuk label di aplikasi. Sebaran kembali wajar: tinggi 11,7%, sedang 52,1%, rendah 36,2%
+- Sempat dipertimbangkan memakai F2-score sebagai pembenaran, namun setelah dihitung **F2 justru masih memenangkan ambang lama** (0,385 berbanding 0,286); baru pada F3 ambang baru unggul. Karena itu pembenaran revisi tidak bersandar pada metrik gabungan, melainkan pada pertimbangan klinis bahwa biaya melewatkan penderita jauh lebih besar daripada biaya satu kali pemeriksaan tambahan
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot terminal: migrasi `ALTER TABLE users ADD COLUMN device_key` berhasil
-- Screenshot DB Browser: kolom `device_key` di tabel `users`
-- Screenshot Swagger UI: endpoint `/device/pair`
-- Screenshot Postman: `POST /device/pair` dengan `{"device_key": "antaraga-001"}` berhasil
+- `ADAM_hasil penerapan ambang baru.png` — notebook `model/hasil_ambang_22juli.ipynb` bagian 2, tabel perbandingan 19 Juli berbanding 22 Juli
+- `ADAM_masalah label risiko rusak.png` — notebook yang sama bagian 3, sebaran label saat masih satu ambang
+- `ADAM_perbaikan dua ambang terpisah.png` — notebook yang sama bagian 4, sebaran setelah dipisah
+- `ADAM_grafik hasil revisi ambang.png` — notebook yang sama, grafik tiga panel
+- `ADAM_perbandingan metrik f1 f2 f3.png` — notebook yang sama bagian 5
 
 ---
 
 **Kamis, 23 Juli 2026 — 180 menit**
 
 **Kegiatan:**
-Implementasi UI pairing perangkat di Dashboard Screen Flutter. Menambahkan ikon jam (watch) di AppBar — abu-abu jika belum terhubung, hijau jika terhubung. Saat ikon di-tap, muncul dialog untuk memasukkan `DEVICE_ID` (contoh: `antaraga-001`). Setelah pairing berhasil, snackbar muncul dengan konfirmasi. Tambah method `pairDevice()` dan `getDeviceStatus()` ke `ApiService`.
+Memvalidasi model setelah perubahan ambang dengan menganalisis kontribusi tiap fitur terhadap keputusan. Tujuannya memastikan model mempelajari pola yang masuk akal secara medis, bukan korelasi semu yang kebetulan muncul di data latih.
 
 **Hasil:**
-- Ikon device di AppBar dengan indikator status (abu-abu/hijau)
-- Dialog pairing dengan input DEVICE_ID
-- `ApiService.pairDevice()` dan `ApiService.getDeviceStatus()`
+- Peringkat kepentingan (gain): Usia **0,502** · IMT 0,086 · Hipertensi 0,079 · Jenis kelamin 0,078 · Glukosa rata-rata 0,076 · Penyakit jantung 0,076
+- Peringkat terbawah justru fitur yang secara medis kurang berkaitan: tipe tempat tinggal 0,059, status merokok 0,044, status bekerja **0,000**
+- Total kontribusi faktor risiko klinis **81,9%**, sehingga model dinilai tidak bertumpu pada korelasi semu
+- Dicatat sebagai catatan pengembangan: dominasi usia 0,502 perlu diwaspadai karena model berisiko sekadar menebak dari umur; hal ini menjadi pertimbangan komposisi subjek saat pengumpulan data kalibrasi nanti
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot emulator: ikon jam abu-abu di AppBar (belum pairing)
-- Screenshot emulator: dialog "Hubungkan Perangkat" dengan input field
-- Screenshot emulator: setelah pairing → ikon berubah hijau + snackbar "Berhasil"
-- Screenshot emulator: tooltip ikon menampilkan "Perangkat: antaraga-001"
-
----
-
-**Jumat, 24 Juli 2026 — 180 menit**
-
-**Kegiatan:**
-Testing integrasi lengkap: firmware → backend → mobile app. Menjalankan `dev.sh`, mengupdate `CLOUD_HOST` di `config.h` firmware sesuai URL ngrok, flash firmware ke XIAO ESP32-S3, melakukan pairing di mobile app, memantau log server. Berhasil melihat `POST /v1/ingest 200 OK` terus-menerus dari firmware. Data vital masuk ke database dan tampil di dashboard Flutter.
-
-**Hasil:**
-- Integrasi end-to-end berhasil: data mengalir dari sensor → backend → HP
-- LED firmware denyut 1x/detik (streaming normal)
-- Dashboard Flutter menampilkan data real dari sensor
-
-📸 **Bukti yang perlu dilampirkan:**
-- Foto smartband XIAO ESP32-S3 yang sudah terpasang sensor dan terhubung WiFi
-- Screenshot terminal: `POST /v1/ingest 200 OK` berulang dengan latency ~10ms
-- Screenshot emulator: dashboard Flutter menampilkan data real dari sensor
-- Video singkat: LED smartband berdenyut saat streaming aktif
+- `ADAM_peringkat kepentingan fitur model.png` — notebook `model/kepentingan_fitur_23juli.ipynb` bagian 1
+- `ADAM_grafik kepentingan fitur dan porsi klinis.png` — notebook yang sama bagian 2
 
 ---
 
 **Sabtu, 25 Juli 2026 — 180 menit**
 
 **Kegiatan:**
-Debugging masalah "dashboard tidak update" di Flutter. Menemukan root cause: backend mengirim `heart_rate_bpm: null` dan `spo2_percent: null` (belum dihitung karena MLP belum dilatih), menyebabkan `VitalData.fromJson()` crash di `(null as num).round()`. Exception tertelan oleh `catch (_)` sehingga `setState()` tidak pernila dipanggil. Fix: gunakan `?? 0` sebagai fallback di `fromJson()`.
+Membangun artefak model final untuk dipakai server. Menyimpan modelnya saja tidak cukup: bila urutan fitur atau daftar nilai kategori berbeda antara pelatihan dan inferensi, prediksinya salah tanpa memunculkan galat apa pun. Untuk membuktikannya dilakukan uji dengan sengaja menukar posisi dua fitur.
 
 **Hasil:**
-- Fix di `lib/models/vital_data.dart`: `(json['heart_rate_bpm'] as num?)?.round() ?? 0`
-- Kartu "Detak Jantung" menampilkan `--` saat nilai 0 (belum tersedia dari sensor)
-- Dashboard sekarang update setiap ada data baru dari firmware
+- Artefak `model/artifacts/stroke_risk_model.joblib` (147 KB) memuat model, urutan sembilan fitur, daftar nilai kategori, jenis pengodean, serta **kedua ambang** (deteksi 0,042 dan risiko tinggi 0,705) beserta target recall
+- Uji penukaran fitur `age` ↔ `is_working`: selisih probabilitas rerata **0,249**, maksimum **0,787**
+- Sebanyak **555 dari 1.533 sampel berubah keputusan** akibat penukaran itu, tanpa satu pun pesan galat
+- Disimpulkan `feature_order` wajib disimpan di dalam artefak dan dipakai ulang saat inferensi
+- Berkas metrik `metrics.json` ikut disimpan sebagai catatan performa versi model ini
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot emulator: dashboard menampilkan `--` untuk detak jantung
-- Screenshot emulator: data vital lain (tekanan darah, gula) ter-update dari sensor
-- Screenshot kode `vital_data.dart` setelah fix di VSCode
-- Screenshot terminal: tidak ada lagi error 500 di backend log
+- `ADAM_isi artefak model dan metadata.png` — notebook `model/artefak_model_25juli.ipynb` bagian 1
+- `ADAM_uji pengaruh urutan fitur tertukar.png` — notebook yang sama bagian 2
+- `ADAM_grafik prediksi bergeser tanpa galat.png` — notebook yang sama bagian 3
+- `ADAM_berkas artefak model tersimpan.png` — terminal `ls -lh model/artifacts/`
 
 ---
 
-**Minggu, 26 Juli 2026 — 180 menit**
+**Senin, 27 Juli 2026 — 240 menit**
 
 **Kegiatan:**
-Implementasi hardware monitoring dashboard di browser — diakses via `GET /dashboard` di backend. Menggunakan Chart.js untuk visualisasi sinyal PPG real-time. Empat tab: (1) Data Asli: grafik PPG, RED, IR; (2) Setelah PWA: sinyal terfilter + peak detection; (3) Setelah MLP: vital tiles; (4) Setelah XGBoost: gauge risiko stroke. Polling setiap 1 detik, auto-connect jika hanya 1 device.
+Mengintegrasikan model ke lapisan API sebagai endpoint prediksi risiko stroke, sehingga aplikasi mobile dapat memanggilnya. Endpoint menerima data profil pengguna, memetakannya ke sembilan fitur model sesuai urutan yang tersimpan di artefak, lalu mengembalikan probabilitas beserta tingkat risiko.
 
 **Hasil:**
-- File `api/static/dashboard.html` — dashboard monitoring lengkap
-- Endpoint `GET /dashboard`, `GET /v1/devices`, `GET /v1/ingest/latest`
-- File `api/ingest_buffer.py` — ring buffer per device (10 detik window)
+- Endpoint `POST /predict/stroke-risk` berjalan dan mengembalikan `probability`, `risk_level`, `threshold`, dan `model_name`
+- Fungsi `predict_stroke_risk()`, `_build_row()`, dan `_risk_level()` di `api/ml.py`
+- Pemetaan profil pengguna ke fitur model lewat `profile_to_features()` di `api/profile_utils.py` — hipertensi diturunkan dari pembacaan tekanan darah terakhir karena aplikasi tidak punya medan diagnosis terpisah
+- Tingkat risiko memakai dua ambang yang tersimpan di artefak, bukan angka yang ditulis langsung di kode
+- Setiap prediksi dicatat ke tabel `prediction_logs` untuk keperluan audit dan riwayat pengguna
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot browser: Dashboard tab "Data Asli" menampilkan grafik PPG
-- Screenshot browser: tab "Setelah PWA" dengan peak markers kuning
-- Screenshot browser: tab "Setelah XGBoost" dengan gauge risiko
-- Screenshot browser: status bar aktif (dot hijau, SEQ terus bertambah)
-
----
-
-## FASE 3 — PENGUJIAN, ASSEMBLY & DOKUMENTASI
-*(29 Juli — 24 September 2026)*
+- `ADAM_kode fungsi predict stroke risk.png` — `api/ml.py` di VSCode, fungsi `predict_stroke_risk()` dan `_risk_level()`
+- `ADAM_swagger endpoint prediksi risiko stroke.png` — Swagger UI `/docs`, endpoint beserta skema permintaan
+- `ADAM_respons json prediksi risiko.png` — hasil uji endpoint menampilkan keempat medan keluaran
+- `ADAM_tabel prediction logs terisi.png` — DB Browser menampilkan isi tabel `prediction_logs`
 
 ---
 
@@ -938,91 +956,73 @@ Implementasi hardware monitoring dashboard di browser — diakses via `GET /dash
 
 ---
 
-**Rabu, 29 Juli 2026 — 180 menit**
+**Rabu, 29 Juli 2026 — 240 menit**
 
 **Kegiatan:**
-Implementasi WebSocket serial monitor di backend — memungkinkan memantau serial UART firmware dari browser tanpa Arduino IDE. Endpoint `GET /serial/ports` menampilkan daftar port serial, `WebSocket /serial/ws?port=...&baud=115200` meneruskan data serial secara real-time. Digunakan tim hardware untuk debug tanpa laptop tambahan.
+  Menghosting backend ke cloud VPS, membeli domain, serta melakukan konfigurasi Cloudflare. Menyiapkan pengemasan aplikasi dengan Docker dan reverse proxy nginx agar backend dapat diakses publik lewat domain, sekaligus alur penerapan otomatis dari repositori.
 
 **Hasil:**
-- Endpoint `GET /serial/ports` — list port serial
-- WebSocket `/serial/ws` — stream data serial real-time
-- `pyserial` ditambahkan ke `requirements.txt`
+- Backend berjalan di VPS dan dapat diakses lewat **www.antaraga.web.id**
+- `Dockerfile` dan `docker-compose.prod.yml` dengan empat named volume agar data bertahan melewati pembaruan: `antaraga-db`, `antaraga-models`, `antaraga-ota`, `antaraga-logs`
+- Port dibatasi ke `127.0.0.1:8089` agar hanya dapat diakses lewat reverse proxy, tidak terbuka langsung ke internet
+- Konfigurasi nginx di `scripts/nginx_antaraga.conf`: domain utama untuk halaman muka dan dashboard, subdomain `api.` untuk seluruh endpoint
+- Cloudflare mode Flexible; pengalihan HTTP ke HTTPS sengaja tidak dipasang di nginx untuk menghindari `ERR_TOO_MANY_REDIRECTS`
+- Alur penerapan otomatis lewat GitHub Actions (`.github/workflows/deploy.yml`)
+- Fitur pembaruan firmware jarak jauh (OTA) ditambahkan agar smartband dapat diperbarui tanpa kabel
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot browser: `http://localhost:8000/serial/ports` → list port tersedia
-- Screenshot: WebSocket test menggunakan wscat atau Postman WebSocket
-- Screenshot: data serial [STAT] firmware terbaca dari browser
+- `ADAM_halaman muka antaraga web id di peramban.png` — situs terbuka lewat domain, sorot ikon kunci HTTPS
+- `ADAM_container antaraga berstatus healthy.png` — terminal `docker compose ps`
+- `ADAM_konfigurasi nginx reverse proxy.png` — `scripts/nginx_antaraga.conf` di VSCode
+- `ADAM_dasbor cloudflare domain antaraga.png` — panel Cloudflare menampilkan catatan DNS
+- `ADAM_github actions penerapan berhasil.png` — riwayat workflow dengan tanda centang hijau
 
 ---
 
 **Kamis, 30 Juli 2026 — 180 menit**
 
 **Kegiatan:**
-Performance testing: mengukur latency pipeline `/v1/ingest` dari penerimaan hingga prediksi. Menggunakan log `latency_ms` di prediction_logs. Target: total latency < BATCH_MS (500ms) agar tidak menahan koneksi keep-alive firmware. Mengoptimasi query database (menambahkan index pada `profile_id` dan `created_at`).
+Menguji ketahanan endpoint terhadap masukan tidak lengkap dan kategori di luar daftar pelatihan, karena data dari aplikasi mobile tidak selalu lengkap. Selain itu membangun sistem pencatatan akses dan galat agar kendala di lapangan dapat ditelusuri tanpa harus masuk ke VPS.
 
 **Hasil:**
-- Latency rata-rata: ~10-15ms per prediksi (jauh di bawah 500ms target)
-- Index database ditambahkan untuk mempercepat query
-- Benchmark hasil terdokumentasi
+- **Ditemukan bug**: masukan yang kolomnya benar-benar hilang membuat server melempar `KeyError`, yang akan merusak aplikasi di tangan pengguna
+- Diperbaiki dengan mengubah `_build_row()` agar kolom yang tidak dikirim diperlakukan sebagai nilai hilang; kolom numerik dipaksa bertipe angka agar `None` menjadi `NaN`
+- Setelah perbaikan: **6 dari 6 skenario ditangani tanpa galat** (semula 5 dari 6)
+- Uji pengaruh IMT: nilai kosong tetap memberi probabilitas wajar tanpa nilai ekstrem, memanfaatkan penanganan data hilang bawaan XGBoost
+- Modul `api/logging_utils.py` dengan dua berkas terpisah: `access.log` dan `api.log`
+- Endpoint `GET /v1/access-log` beserta aliran langsung, sehingga catatan dapat dibaca dari dashboard
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot DB Browser: tabel `prediction_logs` dengan kolom `latency_ms`
-- Screenshot terminal: query latency rata-rata
-- Screenshot: grafik distribusi latency (histogram)
-
----
-
-**Jumat, 31 Juli 2026 — 180 menit**
-
-**Kegiatan:**
-Security review backend API. Memverifikasi: (1) semua endpoint sensitif dilindungi JWT, (2) password tersimpan sebagai bcrypt hash (bukan plaintext), (3) `serviceAccountKey.json` ada di `.gitignore`, (4) JWT secret tidak hardcoded (diambil dari `.env`), (5) CORS dikonfigurasi. Memperbaiki beberapa temuan kecil.
-
-**Hasil:**
-- Checklist security review selesai
-- `.gitignore` diverifikasi — credential files tidak di-commit
-- JWT expiry dikonfigurasi via environment variable
-
-📸 **Bukti yang perlu dilampirkan:**
-- Screenshot `.gitignore` menampilkan `serviceAccountKey.json` terdaftar
-- Screenshot terminal: `git log --all -- api/serviceAccountKey.json` menampilkan tidak pernah di-commit
-- Screenshot `.env` (sensor area sensitif ditutup/blur) menampilkan struktur
-- Screenshot: endpoint tanpa token → 401 Unauthorized
-
----
-
-**Sabtu, 1 Agustus 2026 — 180 menit**
-
-**Kegiatan:**
-Persiapan pengumpulan data kalibrasi untuk training model MLP. Membuat protokol kalibrasi: pengguna memakai smartband sambil mengukur tekanan darah dengan tensimeter standar dan gula darah dengan glucometer. Data disimpan secara terstruktur di `data/calibration/`. Membuat template CSV dan dokumentasi prosedur kalibrasi.
-
-**Hasil:**
-- Folder `data/calibration/` dengan template CSV
-- Dokumen prosedur kalibrasi (kapan, posisi, berapa pengulangan)
-- Script `scripts/record_calibration.py` untuk merekam data sesi kalibrasi
-
-📸 **Bukti yang perlu dilampirkan:**
-- Screenshot folder `data/calibration/` di file explorer
-- Screenshot template CSV di spreadsheet
-- Foto: tensimeter standar dan glucometer yang akan digunakan kalibrasi
-- Screenshot kode `record_calibration.py` di VSCode
+- `ADAM_uji enam skenario masukan bermasalah.png` — notebook `model/uji_ketahanan_endpoint_30juli.ipynb` bagian 1
+- `ADAM_grafik ketahanan endpoint dan nilai kosong.png` — notebook yang sama
+- `ADAM_perbaikan penanganan kolom hilang.png` — `api/ml.py` fungsi `_build_row()` yang sudah diperbaiki
+- `ADAM_tab log akses realtime dashboard.png` — dashboard tab Log Akses
 
 ---
 
 **Minggu, 2 Agustus 2026 — 180 menit**
+*Lokasi: Kopi Kenangan*
 
 **Kegiatan:**
-Memulai pengumpulan data kalibrasi bersama tim hardware. Sesi pertama: memasang smartband ke relawan, merekam sinyal PPG selama 30 detik per sesi, mencatat tekanan darah dan gula darah secara bersamaan menggunakan alat standar. Menganalisis kualitas sinyal PPG pertama dari perangkat nyata.
+Membangun dashboard web pemantauan untuk kemudahan riset. Memindahkan algoritma analisis sinyal dari firmware hardware (ESP32) ke server, agar bentuk gelombang dan BPM ketiga kanal sensor multiwavelength dapat dipantau langsung lewat web tanpa perlu menyambungkan kabel mikrokontroler ke laptop.
 
 **Hasil:**
-- Data kalibrasi sesi pertama: beberapa rekaman PPG + ground truth vital
-- Analisis kualitas sinyal: peak-to-peak ratio, SNR
-- Catatan penyesuaian hardware (posisi sensor, kekencangan tali)
+- Dashboard web di `/dashboard` dengan pembaruan tiap 1 detik
+- Modul `api/ppg_analysis.py`: pembuangan garis dasar dengan bandpass Butterworth 0,5–5 Hz zero-phase, penghitungan BPM lewat autokorelasi FFT beserta nilai periodisitas
+- Ketiga kanal diproses terpisah: hijau 525 nm, merah 660 nm, inframerah 880 nm
+- Panel statistik menampilkan DC, AC puncak-ke-puncak, dan perfusi permil tiap kanal
+- Pilihan lebar jendela tampilan 5 sampai 60 detik
+- Nilai periodisitas di bawah 0,30 ditandai sebagai derau agar angka BPM tidak dibaca sebagai hasil sah
+- Port algoritma BPM firmware ke Python di `api/bpm_engine.py` sebagai pembanding, seluruh konstanta disamakan dengan `Firmware/include/config.h`
+- Penilaian mutu sinyal (SQI) berlapis: penanda dari perangkat digabung pemeriksaan di server, batch bermutu buruk dibuang sebelum dianalisis
+- **Estimasi SpO2 diuji lalu dibatalkan.** Perhitungan rasio-of-ratios memerlukan kalibrasi terhadap pulse oximeter medis yang belum tersedia, sehingga nilainya berisiko menyesatkan. Fitur dilepas agar tidak ada angka yang tidak dapat dipertanggungjawabkan
 
 📸 **Bukti yang perlu dilampirkan:**
-- Foto: relawan memakai smartband ANTARAGA + tensimeter di lengan lain
-- Screenshot: sinyal PPG dari sensor_monitor.py selama sesi kalibrasi
-- Foto: layar glucometer dan tensimeter saat pengukuran
-- Screenshot: file CSV data kalibrasi tersimpan
+- `ADAM_dashboard web pemantauan realtime.png` — tampilan penuh dashboard dengan grafik berjalan
+- `ADAM_grafik ppg tiga kanal multiwavelength.png` — gelombang ketiga kanal berdampingan
+- `ADAM_panel statistik dc ac perfusi.png` — tabel statistik jendela
+- `ADAM_penilaian mutu sinyal sqi.png` — skor SQI beserta penandanya
+- `ADAM_kode analisis sinyal ppg server.png` — `api/ppg_analysis.py`
 
 ---
 
@@ -1030,91 +1030,92 @@ Memulai pengumpulan data kalibrasi bersama tim hardware. Sesi pertama: memasang 
 
 ---
 
-**Rabu, 5 Agustus 2026 — 180 menit**
+**Selasa, 5 Agustus 2026 — 240 menit**
+*Lokasi: Ruang Kerja Pribadi Tim*
 
 **Kegiatan:**
-Analisis data kalibrasi yang sudah terkumpul. Memverifikasi kualitas sinyal PPG: deteksi apakah ada noise berlebih, motion artifact, atau saturasi sensor. Memvisualisasikan sinyal sebelum dan sesudah bandpass filter. Menghitung korelasi awal antara fitur morfologi PPG dengan nilai vital ground truth.
+Membangun antarmuka kalibrasi di dashboard untuk perekaman sesi berpasangan antara sinyal PPG sensor dan nilai alat medis. Sebelumnya perekaman hanya dapat dilakukan lewat terminal, yang menyulitkan saat pengambilan data di lapangan bersama subjek lansia. Kegiatan ini menyiapkan sarana pengumpulan data; perancangan modelnya dilakukan setelah datanya terkumpul.
 
 **Hasil:**
-- Laporan kualitas sinyal kalibrasi
-- Grafik perbandingan sinyal raw vs filtered
-- Korelasi Pearson fitur PPG vs vital (tekanan darah, gula darah)
+- Formulir perekaman sesi kalibrasi: sinyal PPG diambil otomatis dari penyangga 10 detik terakhir, nilai alat invasif diisi manual peneliti
+- Tiga kondisi pengukuran dapat dipilih: puasa, dua jam setelah makan, dan sewaktu
+- Tabel dataset kalibrasi beserta penyuntingan, penghapusan, dan ekspor CSV
+- Ringkasan statistik dataset: jumlah sesi, jumlah subjek, dan rentang tiap parameter
+- Endpoint `POST /v1/calibrate`, `GET /v1/calibrate`, `PATCH /v1/calibrate/{id}`, dan `GET /v1/calibrate/export.csv`
+- Sinyal mentah ketiga kanal ikut disimpan, sehingga nilai turunan dapat dihitung ulang bila kelak ditemukan kesalahan pemrosesan
+- Dokumen `docs/protokol_kalibrasi.md` disusun sebagai panduan pengambilan data di lapangan
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot notebook: sinyal PPG dari sensor nyata (raw + filtered)
-- Screenshot notebook: heatmap korelasi fitur PPG vs vital
-- Screenshot: grafik scatter plot fitur terbaik vs tekanan darah
+- `ADAM_formulir perekaman sesi kalibrasi.png` — dashboard tab Kalibrasi
+- `ADAM_tabel dataset kalibrasi.png` — tabel dataset dengan baris yang sudah terekam
+- `ADAM_ekspor csv dataset kalibrasi.png` — berkas CSV hasil ekspor terbuka
+- `ADAM_dokumen protokol kalibrasi.png` — `docs/protokol_kalibrasi.md`
 
 ---
 
-**Kamis, 6 Agustus 2026 — 180 menit**
+**Rabu, 6 Agustus 2026 — 360 menit**
+*Waktu: 10:00 – 16:00*
 
 **Kegiatan:**
-Lanjutan pengumpulan data kalibrasi — sesi kedua dengan lebih banyak relawan. Target: minimal 30 rekaman per relawan × 5 relawan = 150 titik data. Memperhatikan variasi: posisi sensor, kondisi cahaya, aktivitas sebelum pengukuran. Menyimpan metadata sesi kalibrasi.
+Pengujian smartband ANTARAGA secara menyeluruh bersama tim hardware. Menguji alur data dari sensor sampai tersimpan di server, sekaligus memeriksa kewajaran nilai yang terbaca.
 
 **Hasil:**
-- Data kalibrasi bertambah
-- Metadata sesi: nama relawan (anonim), kondisi, waktu
-- Dataset kalibrasi dalam proses akumulasi
+- Alur pengiriman data berjalan: firmware mengirim batch tiap 500 ms, server menerima dan memproses ketiga kanal
+- **Ditemukan lonjakan BPM tidak wajar**: pembacaan stabil di 80 bpm tiba-tiba melompat ke 40 bpm selama beberapa detik lalu kembali normal. Polanya tepat setengah, yang merupakan ciri *octave error* — detektor melewatkan satu dari dua denyut
+- Dibuat penyaring di `api/bpm_filter.py` dengan empat lapis: gerbang periodisitas, koreksi kesalahan oktaf, batas laju fisiologis 20%, dan median bergulir
+- Nilai terakhir yang baik ditahan maksimum 15 detik saat sinyal hilang, agar layar tidak menampilkan tanda hubung berkedip
+- Mekanisme pemulihan ditambahkan: bila delapan pembacaan berturut-turut konsisten, penyaring menganggap detak memang berpindah level
+- **Ditemukan BPM kanal hijau terkunci di sekitar 60 bpm.** Penelusuran menunjukkan sinyal SEN0203 sudah AC-coupled di perangkat (perfusi terukur 1.719‰, padahal PPG normal 0,02–2%), dan penggabungan batch tanpa pemeriksaan kesinambungan menimbulkan lompatan periodik tepat 1 Hz yang dikunci autokorelasi
+- Kartu BPM siap-tampil dialihkan bersumber dari kanal inframerah yang perfusinya stabil
+- **Ditemukan kesalahan oktaf pada jalur analisis PWA**: `bpm_from_spectrum()` melaporkan 157,5 bpm padahal ketiga kanal sepakat di sekitar 78 bpm. Diperbaiki dengan penjaga sub-harmonik dan interpolasi parabola
 
 📸 **Bukti yang perlu dilampirkan:**
-- Foto: sesi kalibrasi dengan relawan berbeda
-- Screenshot: file CSV data kalibrasi di folder `data/calibration/`
-- Screenshot: jumlah total rekaman yang terkumpul
-- Foto: tim sedang melakukan pengambilan data
+- `ADAM_pengujian smartband bersama tim.png` — foto pengujian dengan alat terpasang
+- `ADAM_lonjakan bpm sebelum disaring.png` — dashboard menampilkan lonjakan 80 ke 40 bpm
+- `ADAM_uji empat skenario penyaring bpm.png` — hasil uji penyaring, nilai 40 dikoreksi jadi 80
+- `ADAM_kartu bpm tersaring di dashboard.png` — kartu BPM Tersaring beserta nilai mentahnya
+- `ADAM_analisis artefak kanal hijau.png` — perhitungan periode terdeteksi sama dengan panjang batch
+- `ADAM_perbaikan kesalahan oktaf pwa.png` — tabel perbandingan tujuh detak, versi lama berbanding baru
 
 ---
 
-**Jumat, 7 Agustus 2026 — 180 menit**
+**Sabtu, 9 Agustus 2026 — 360 menit**
 
 **Kegiatan:**
-Training model MLP untuk estimasi vital dari PPG menggunakan data kalibrasi yang sudah terkumpul. Menjalankan `python -m model.train_ppg_vitals`. Evaluasi dengan cross-validation 5-fold. Menganalisis error per output: Mean Absolute Error untuk tekanan sistolik, diastolik, dan gula darah.
+Proses pembuatan berkas pendaftaran Hak Kekayaan Intelektual untuk komponen perangkat lunak dan model kecerdasan buatan ANTARAGA. Menyusun dokumentasi struktur kode beserta rentang baris tiap fitur agar dapat dilampirkan sebagai bukti ciptaan.
 
 **Hasil:**
-- Model MLP `ppg_vitals_model.joblib` berhasil dilatih
-- MAE tekanan sistolik: ±X mmHg, diastolik: ±Y mmHg, gula darah: ±Z mg/dL
-- Model artifact tersimpan di `model/artifacts/`
+- Dokumen `HKI.md` tersusun dengan lima bagian: backend API, dashboard web, model AI, firmware smartband, dan aplikasi mobile
+- Tiap fitur dipetakan ke berkas dan rentang barisnya, sehingga pemeriksa dapat menelusuri langsung ke kodenya
+- Lampiran ringkasan delapan fitur unggulan yang menjadi inti kebaruan ciptaan
+- Catatan penyusunan lampiran: kredensial pada `Firmware/include/config.h` dan `.env` harus disamarkan, dataset pihak ketiga tidak dilampirkan, artefak model biner tidak disertakan karena yang diklaim adalah kode pelatihannya
+- Total baris kode yang didokumentasikan: backend dan dashboard di repositori utama, serta 4.785 baris aplikasi Flutter pada 23 berkas
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot terminal: training MLP selesai dengan metrik
-- Screenshot notebook: learning curve (loss vs epoch)
-- Screenshot: tabel MAE per output
-- Screenshot file `ppg_vitals_model.joblib` terbuat di `model/artifacts/`
+- `ADAM_dokumen hki lima bagian.png` — `HKI.md` di VSCode, daftar isi kelima bagian
+- `ADAM_pemetaan fitur ke baris kode.png` — tabel pemetaan berkas dan rentang baris
+- `ADAM_lampiran fitur unggulan ciptaan.png` — tabel delapan fitur unggulan
 
 ---
 
-**Sabtu, 8 Agustus 2026 — 180 menit**
+**Minggu, 10 Agustus 2026 — 180 menit**
 
 **Kegiatan:**
-Validasi model MLP end-to-end: memasang smartband ke relawan, merekam sinyal PPG, mengirimkan ke endpoint `/estimate/vitals-from-ppg`, membandingkan output model dengan pengukuran alat standar. Mendokumentasikan akurasi pada data unseen (test set).
+Mengunjungi dokter spesialis saraf untuk validasi pendekatan sistem ANTARAGA, terutama pemilihan parameter risiko, penetapan ambang keputusan, dan cara penyampaian hasil kepada keluarga.
 
 **Hasil:**
-- Tabel validasi: prediksi MLP vs ground truth untuk setiap relawan
-- Analisis error: apakah error sistematis atau acak
-- Rekomendasi fine-tuning jika error melebihi ambang klinis
+*(Bagian ini perlu diisi sesuai hasil kunjungan yang sebenarnya — nama dan institusi dokter, masukan yang diberikan, serta tindak lanjut yang disepakati.)*
+
+Hal-hal yang disiapkan untuk ditanyakan:
+- Kelayakan ambang deteksi 0,042 yang mengutamakan recall (73 dari 75 penderita terdeteksi, dengan konsekuensi 62% orang sehat ikut tertandai)
+- Kesesuaian sembilan parameter masukan model dengan faktor risiko stroke pada praktik klinis
+- Ketepatan penggunaan skor ABCD² sebagai asesmen lanjutan, dan penegasan bahwa ANTARAGA berperan sebagai penyaring awal, bukan alat diagnosis
+- Cara penyampaian tingkat risiko kepada keluarga agar tidak menimbulkan kepanikan maupun rasa aman yang keliru
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot: tabel perbandingan prediksi vs ground truth
-- Screenshot Postman: `/estimate/vitals-from-ppg` dengan data nyata
-- Foto: pengukuran bersamaan (smartband + alat standar)
-- Screenshot: response API dengan nilai estimasi vital
-
----
-
-**Minggu, 9 Agustus 2026 — 180 menit**
-
-**Kegiatan:**
-Review dan refactoring kode backend secara menyeluruh. Memastikan tidak ada hardcoded value, semua konfigurasi melalui environment variable, error handling konsisten, dan kode terdokumentasi. Memverifikasi semua endpoint di Swagger UI masih berjalan setelah perubahan.
-
-**Hasil:**
-- Kode backend lebih bersih dan konsisten
-- Semua endpoint terverifikasi di Swagger UI
-- Tidak ada secret/credential di dalam kode
-
-📸 **Bukti yang perlu dilampirkan:**
-- Screenshot Swagger UI: semua endpoint berwarna hijau (tidak ada error)
-- Screenshot: `git log --oneline` menampilkan riwayat commit yang rapi
-- Screenshot kode setelah refactoring di VSCode
+- `ADAM_kunjungan validasi dokter saraf.png` — foto bersama dokter saat konsultasi
+- `ADAM_catatan masukan dokter.png` — catatan hasil konsultasi
+- `ADAM_surat keterangan validasi.png` — dokumen validasi bila tersedia
 
 ---
 
@@ -1122,88 +1123,77 @@ Review dan refactoring kode backend secara menyeluruh. Memastikan tidak ada hard
 
 ---
 
-**Rabu, 12 Agustus 2026 — 180 menit**
+**Kamis, 14 Agustus 2026 — 180 menit**
 
 **Kegiatan:**
-Testing skenario notifikasi FCM secara lengkap dengan device fisik. Skenario 1: user aktif menggunakan app saat risiko HIGH → notifikasi muncul in-app. Skenario 2: app di background → notifikasi di notification bar, tap → buka form ABCD2. Skenario 3: app killed → notifikasi di bar, tap → app restart langsung ke ABCD2.
+Proses penyerahan berkas HKI ke bagian sentra HKI kampus PENS. Melengkapi lampiran kode sumber dan memastikan seluruh kredensial sudah disamarkan sebelum dokumen diserahkan.
 
 **Hasil:**
-- Ketiga skenario FCM berfungsi dengan benar
-- Cooldown 5 menit mencegah spam notifikasi
-- Bug ditemukan dan diperbaiki: notifikasi terkadang double
+- Berkas lampiran kode sumber disiapkan sesuai urutan dokumen: backend, dashboard, model AI, firmware, aplikasi mobile
+- Kredensial WiFi pada `Firmware/include/config.h`, kunci perangkat, dan isi `.env` diganti dengan tanda bintang pada salinan lampiran
+- Berkas `serviceAccountKey.json` dan kunci API pada `lib/firebase_options.dart` dikecualikan dari lampiran
+- Dataset publik `healthcare-dataset-stroke-data.csv` tidak dilampirkan karena bukan bagian dari ciptaan
+- Berkas diserahkan ke sentra HKI PENS
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot HP: notifikasi "Risiko Stroke Tinggi" di notification bar
-- Video: tap notifikasi → app buka form ABCD2
-- Screenshot: kode handler notifikasi untuk ketiga skenario
+- `ADAM_berkas hki siap serah.png` — tumpukan dokumen lampiran
+- `ADAM_kredensial disamarkan pada lampiran.png` — perbandingan berkas asli dan salinan lampiran
+- `ADAM_penyerahan berkas ke sentra hki.png` — foto saat penyerahan dokumen
 
 ---
 
-**Kamis, 13 Agustus 2026 — 180 menit**
+**Jumat, 15 Agustus 2026 — 360 menit**
 
 **Kegiatan:**
-Pengujian performa dashboard browser. Mengukur: (1) waktu load initial Chart.js dari CDN, (2) lag saat update chart setiap 1 detik, (3) penggunaan memory browser setelah 30 menit berjalan. Mengoptimasi: mengurangi jumlah data yang dikirim dari endpoint, memakai `chart.update('none')` untuk skip animasi.
+Merancang model MLP untuk kalibrasi sensor PPG. Model XGBoost yang sudah selesai memprediksi risiko stroke dari nilai vital, tetapi nilai-nilai itu masih harus diukur dengan alat invasif. Tugas MLP adalah menerjemahkan sinyal optik sensor menjadi nilai vital, sehingga pengguna tidak perlu ditusuk jarum atau dipasangi manset.
 
 **Hasil:**
-- Dashboard stabil setelah 30 menit tanpa memory leak
-- Update chart < 50ms per cycle
-- Sinyal PPG terlihat jelas di semua 4 tab
+- **Ditetapkan MLP, bukan regresi linier.** Diuji pada data buatan yang meniru dua sifat nyata: perfusi merupakan rasio AC/DC (pembagian, tidak dapat dinyatakan sebagai penjumlahan berbobot) dan efeknya dimodulasi kekakuan pembuluh yang meningkat seiring usia (interaksi antar-fitur). Hasilnya regresi linier R² 0,868 sedangkan MLP 0,946
+- **Ditetapkan lima model terpisah**, bukan satu model lima keluaran. Alasannya: ketersediaan data tiap parameter berbeda (alat kolesterol dan asam urat tidak selalu ada), skala nilainya jauh berbeda (gula darah 70–280 mg/dL berbanding asam urat 2–9,5 mg/dL) sehingga galat gula darah akan mendominasi fungsi loss, dan kegagalan satu parameter tidak menular ke yang lain
+- **Ditetapkan aturan penskalaan kapasitas**: n<10 memakai lapisan (4,) dengan alpha 1,0; 10≤n<30 memakai (16,8) alpha 0,1; n≥30 memakai (64,32) alpha 0,01 dengan solver adam. MLP (64,32) memiliki 2.625 parameter — memaksakannya ke data sedikit sama saja mencari 2.625 nilai dari 5 persamaan
+- **Ditetapkan pengelompokan validasi silang per subjek.** Diuji pada 6 subjek × 5 rekaman: LeaveOneOut biasa menghasilkan R² 0,720 sedangkan pengelompokan per subjek menghasilkan −4,737. Selisih 5,5 itulah kebocoran yang tersembunyi — model hanya mengenali sidik optik lalu menyalin nilai dari rekaman lain milik orang yang sama
+- Tujuh fitur masukan ditetapkan: empat fitur optik (DC dan AC inframerah, DC dan AC merah), detak jantung, usia, dan jenis kelamin. Kanal hijau tidak dipakai karena sinyalnya sudah AC-coupled di perangkat sehingga nilai DC-nya tidak mencerminkan penyerapan cahaya
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot dashboard berjalan: semua 4 tab aktif menampilkan data
-- Screenshot browser DevTools (Performance tab): tidak ada memory leak
-- Video singkat: dashboard update real-time selama 30 detik
+- `ADAM_perbandingan mlp dan regresi linier.png` — notebook `model/mlp_rancangan_15agustus.ipynb` bagian 1
+- `ADAM_grafik perfusi rasio dan interaksi usia.png` — notebook yang sama, grafik tiga panel
+- `ADAM_aturan penskalaan kapasitas mlp.png` — notebook yang sama bagian 3, tabel aturan
+- `ADAM_grafik kebutuhan data tiap ukuran jaringan.png` — notebook yang sama bagian 3
+- `ADAM_uji kebocoran validasi silang.png` — notebook yang sama bagian 4
 
 ---
 
-**Jumat, 14 Agustus 2026 — 180 menit**
+**Sabtu, 16 Agustus 2026 — 300 menit**
 
 **Kegiatan:**
-UI polish dan bug fixing aplikasi Flutter berdasarkan feedback internal tim. Memperbaiki: padding yang tidak konsisten, teks yang terpotong di layar kecil, animasi loading yang terlalu lama. Menambahkan empty state yang informatif saat belum ada data vital. Mengecek responsivitas di berbagai ukuran layar (kecil dan besar).
+Menerapkan rancangan MLP ke kode pelatihan, menyambungkannya ke dashboard agar dapat dilatih langsung dari peramban, lalu melatihnya memakai data kalibrasi yang sudah terkumpul. Sekaligus memeriksa apakah model yang dihasilkan benar-benar lebih baik daripada tebakan paling sederhana.
 
 **Hasil:**
-- UI lebih konsisten dan polish
-- Empty state informatif di semua layar
-- App berjalan mulus di layar 5" hingga 6.7"
+- Endpoint `POST /v1/calibrate/train` dengan tiga mode: data asli, data demo, atau keduanya
+- Dua tombol pelatihan terpisah di dashboard, sehingga pelatihan tidak perlu lewat terminal lagi
+- Pembangkit data demo 100 baris untuk menguji alur tanpa perangkat keras
+- Laporan pelatihan dapat diunduh sebagai HTML lengkap dengan scatter plot dan penjelasan awam
+- Tiap target membawa status keterandalan: **TIDAK VALID** di bawah 10 subjek, **LEMAH** pada 10–29 subjek, **MEMADAI** pada 30 subjek ke atas
+- **Hasil pelatihan pada 5 subjek belum layak dipakai.** Dibandingkan dengan tolok ukur menebak nilai rata-rata tanpa memakai sensor sama sekali, MLP kalah pada 3 dari 5 parameter:
+
+| Parameter | MAE MLP | MAE tebak rata-rata | R² MLP |
+|---|---|---|---|
+| Gula Darah | 45,09 | **37,20** | −1,565 |
+| Kolesterol | 51,51 | **25,40** | −3,723 |
+| Asam Urat | **0,46** | 0,70 | +0,055 |
+| Sistolik | 22,30 | **15,80** | −1,321 |
+| Diastolik | **6,00** | 8,60 | +0,297 |
+
+- Sebabnya jelas: tujuh fitur dilatih dari lima baris data, sehingga persamaannya lebih sedikit daripada variabel yang dicari
+- Dicatat tiga persoalan komposisi untuk pengambilan data berikutnya: belum ada subjek dengan kolesterol di bawah 200 mg/dL, usia berhimpit dengan kondisi penyakit (satu-satunya subjek muda juga satu-satunya yang sehat), dan jumlah subjek masih 5 dari target 30
+- Angka di atas **tidak dilaporkan sebagai capaian**, melainkan sebagai penanda bahwa pengumpulan data harus dilanjutkan
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot sebelum dan sesudah fix (before/after comparison)
-- Screenshot di berbagai ukuran layar (emulator 5" dan 6.7")
-- Screenshot empty state yang informatif
-
----
-
-**Sabtu, 15 Agustus 2026 — 180 menit**
-
-**Kegiatan:**
-Membuat user guide singkat untuk pengguna sistem ANTARAGA: cara pertama kali setup (register → buat profil → pasang smartband → pairing), cara membaca dashboard, kapan harus ke dokter berdasarkan skor ABCD2. Disusun dalam format yang mudah dipahami orang awam (tidak teknis).
-
-**Hasil:**
-- Dokumen user guide (PDF/Word) untuk pengguna akhir
-- Panduan visual dengan screenshot aplikasi
-- FAQ 10 pertanyaan umum
-
-📸 **Bukti yang perlu dilampirkan:**
-- Screenshot halaman user guide yang sudah selesai
-- Screenshot: user guide dibuka di HP (format PDF)
-- Foto: caregiver lansia membaca dan menggunakan panduan
-
----
-
-**Minggu, 16 Agustus 2026 — 180 menit**
-
-**Kegiatan:**
-Testing aksesibilitas aplikasi Flutter. Memverifikasi: label semantik untuk screen reader, kontras warna yang cukup (AA standard), ukuran touch target minimal 48×48dp, teks yang bisa diperbesar hingga 200% tanpa layout rusak. Membuat laporan aksesibilitas.
-
-**Hasil:**
-- Laporan aksesibilitas: daftar issue dan status perbaikan
-- Touch target diperbaiki untuk komponen yang kurang dari 48dp
-- Kontras warna diverifikasi untuk semua teks penting
-
-📸 **Bukti yang perlu dilampirkan:**
-- Screenshot: Flutter accessibility inspector menampilkan semantic labels
-- Screenshot: app dengan ukuran teks 200% masih terbaca
-- Screenshot: laporan aksesibilitas
+- `ADAM_tombol pelatihan mlp di dashboard.png` — kartu Pelatihan MLP dengan dua tombol
+- `ADAM_status keterandalan tiap target.png` — hasil pelatihan menampilkan status TIDAK VALID
+- `ADAM_perbandingan mlp dengan tebakan rata rata.png` — notebook `model/pelatihan_mlp_16agustus.ipynb` bagian 2
+- `ADAM_grafik hasil pelatihan lima subjek.png` — notebook yang sama, grafik dua panel
+- `ADAM_laporan pelatihan html terunduh.png` — berkas laporan terbuka di peramban
 
 ---
 
@@ -1211,90 +1201,87 @@ Testing aksesibilitas aplikasi Flutter. Memverifikasi: label semantik untuk scre
 
 ---
 
-**Rabu, 19 Agustus 2026 — 180 menit**
+**Selasa, 19 Agustus 2026 — 240 menit**
 
 **Kegiatan:**
-Persiapan demo sistem ANTARAGA untuk penilaian PKM. Membuat script demo: urutan langkah yang akan ditunjukkan, data dummy yang menarik (menunjukkan notifikasi HIGH risk), penjelasan tiap komponen sistem. Memastikan semua komponen berjalan tanpa bug saat demo.
+Membangun simulator perangkat keras agar seluruh alur sistem dapat diuji tanpa smartband fisik. Sebelumnya pengujian selalu bergantung pada ketersediaan alat, sehingga pekerjaan sisi perangkat lunak terhambat saat alat sedang dipakai tim hardware atau sedang diperbaiki.
 
 **Hasil:**
-- Script demo yang telah dilatih
-- Data test yang menarik untuk demo (profile dengan risiko tinggi)
-- Checklist pra-demo (semua service running, HP terhubung, dll)
+- Modul `api/hw_simulator.py` yang membangkitkan sinyal PPG sintetis dan menyuntikkannya lewat handler `POST /v1/ingest` yang sama dengan firmware asli — tidak ada jalur khusus maupun cabang "kalau demo", sehingga alurnya identik dengan perangkat sungguhan
+- Fase kardiak disimpan sebagai state dan dilanjutkan antar batch, sehingga tidak menimbulkan diskontinuitas 1 Hz seperti artefak yang ditemukan pada kanal hijau
+- Polaritas dibuat benar: kanal merah dan inframerah terbalik (saat sistol cacah menurun karena darah menyerap lebih banyak cahaya), sedangkan kanal hijau tidak
+- Nilai disetel menyerupai rekaman nyata: DC inframerah 145.000, perfusi 1,1‰, modulasi napas 0,25 Hz
+- Tombol pengaktifan di dashboard beserta penanda status
+- Diuji: ketiga kanal sepakat di 78 bpm, SQI 92/100, dan keempat tahap pipeline terisi
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot script demo yang sudah disiapkan
-- Screenshot sistem berjalan lengkap saat dry run demo
-- Foto: setup demo (laptop + HP + smartband)
+- `ADAM_simulator perangkat keras aktif.png` — dashboard dengan simulator menyala
+- `ADAM_kode pembangkit sinyal sintetis.png` — `api/hw_simulator.py` fungsi `build_batch()`
+- `ADAM_ketiga kanal sepakat pada simulator.png` — statistik menampilkan BPM ketiga kanal
 
 ---
 
-**Kamis, 20 Agustus 2026 — 180 menit**
+**Kamis, 21 Agustus 2026 — 300 menit**
 
 **Kegiatan:**
-Assembly sistem ANTARAGA — menggabungkan semua komponen: smartband (hardware), HP Android (Flutter app), laptop (backend server). Memastikan semua kabel, power supply, dan koneksi rapi. Menguji sistem dalam kondisi seperti deployment nyata: smartband terpasang di pergelangan tangan, data mengalir ke HP secara wireless.
+Mengintegrasikan aplikasi mobile Flutter dengan API backend secara menyeluruh, sehingga data yang diproses server benar-benar sampai ke layar keluarga. Menelusuri sebab beberapa kartu vital yang masih kosong di aplikasi.
 
 **Hasil:**
-- Sistem ANTARAGA berjalan lengkap sebagai satu kesatuan
-- Latency end-to-end: <1 detik dari sensor ke dashboard HP
-- Dokumentasi assembly tersempurna
+- Lapisan `ApiService` menyambung ke sembilan endpoint: pendaftaran, masuk, profil, pemasangan perangkat, vital terbaru, riwayat vital, prediksi risiko, asesmen ABCD², dan pendaftaran token notifikasi
+- **Ditemukan bug**: pipeline penerimaan data hanya memeriksa artefak `ppg_vitals_model.joblib` yang tidak pernah dibuat, sehingga MLP kalibrasi yang sudah dilatih tidak pernah terpakai dan seluruh tahap hilir dilewati. Diperbaiki dengan menambahkan cabang yang memakai `mlp_calibration.joblib`, dengan usia dan jenis kelamin diambil dari profil yang di-pair lewat aplikasi
+- **Ditemukan bug kedua**: penulisan f-string yang tidak sah membuat penghitungan penanda risiko melempar galat setiap kali tekanan darah tinggi, dan tab MLP diam-diam berubah menjadi tidak tersedia tanpa pesan apa pun
+- **Ditemukan bug ketiga**: kartu Detak Jantung di aplikasi tetap menampilkan tanda hubung. Sebabnya kolom `heart_rate_bpm` sudah ada di tabel `vital_readings` tetapi tidak pernah diisi saat penyimpanan. Diperbaiki dengan mengisinya dari BPM yang sudah lewat penyaring lonjakan
+- **Ditemukan bug keempat**: tab XGBoost di dashboard tersangkut pada tulisan "Menunggu data" padahal server mengembalikan hasil dengan benar. Sebabnya keenam fungsi penggambar dipanggil berderet tanpa pengaman — bila satu melempar galat, seluruh fungsi sesudahnya tidak pernah dijalankan. Diperbaiki dengan membungkus tiap penggambar secara terisolasi
+- Notifikasi FCM diuji untuk tiga keadaan: aplikasi terbuka, di latar belakang, dan tertutup
 
 📸 **Bukti yang perlu dilampirkan:**
-- Foto: setup sistem lengkap (smartband + HP + laptop server)
-- Foto: smartband terpasang di pergelangan tangan pengguna
-- Screenshot: data mengalir dari sensor ke dashboard Flutter secara live
-- Foto: close-up smartband XIAO ESP32-S3 dengan sensor PPG
+- `ADAM_aplikasi mobile menampilkan vital lengkap.png` — layar dashboard aplikasi dengan ketiga kartu terisi
+- `ADAM_alur ujung ke ujung mlp dan xgboost.png` — respons endpoint dengan kedua tahap tersedia
+- `ADAM_perbaikan kolom detak jantung.png` — kode pengisian `heart_rate_bpm`
+- `ADAM_perbaikan isolasi galat penggambar.png` — `api/static/dashboard.html` fungsi pembungkus
+- `ADAM_notifikasi fcm diterima di ponsel.png` — tangkapan layar notifikasi di ponsel
 
 ---
 
-**Jumat, 21 Agustus 2026 — 180 menit**
+**Jumat, 22 Agustus 2026 — 240 menit**
 
 **Kegiatan:**
-Pengujian sistem dengan pengguna nyata (caregiver lansia). Melakukan observasi: apakah caregiver bisa setup app sendiri, apakah notifikasi mudah dipahami, apakah rekomendasi ABCD2 bisa diikuti. Mengumpulkan feedback kualitatif melalui wawancara singkat setelah penggunaan.
+Membangun fasilitas distribusi berkas APK aplikasi mobile agar dapat diunduh langsung dari halaman muka, serta menyiapkan pengelolaannya dari dashboard. Menyelesaikan kendala penolakan unggahan oleh reverse proxy.
 
 **Hasil:**
-- Laporan user testing dengan 3 caregiver
-- Feedback: tombol "Hubungkan Perangkat" kurang jelas → perlu label teks
-- Feedback: notifikasi bahasa Indonesia sudah tepat
+- Modul `api/apk.py`: unggah APK, riwayat versi, penghapusan, dan pengaturan tautan toko aplikasi
+- Tautan unduh publik `/download/app.apk` dibuat tetap tanpa nomor versi, sehingga tautan yang sudah tersebar di proposal atau kode QR tidak perlu diganti setiap rilis
+- Ketiga tombol di halaman muka dilayani satu sumber: Unduh Gratis dan Google Play mengunduh APK bila tautan toko belum tersedia, sedangkan App Store dinonaktifkan karena iOS tidak dapat memasang berkas Android
+- **Ditemukan kendala**: unggahan ditolak dengan galat `413 Request Entity Too Large`. Sebabnya batas bawaan nginx hanya 1 MB, sehingga berkas ditolak sebelum permintaannya sampai ke aplikasi dan pesan galatnya berupa halaman HTML nginx, bukan JSON. Diperbaiki dengan `client_max_body_size 350M`, perpanjangan tenggat waktu, dan mematikan penampungan permintaan
+- Modal progres unggah memakai `XMLHttpRequest` dengan bilah progres, laju unggah, dan estimasi sisa waktu — `fetch()` tidak dipakai karena belum mendukung pelaporan progres unggah
+- Volume `antaraga-apk` ditambahkan agar berkas bertahan melewati pembaruan container
+- Diuji dengan berkas 45 MB: terunggah dan terunduh kembali dengan SHA-256 identik
 
 📸 **Bukti yang perlu dilampirkan:**
-- Foto: caregiver lansia menggunakan aplikasi ANTARAGA di HP mereka
-- Screenshot: app dibuka oleh pengguna nyata (bukan developer)
-- Foto: sesi wawancara pasca penggunaan
-- Dokumen: catatan feedback dari user testing
+- `ADAM_kartu pengelolaan apk di dashboard.png` — dashboard tab Firmware
+- `ADAM_modal progres unggah apk.png` — modal saat unggahan berjalan
+- `ADAM_tombol unduh di halaman muka.png` — halaman muka dengan ketiga tombol
+- `ADAM_perbaikan batas unggah nginx.png` — `scripts/nginx_antaraga.conf`
+- `ADAM_uji keutuhan berkas apk.png` — hasil uji SHA-256
 
 ---
 
-**Sabtu, 22 Agustus 2026 — 180 menit**
+**Sabtu, 23 Agustus 2026 — 180 menit**
 
 **Kegiatan:**
-Implementasi perbaikan berdasarkan feedback user testing. Menambahkan label teks "Perangkat" di bawah ikon jam di AppBar. Memperjelas pesan empty state: "Belum ada data vital — hubungkan smartband terlebih dahulu". Memperbaiki wording notifikasi agar lebih mudah dipahami orang awam.
+Menguji ketahanan sistem pada pemakaian berkelanjutan: perilaku saat jaringan terputus, saat perangkat mati mendadak, dan saat data mengalir terus-menerus dalam waktu lama.
 
 **Hasil:**
-- Label teks di ikon perangkat (AppBar)
-- Empty state yang lebih informatif
-- Wording notifikasi disederhanakan
+- Uji pemutusan jaringan: firmware menyimpan batch di penyangga dan mengirim ulang setelah tersambung kembali
+- **Ditemukan kendala pada firmware**: perangkat sering gagal menyambung ulang ke WiFi dan baru pulih setelah dimatikan lalu dinyalakan. Penelusuran menunjukkan radio tidak pernah direset antar percobaan (`WiFi.disconnect(false, false)` mempertahankan radio tetap menyala) dan `WiFi.mode()` hanya dipanggil sekali di awal. Akibatnya bila driver masuk keadaan buruk, percobaan berikutnya mengulang permintaan gagal yang sama selamanya
+- Juga ditemukan tidak ada `WiFi.onEvent()` sehingga perangkat tidak pernah mencatat alasan kegagalan, dan tidak ada task watchdog yang memaksa mulai ulang saat tugas jaringan tersangkut
+- Temuan diteruskan ke tim hardware beserta usul perbaikan; disepakati pemasangan pencatat kode alasan terlebih dahulu sebelum mengubah logika koneksi
+- Uji pemakaian berkelanjutan: server memproses batch tanpa kebocoran memori, catatan akses bertambah wajar
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot emulator: ikon "Perangkat" dengan label teks di AppBar
-- Screenshot emulator: empty state baru yang informatif
-- Screenshot: notifikasi dengan wording yang sudah diperbaiki
-
----
-
-**Minggu, 23 Agustus 2026 — 180 menit**
-
-**Kegiatan:**
-Membuat video demonstrasi sistem ANTARAGA untuk dokumentasi PKM. Video menunjukkan: (1) smartband di pergelangan tangan, (2) data mengalir ke app Flutter, (3) dashboard monitoring di browser, (4) simulasi notifikasi risiko tinggi, (5) pengguna mengisi ABCD2 dan mendapat rekomendasi. Durasi video: ~3 menit.
-
-**Hasil:**
-- Video demonstrasi sistem ANTARAGA (MP4, ~3 menit)
-- Narasi audio menjelaskan tiap komponen
-- Subtitle dalam bahasa Indonesia
-
-📸 **Bukti yang perlu dilampirkan:**
-- Screenshot frame-frame kunci dari video demonstrasi
-- Screenshot: timeline edit video di software editing
-- Link/thumbnail video demonstrasi
+- `ADAM_uji pemutusan jaringan.png` — dashboard menampilkan status terputus lalu pulih
+- `ADAM_analisis kegagalan wifi firmware.png` — `Firmware/src/cloud.cpp` bagian `wifiConnectOnce()`
+- `ADAM_catatan akses server berkelanjutan.png` — tab Log Akses dengan lalu lintas berjalan
 
 ---
 
@@ -1302,179 +1289,173 @@ Membuat video demonstrasi sistem ANTARAGA untuk dokumentasi PKM. Video menunjukk
 
 ---
 
-**Rabu, 26 Agustus 2026 — 180 menit**
+**Selasa, 26 Agustus 2026 — 300 menit**
 
 **Kegiatan:**
-Penulisan laporan PKM bagian software/AI. Mendeskripsikan: arsitektur sistem, teknologi yang digunakan (FastAPI, Flutter, XGBoost, MLP, Firebase), metodologi pengembangan (iterative), hasil pengujian, dan keterbatasan sistem. Memastikan penjelasan teknis dapat dipahami oleh reviewer non-teknis.
+Menyusun bagian perangkat lunak dan kecerdasan buatan pada laporan kemajuan PKM. Merangkum capaian, kendala beserta solusinya, dan kegiatan yang belum selesai.
 
 **Hasil:**
-- Draft laporan bagian 3 (Metode Pelaksanaan) selesai
-- Draft laporan bagian 4 (Hasil dan Pembahasan) selesai
-- Tabel hasil evaluasi model AI
+- Rangkuman capaian model XGBoost: ROC-AUC 0,823, recall 0,973 (73 dari 75 penderita terdeteksi), dengan ambang deteksi 0,042 yang ditetapkan lewat target recall pada prediksi out-of-fold
+- Rangkuman aplikasi mobile: dua belas fitur berjalan, tersambung ke sembilan endpoint
+- Rangkuman infrastruktur: backend daring di www.antaraga.web.id, penerapan otomatis, dashboard pemantauan, pembaruan firmware jarak jauh
+- Daftar dua belas kendala beserta solusinya disusun dalam bentuk rantai masalah sampai penyelesaian
+- Dinyatakan terus terang bahwa model MLP kalibrasi **belum layak dilaporkan sebagai capaian** karena baru terkumpul 5 dari 30 subjek yang dibutuhkan
+- Perbandingan dengan skor klinis ABCD² disiapkan sebagai pembelaan atas presisi yang rendah: ABCD² yang dirujuk pedoman AHA bekerja pada sensitivitas 0,89 dengan PPV 0,08, sedangkan ANTARAGA 0,973 dengan PPV 0,075
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot: dokumen laporan PKM yang sedang ditulis
-- Screenshot: tabel evaluasi model di laporan
-- Screenshot: diagram arsitektur sistem di laporan
+- `ADAM_bagian software laporan kemajuan.png` — dokumen laporan bagian perangkat lunak
+- `ADAM_daftar kendala dan solusi.png` — tabel dua belas kendala
+- `ADAM_perbandingan dengan skor abcd2.png` — tabel perbandingan metrik
 
 ---
 
-**Kamis, 27 Agustus 2026 — 180 menit**
+**Rabu, 27 Agustus 2026 — 180 menit**
 
 **Kegiatan:**
-Membuat slide presentasi PKM untuk reviewer. Slide mencakup: latar belakang masalah (angka stroke di Indonesia), solusi ANTARAGA (arsitektur + alur data), hasil demo sistem, model AI (XGBoost AUC 0.823, MLP), rencana masa depan (deployment cloud, data kalibrasi lebih banyak).
+Mengikuti Workshop Teknik Presentasi PKP2 yang diselenggarakan PKM Center PENS.
 
 **Hasil:**
-- Slide presentasi PKM (~15 slide)
-- Visualisasi data yang menarik di setiap slide
-- Speaker notes untuk setiap slide
+- Memahami struktur presentasi yang diharapkan penilai: latar belakang, kebaruan, metode, capaian terukur, dan rencana lanjutan
+- Menyiapkan kerangka bagian teknis yang akan dibawakan, dengan penekanan pada capaian yang dapat diangkakan
+- Catatan penting dari pemateri: setiap klaim harus dapat ditunjukkan buktinya saat sesi tanya jawab
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot slide presentasi (beberapa slide kunci)
-- Screenshot: slide demo dengan screenshot app
-- Screenshot: slide hasil model AI dengan grafik AUC-ROC
+- `ADAM_workshop teknik presentasi pkp2.png` — foto saat mengikuti workshop
+- `ADAM_catatan materi workshop presentasi.png` — catatan hasil workshop
 
 ---
 
-**Jumat, 28 Agustus 2026 — 180 menit**
+**Kamis, 28 Agustus 2026 — 180 menit**
 
 **Kegiatan:**
-Dry run presentasi PKM bersama seluruh anggota tim. Mempraktikkan demo live sistem: menjalankan backend, menyambungkan HP, menyambungkan smartband, menunjukkan data mengalir, mengirim notifikasi. Memperbaiki timing dan bagian yang kurang lancar.
+Asistensi laporan kemajuan ke dosen pendamping, khususnya bagian perangkat lunak dan kecerdasan buatan.
 
 **Hasil:**
-- Timing presentasi: 15 menit paparan + 5 menit demo + 10 menit Q&A
-- Daftar pertanyaan yang kemungkinan muncul + jawabannya
-- Setup demo dipercepat (script otomatis start semua service)
+*(Bagian ini perlu diisi sesuai masukan yang sebenarnya diberikan dosen pendamping.)*
+
+Hal-hal yang disiapkan untuk dikonsultasikan:
+- Cara menyajikan presisi 0,075 agar tidak dibaca sebagai kelemahan, melainkan sebagai konsekuensi desain alat skrining
+- Apakah hasil MLP pada 5 subjek perlu ditampilkan apa adanya atau cukup disebut sebagai proses yang sedang berjalan
+- Kelayakan perbandingan dengan skor ABCD² sebagai pembelaan metodologis
+- Kelengkapan bukti dokumentasi untuk tiap capaian yang diklaim
 
 📸 **Bukti yang perlu dilampirkan:**
-- Foto: tim saat latihan presentasi
-- Screenshot: script otomatis start semua service
-- Foto: setup demo yang sudah dioptimasi
+- `ADAM_asistensi laporan ke dosen pendamping.png` — foto saat asistensi
+- `ADAM_catatan masukan dosen pendamping.png` — catatan revisi yang diminta
 
 ---
 
-**Sabtu, 29 Agustus 2026 — 180 menit**
+**Jumat, 29 Agustus 2026 — 180 menit**
 
 **Kegiatan:**
-Deployment backend ke cloud server (Railway/Render) untuk versi production. Mengonfigurasi environment variables, mengganti SQLite ke PostgreSQL, mengatur domain custom. Testing bahwa app Flutter (dengan `API_BASE_URL_PROD`) bisa terhubung ke backend production.
+Menyiapkan bahan teknis untuk pengiklanan konten media sosial ketiga, berupa peragaan sistem ANTARAGA yang sedang berjalan.
 
 **Hasil:**
-- Backend ANTARAGA berjalan di cloud server
-- Database PostgreSQL production aktif
-- Flutter app terhubung ke endpoint production
+- Rekaman layar dashboard pemantauan dengan sinyal PPG tiga kanal berjalan
+- Rekaman layar aplikasi mobile menampilkan kartu vital dan tingkat risiko
+- Peragaan alur peringatan dini: sinyal masuk, model memprediksi, notifikasi sampai ke ponsel keluarga
+- Bahan diserahkan ke anggota tim yang menangani konten untuk disunting
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot: dashboard Railway/Render menampilkan backend running
-- Screenshot: URL production (e.g., `https://antaraga-api.onrender.com/docs`)
-- Screenshot: Flutter app terhubung ke backend production
-- Screenshot: database PostgreSQL dengan data di cloud
-
----
-
-**Minggu, 30 Agustus 2026 — 180 menit**
-
-**Kegiatan:**
-Pengujian sistem di lingkungan production (cloud). Memverifikasi: latency endpoint lebih tinggi dari lokal tapi masih acceptable, notifikasi FCM berjalan dari server cloud, firmware bisa terhubung ke URL production. Membuat monitoring sederhana dengan log rotation.
-
-**Hasil:**
-- Sistem production berjalan stabil
-- Latency endpoint: <200ms dari Indonesia
-- Notifikasi FCM berfungsi dari server production
-
-📸 **Bukti yang perlu dilampirkan:**
-- Screenshot: uptime monitoring server production
-- Screenshot: latency endpoint dari Postman (ke server cloud)
-- Screenshot: notifikasi FCM masuk dari server production
+- `ADAM_rekaman layar dashboard untuk konten.png` — cuplikan rekaman dashboard
+- `ADAM_rekaman layar aplikasi mobile.png` — cuplikan rekaman aplikasi
+- `ADAM_peragaan alur peringatan dini.png` — notifikasi muncul di ponsel
 
 ---
 
 ### Minggu ke-16 — 2–6 September 2026
+
+> **Catatan:** entri mulai bagian ini adalah **rencana kerja**, bukan kegiatan yang sudah terlaksana. Isi kolom Hasil perlu diperbarui sesuai kenyataan setelah kegiatannya berlangsung.
 
 ---
 
 **Rabu, 2 September 2026 — 180 menit**
 
 **Kegiatan:**
-Pembuatan dokumentasi teknis lengkap: API Documentation (Swagger), README repository, panduan setup untuk developer baru yang ingin berkontribusi. Mendokumentasikan semua environment variable yang dibutuhkan, langkah-langkah instalasi, dan cara menjalankan test.
+Melanjutkan pengumpulan data kalibrasi bersama tim. Target menambah subjek dengan komposisi yang memperbaiki tiga persoalan yang tercatat pada 16 Agustus.
 
-**Hasil:**
-- README.md yang komprehensif (setup, instalasi, cara menjalankan)
-- `Firmware/README.md` — cara konfigurasi dan flash firmware
-- Semua dokumentasi dalam bahasa Indonesia
+**Rencana hasil:**
+- Penambahan subjek dengan prioritas komposisi: subjek berkolesterol di bawah 200 mg/dL, subjek usia di bawah 50 tahun, serta lansia bertekanan darah normal dan orang muda bertekanan tinggi untuk memutus keterkaitan usia dengan kondisi penyakit
+- Perekaman mengikuti `docs/protokol_kalibrasi.md`: subjek duduk tenang, lengan setinggi jantung, tidak bicara dan tidak menggerakkan tangan selama perekaman
+- Verifikasi sebelum menyimpan: menunggu 15 detik setelah sinyal stabil, membandingkan BPM tersaring dengan nadi manual, memeriksa perfusi inframerah berada di 0,5–3,0‰
+- Dataset diekspor sebagai cadangan setiap akhir sesi
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot: README.md di GitHub repository
-- Screenshot: Firmware README.md di GitHub
-- Screenshot: Swagger UI (dokumentasi API otomatis)
+- `ADAM_sesi pengumpulan data kalibrasi.png` — foto perekaman bersama subjek
+- `ADAM_dataset kalibrasi bertambah.png` — tabel dataset dengan jumlah subjek terbaru
+- `ADAM_ringkasan komposisi subjek.png` — statistik sebaran usia dan nilai klinis
 
 ---
 
 **Kamis, 3 September 2026 — 180 menit**
 
 **Kegiatan:**
-Pengujian robustness sistem: apa yang terjadi jika koneksi internet putus saat firmware streaming? Backend down? HP habis battery lalu restart? Memverifikasi bahwa setiap komponen memiliki graceful degradation. Mendokumentasikan behavior sistem di kondisi edge case.
+Melatih ulang model MLP kalibrasi memakai data yang sudah bertambah, lalu membandingkan hasilnya dengan pelatihan sebelumnya pada 5 subjek.
 
-**Hasil:**
-- Firmware: buffer data saat WiFi putus (hingga 2.5 detik)
-- Flutter: tampilkan data terakhir yang cached, tidak crash
-- Backend: auto-restart dengan uvicorn supervisor
+**Rencana hasil:**
+- Pelatihan ulang lewat dashboard dengan mode data asli
+- Kapasitas jaringan otomatis menyesuaikan jumlah data sesuai aturan penskalaan
+- Perbandingan terhadap tolok ukur menebak nilai rata-rata untuk memastikan model benar-benar memberi tambahan informasi
+- Pemeriksaan status keterandalan tiap parameter, dan pelaporan apa adanya bila masih berstatus TIDAK VALID atau LEMAH
+- Bila jumlah subjek sudah melewati 30, validasi silang otomatis beralih ke 5-fold dan metriknya mulai dapat dilaporkan
 
 📸 **Bukti yang perlu dilampirkan:**
-- Video: simulasi WiFi putus → LED firmware ganda (NET_LOST) → WiFi kembali → LED normal
-- Screenshot: Flutter app tetap menampilkan data terakhir saat backend unreachable
-- Screenshot: kode error handling di masing-masing komponen
+- `ADAM_hasil pelatihan ulang mlp.png` — kartu Pelatihan MLP dengan metrik terbaru
+- `ADAM_perbandingan metrik sebelum sesudah.png` — tabel perbandingan dengan hasil 16 Agustus
+- `ADAM_laporan pelatihan terbaru.png` — laporan HTML dengan scatter plot
 
 ---
 
 **Jumat, 4 September 2026 — 180 menit**
 
 **Kegiatan:**
-Sesi pengambilan data kalibrasi tambahan untuk meningkatkan akurasi model MLP. Target: total 200+ titik data dari 10+ relawan dengan rentang usia 40-80 tahun. Menganalisis distribusi data: apakah sudah mewakili populasi target (lansia Indonesia).
+Uji lapangan sistem ANTARAGA bersama lansia dan keluarga pendamping, untuk menilai kemudahan pemakaian di luar lingkungan pengembangan.
 
-**Hasil:**
-- Data kalibrasi bertambah signifikan
-- Distribusi usia dan kondisi medis relawan terdokumentasi
-- Re-training MLP dengan dataset yang lebih besar
+**Rencana hasil:**
+- Pengamatan alur pemakaian: memasang smartband, mendaftar akun, mengisi profil, memasangkan perangkat, sampai melihat hasil di aplikasi
+- Pencatatan bagian yang membingungkan bagi pengguna awam
+- Pengukuran waktu yang dibutuhkan dari membuka aplikasi hingga data pertama muncul
+- Pengumpulan masukan tentang cara penyampaian tingkat risiko: apakah kalimatnya menakutkan, membingungkan, atau sudah jelas
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot: total rekaman di folder `data/calibration/`
-- Foto: beragam relawan (usia 40-80 tahun)
-- Screenshot: distribusi usia relawan (histogram)
-- Screenshot terminal: re-training MLP berhasil dengan metrik lebih baik
+- `ADAM_uji lapangan bersama lansia.png` — foto sesi uji pakai
+- `ADAM_catatan kendala pengguna.png` — daftar temuan dari pengamatan
+- `ADAM_alur pemakaian dari sisi pengguna.png` — rekaman layar selama sesi
 
 ---
 
 **Sabtu, 5 September 2026 — 180 menit**
 
 **Kegiatan:**
-Analisis komparatif model: membandingkan performa XGBoost dengan model alternatif (Random Forest, Logistic Regression) menggunakan dataset yang sama. Mendokumentasikan mengapa XGBoost dipilih sebagai model utama ANTARAGA (AUC tertinggi, handling imbalance terbaik).
+Menindaklanjuti temuan uji lapangan, terutama pada bagian yang membingungkan pengguna awam.
 
-**Hasil:**
-- Tabel perbandingan: XGBoost vs RF vs LR (AUC, Recall, Precision)
-- Visualisasi: kurva ROC ketiga model di grafik yang sama
-- Justifikasi pilihan XGBoost yang terdokumentasi
+**Rencana hasil:**
+- Perbaikan kalimat pada aplikasi agar dapat dipahami keluarga tanpa latar belakang medis
+- Penyesuaian tampilan tingkat risiko agar tidak menimbulkan kepanikan maupun rasa aman yang keliru
+- Penambahan keterangan nilai rujukan pada kartu vital bila diperlukan
+- Perbaikan alur pemasangan perangkat bila terbukti menyulitkan
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot notebook: grafik ROC curve ketiga model
-- Screenshot notebook: tabel perbandingan metrik
-- Screenshot: kode training ketiga model
+- `ADAM_perbaikan tampilan berdasarkan uji lapangan.png` — perbandingan sebelum dan sesudah
+- `ADAM_daftar perbaikan yang diterapkan.png` — catatan tindak lanjut
 
 ---
 
 **Minggu, 6 September 2026 — 180 menit**
 
 **Kegiatan:**
-Latihan presentasi ANTARAGA dengan audiens terbatas (5-7 orang, termasuk yang awam teknologi). Mengumpulkan feedback: apakah penjelasan mudah dipahami, apakah demo berjalan lancar, apakah ada pertanyaan yang tidak bisa dijawab. Memperbaiki penjelasan berdasarkan feedback.
+Pengujian ketahanan sistem secara menyeluruh: daya tahan baterai saat pemakaian nyata, jangkauan jaringan, dan perilaku saat perangkat dipakai berjam-jam.
 
-**Hasil:**
-- Feedback dari audiens terbatas terdokumentasi
-- Penjelasan dipersingkat di beberapa bagian yang terlalu teknis
-- Demo dipercepat dengan shortcut keyboard
+**Rencana hasil:**
+- Pengukuran lama pakai baterai dengan pengiriman data berkelanjutan
+- Pengujian jangkauan WiFi dan perilaku saat sinyal melemah
+- Pemantauan penggunaan sumber daya server selama pemakaian berkelanjutan
+- Pemeriksaan apakah penyaring BPM tetap bekerja wajar pada pemakaian panjang
 
 📸 **Bukti yang perlu dilampirkan:**
-- Foto: sesi presentasi dengan audiens
-- Screenshot: slide yang direvisi berdasarkan feedback
-- Foto: Q&A session
+- `ADAM_pengujian daya tahan baterai.png` — grafik penurunan kapasitas baterai
+- `ADAM_catatan server pemakaian berkelanjutan.png` — statistik penggunaan sumber daya
+- `ADAM_uji jangkauan jaringan.png` — hasil pengujian pada jarak berbeda
 
 ---
 
@@ -1485,86 +1466,53 @@ Latihan presentasi ANTARAGA dengan audiens terbatas (5-7 orang, termasuk yang aw
 **Rabu, 9 September 2026 — 180 menit**
 
 **Kegiatan:**
-Final integration testing — pengujian sistem secara menyeluruh dari awal hingga akhir tanpa intervensi developer. Skenario: (1) user baru install app → register → buat profil → pasang smartband → pairing, (2) monitoring selama 30 menit, (3) simulasi notifikasi HIGH, (4) assessment ABCD2, (5) cek riwayat di daily stats.
+Menyusun panduan pengguna untuk keluarga yang akan memakai sistem ANTARAGA, serta melengkapi dokumentasi teknis repositori.
 
-**Hasil:**
-- Semua skenario berjalan tanpa bug
-- Waktu setup pertama kali: <5 menit
-- Tidak ada crash selama 30 menit monitoring
+**Rencana hasil:**
+- Panduan bergambar: cara memakai smartband, mendaftar, memasangkan perangkat, dan membaca hasil
+- Penjelasan arti tiap tingkat risiko beserta tindakan yang disarankan, ditulis dengan bahasa awam
+- Bagian penanganan kendala umum: perangkat tidak terhubung, data tidak muncul, notifikasi tidak masuk
+- Pemutakhiran `README.md` dan dokumentasi endpoint API
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot timeline integrasi test (semua step berhasil)
-- Video: demo lengkap selama 5 menit
-- Screenshot: app setelah 30 menit monitoring (data history terisi)
+- `ADAM_panduan pengguna bergambar.png` — halaman panduan
+- `ADAM_dokumentasi api diperbarui.png` — README bagian endpoint
 
 ---
 
-**Kamis, 10 September 2026 — 180 menit**
+**Jumat, 12 September 2026 — 300 menit**
 
 **Kegiatan:**
-Membuat poster ilmiah PKM-KC ANTARAGA. Poster berisi: judul, abstrak, latar belakang, metodologi (dengan diagram), hasil utama (AUC model, demo screenshot), kesimpulan. Desain poster menggunakan template PKM yang sesuai dengan panduan DIKTI.
+Persiapan demonstrasi sistem untuk Penilaian Kemajuan Program PKM (PKP2). Menyiapkan skenario peragaan dan cadangan bila terjadi kendala teknis saat penilaian.
 
-**Hasil:**
-- Poster ilmiah PKM-KC ukuran A1 (sesuai panduan)
-- File PDF poster siap cetak
-- Versi digital untuk presentasi online
+**Rencana hasil:**
+- Skenario peragaan tersusun: dari memasang smartband sampai notifikasi sampai ke ponsel keluarga
+- Simulator perangkat keras disiapkan sebagai cadangan bila alat bermasalah saat demo
+- Data demo disiapkan agar dashboard tetap menampilkan hasil bila jaringan bermasalah
+- Bahan tanya jawab teknis disiapkan, terutama untuk pertanyaan soal presisi rendah dan jumlah data kalibrasi
+- Pemeriksaan seluruh layanan: backend daring, dashboard, aplikasi mobile, notifikasi
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot poster ANTARAGA tampak penuh
-- Foto: poster dicetak dan dipasang
-- Screenshot: detail diagram sistem di poster
+- `ADAM_skenario demonstrasi pkp2.png` — dokumen skenario peragaan
+- `ADAM_pemeriksaan seluruh layanan.png` — daftar periksa kesiapan sistem
+- `ADAM_bahan tanya jawab teknis.png` — catatan antisipasi pertanyaan penilai
 
 ---
 
-**Jumat, 11 September 2026 — 180 menit**
+**Sabtu, 13 September 2026 — 180 menit**
 
 **Kegiatan:**
-Finalisasi laporan PKM-KC ANTARAGA. Review seluruh laporan: abstrak, bab pendahuluan, tinjauan pustaka, metode, hasil pembahasan, kesimpulan, daftar pustaka. Memastikan format sesuai panduan DIKTI 2026, semua referensi lengkap, dan tidak ada plagiarisme.
+Gladi bersih demonstrasi bersama seluruh anggota tim, sekaligus latihan menjawab pertanyaan teknis.
 
-**Hasil:**
-- Laporan PKM-KC ANTARAGA final (siap submit)
-- Cek plagiarisme: <15% (aman)
-- Format dan citasi sesuai panduan DIKTI
-
-📸 **Bukti yang perlu dilampirkan:**
-- Screenshot: laporan PKM dibuka (halaman judul)
-- Screenshot: hasil cek plagiarisme
-- Screenshot: daftar pustaka yang lengkap
-
----
-
-**Sabtu, 12 September 2026 — 180 menit**
-
-**Kegiatan:**
-Persiapan final demo untuk penilaian PKM. Menginstall app Flutter di HP yang akan dipakai demo (bukan emulator). Memverifikasi semua komponen berjalan dari satu tempat: server lokal + ngrok, smartband charged dan terpasang firmware terbaru, HP dengan app versi terbaru.
-
-**Hasil:**
-- APK terbaru terinstall di HP demo
-- Firmware terbaru terflash ke smartband
-- Checklist demo: semua ✓
+**Rencana hasil:**
+- Peragaan dijalankan penuh dari awal sampai akhir dengan penghitungan waktu
+- Latihan menjawab pertanyaan yang kemungkinan besar muncul: dasar pemilihan ambang, alasan presisi rendah, jumlah data kalibrasi, dan pembeda dengan penelitian terdahulu
+- Pembagian peran saat sesi tanya jawab
+- Perbaikan bagian peragaan yang berjalan kurang lancar
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot: APK versi final terinstall di HP (Settings → Apps)
-- Foto: smartband dalam kondisi charged dan siap
-- Screenshot: checklist demo semua ✓
-- Foto: setup demo lengkap di meja presentasi
-
----
-
-**Minggu, 13 September 2026 — 180 menit**
-
-**Kegiatan:**
-Membuat video profile produk ANTARAGA yang lebih profesional untuk dokumentasi PKM dan media sosial. Video 1.5 menit menampilkan: problem statement (stroke di Indonesia), produk ANTARAGA (close-up hardware dan app), cara kerja singkat, manfaat untuk caregiver lansia.
-
-**Hasil:**
-- Video profile produk ANTARAGA (MP4, 1.5 menit)
-- Thumbnail video
-- Caption untuk media sosial
-
-📸 **Bukti yang perlu dilampirkan:**
-- Screenshot: frame kunci dari video profile
-- Foto: behind the scenes pengambilan video
-- Screenshot: video sudah diupload ke YouTube/Drive
+- `ADAM_gladi bersih demonstrasi.png` — foto saat gladi bersih
+- `ADAM_catatan perbaikan gladi bersih.png` — daftar perbaikan yang disepakati
 
 ---
 
@@ -1572,130 +1520,111 @@ Membuat video profile produk ANTARAGA yang lebih profesional untuk dokumentasi P
 
 ---
 
-**Rabu, 16 September 2026 — 180 menit**
+**14–19 September 2026 — Pelaksanaan Penilaian Kemajuan Program PKM (PKP2)**
 
 **Kegiatan:**
-Pengujian final sistem di berbagai kondisi: WiFi lemah (hotspot jauh), HP dengan baterai rendah, server production (bukan localhost). Mendokumentasikan performa sistem di kondisi tidak ideal. Mengidentifikasi dan mencatat batasan sistem yang perlu disebutkan di laporan.
+Mengikuti rangkaian PKP2 sesuai jadwal yang ditetapkan penyelenggara. Membawakan bagian teknis perangkat lunak dan kecerdasan buatan.
 
-**Hasil:**
-- Tabel performa di berbagai kondisi
-- Batasan sistem terdokumentasi: latency meningkat di WiFi lemah, akurasi MLP tergantung kualitas sensor
-- Rekomendasi pengembangan berikutnya
+**Rencana hasil:**
+*(Diisi setelah pelaksanaan: hasil penilaian, pertanyaan yang diajukan penilai, serta masukan yang diberikan.)*
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot: sistem berjalan dengan WiFi lemah (speed test + app masih running)
-- Screenshot: tabel kondisi vs performa
-- Screenshot: log latency saat kondisi berbeda
+- `ADAM_pelaksanaan pkp2.png` — foto saat presentasi
+- `ADAM_catatan masukan penilai.png` — catatan pertanyaan dan masukan
 
 ---
 
-**Kamis, 17 September 2026 — 180 menit**
+**Jumat, 19 September 2026 — 180 menit**
 
 **Kegiatan:**
-Benchmarking model AI ANTARAGA menggunakan dataset validasi eksternal (berbeda dari training set). Menghitung AUC-ROC, sensitivity, specificity, positive predictive value, negative predictive value. Membandingkan dengan threshold klinis ABCD2 sebagai baseline.
+Evaluasi hasil PKP2 bersama tim, menyusun daftar tindak lanjut berdasarkan masukan penilai.
 
-**Hasil:**
-- Tabel metrik evaluasi komprehensif model XGBoost
-- Perbandingan ANTARAGA vs metode konvensional (hanya ABCD2)
-- Kesimpulan: ANTARAGA mendeteksi lebih awal dengan akurasi yang comparable
+**Rencana hasil:**
+- Rangkuman pertanyaan dan masukan penilai
+- Penentuan prioritas perbaikan yang masih memungkinkan dikerjakan sebelum laporan akhir
+- Pembagian tugas tindak lanjut
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot notebook: confusion matrix pada dataset validasi
-- Screenshot: tabel metrik komprehensif
-- Screenshot grafik: kurva ROC dengan AUC pada validation set
+- `ADAM_evaluasi hasil pkp2.png` — catatan hasil evaluasi tim
+- `ADAM_daftar tindak lanjut.png` — daftar prioritas perbaikan
 
 ---
 
-**Jumat, 18 September 2026 — 180 menit**
+**Sabtu, 20 September 2026 — 180 menit**
 
 **Kegiatan:**
-Finalisasi semua file repository sebelum submission PKM. Membuat tag Git `v1.0.0-pkm-submission`. Memastikan: tidak ada credential di repository, semua dependency terdokumentasi di `requirements.txt` dan `pubspec.yaml`, README lengkap dan akurat.
+Menerapkan perbaikan pada sisi perangkat lunak berdasarkan masukan penilai PKP2.
 
-**Hasil:**
-- Tag Git `v1.0.0-pkm-submission` dibuat
-- Repository bersih dan terorganisir
-- README.md diverifikasi terakhir kali
+**Rencana hasil:**
+*(Diisi sesuai masukan yang diterima.)*
+
+Kemungkinan yang perlu disiapkan:
+- Penyesuaian cara penyajian metrik bila penilai menilai kurang jelas
+- Penambahan bukti pendukung untuk klaim yang dipertanyakan
+- Perbaikan tampilan atau alur yang mendapat catatan
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot: GitHub repository dengan tag `v1.0.0-pkm-submission`
-- Screenshot: commit terakhir sebelum submission
-- Screenshot: GitHub repository tampak publik (README tampil)
+- `ADAM_perbaikan berdasarkan masukan penilai.png` — perbandingan sebelum dan sesudah
 
 ---
 
-**Sabtu, 19 September 2026 — 180 menit**
-
-**Kegiatan:**
-Mempersiapkan seluruh berkas submission PKM-KC: laporan utama, logbook, video demo, poster, bukti keuangan, surat pernyataan. Mengorganisir semua file dalam folder terstruktur sesuai format yang diminta DIKTI. Double-check semua file dapat dibuka dengan benar.
-
-**Hasil:**
-- Folder submission terstruktur sesuai format DIKTI
-- Semua file berhasil dibuka dan kontennya benar
-- Backup di Google Drive dan hardisk eksternal
-
-📸 **Bukti yang perlu dilampirkan:**
-- Screenshot: struktur folder submission
-- Screenshot: semua file terbuka (laporan, poster, video)
-- Screenshot: folder backup di Google Drive
+### Minggu ke-19 (Parsial) — 23–25 September 2026
 
 ---
 
-**Minggu, 20 September 2026 — 180 menit**
+**Selasa, 23 September 2026 — 300 menit**
 
 **Kegiatan:**
-Rehearsal final presentasi PKM bersama seluruh tim. Simulasi kondisi penilaian sesungguhnya: timer ketat, ada juri yang bertanya. Membagi peran: siapa yang presentasi slide, siapa yang demo live system, siapa yang jawab pertanyaan teknis. Melatih kelancaran dan transisi antar bagian.
+Finalisasi seluruh komponen perangkat lunak: pemeriksaan menyeluruh, pembersihan kode, dan penyiapan arsip repositori.
 
-**Hasil:**
-- Presentasi berjalan lancar dalam 15 menit
-- Demo live tidak ada bug
-- Semua anggota tim siap menjawab pertanyaan di bidangnya
+**Rencana hasil:**
+- Pemeriksaan menyeluruh seluruh layanan berjalan tanpa galat
+- Pembersihan kode yang tidak terpakai dan pemutakhiran dokumentasi
+- Penandaan versi rilis pada repositori
+- Cadangan basis data, artefak model, dan dataset kalibrasi
+- Pemeriksaan bahwa artefak model di server sama dengan yang dilaporkan
 
 📸 **Bukti yang perlu dilampirkan:**
-- Foto: seluruh tim saat rehearsal presentasi
-- Screenshot: slide presentasi final
-- Foto: setup demo saat rehearsal
+- `ADAM_pemeriksaan akhir seluruh layanan.png` — daftar periksa lengkap
+- `ADAM_penandaan versi rilis repositori.png` — riwayat git dengan penanda versi
+- `ADAM_cadangan basis data dan artefak.png` — daftar berkas cadangan
 
 ---
 
-### Minggu ke-19 (Parsial) — 23–24 September 2026
+**Rabu, 24 September 2026 — 180 menit**
+
+**Kegiatan:**
+Pembuatan laporan akhir bagian perangkat lunak dan kecerdasan buatan, sekaligus asistensi ke dosen pendamping.
+
+**Rencana hasil:**
+- Bagian metode: alur pengembangan model XGBoost dan MLP beserta dasar tiap keputusan
+- Bagian hasil: metrik final, capaian aplikasi mobile, dan infrastruktur yang berjalan
+- Bagian pembahasan: alasan pengutamaan recall pada alat skrining, disertai perbandingan dengan skor klinis ABCD²
+- Bagian keterbatasan: jumlah data kalibrasi, presisi rendah, dan kendala WiFi firmware — ditulis apa adanya
+- Asistensi ke dosen pendamping untuk pemeriksaan akhir
+
+📸 **Bukti yang perlu dilampirkan:**
+- `ADAM_laporan akhir bagian software.png` — dokumen laporan akhir
+- `ADAM_asistensi laporan akhir.png` — foto saat asistensi
 
 ---
 
-**Rabu, 23 September 2026 — 180 menit**
+**Kamis, 25 September 2026 — 180 menit**
 
 **Kegiatan:**
-Final system check sehari sebelum submission. Menjalankan seluruh sistem dari awal: server production, smartband, app Flutter. Memverifikasi setiap komponen berfungsi: login → pairing → monitoring → notifikasi → ABCD2 → riwayat. Mendokumentasikan versi final setiap komponen.
+Penyerahan laporan akhir dan pengarsipan seluruh dokumentasi teknis proyek.
 
-**Hasil:**
-- Semua komponen terverifikasi berfungsi
-- Versi final terdokumentasi: Flutter v1.0.0, Backend v1.0.0, Firmware v1.0.0
-- Sistem siap untuk penilaian
-
-📸 **Bukti yang perlu dilampirkan:**
-- Screenshot: final system status (semua komponen running)
-- Screenshot: versi app Flutter (`About` page atau build info)
-- Video singkat: system check terakhir berjalan sempurna
-
----
-
-**Kamis, 24 September 2026 — 180 menit**
-
-**Kegiatan:**
-Submission PKM-KC ANTARAGA dan finalisasi logbook. Mengupload seluruh berkas ke sistem Simbelmawa sesuai deadline. Melakukan final review logbook — memverifikasi konsistensi tanggal, kelengkapan bukti foto, dan keakuratan deskripsi kegiatan. Merefleksikan perjalanan pengembangan sistem ANTARAGA dari Mei hingga September 2026.
-
-**Hasil:**
-- Semua berkas PKM berhasil di-submit ke Simbelmawa
-- Logbook lengkap dengan semua bukti foto terlampir
-- Sistem ANTARAGA berhasil dikembangkan: dari arsitektur → backend → AI model → mobile app → hardware integration → dashboard → production deployment
-
-**Refleksi:**
-Selama 4 bulan pengembangan, ANTARAGA berhasil menjadi sistem monitoring risiko stroke yang komprehensif. Tantangan terbesar adalah integrasi hardware-software (firmware ↔ backend ↔ mobile) dan penanganan class imbalance pada model XGBoost. Pencapaian terbesar: AUC-ROC 0.823 pada model XGBoost, latency prediksi <15ms, dan sistem notifikasi FCM yang berfungsi di ketiga skenario (foreground/background/killed state).
+**Rencana hasil:**
+- Laporan akhir diserahkan sesuai ketentuan
+- Seluruh notebook, kode, dan dokumentasi diarsipkan di repositori
+- Logbook diperiksa kelengkapannya beserta bukti dokumentasi tiap entri
+- Serah terima akses server, domain, dan repositori kepada tim
+- Catatan pengembangan lanjutan disusun: pengumpulan data kalibrasi sampai 30 subjek, pelatihan ulang MLP, perbaikan WiFi firmware, dan penambahan estimasi SpO2 setelah alat pembanding tersedia
 
 📸 **Bukti yang perlu dilampirkan:**
-- Screenshot: konfirmasi submission berhasil di sistem Simbelmawa
-- Screenshot: logbook final semua halaman terisi
-- Foto: tim ANTARAGA bersama (foto penutup kegiatan PKM)
-- Screenshot: repository GitHub final (commit terakhir)
+- `ADAM_penyerahan laporan akhir.png` — bukti penyerahan
+- `ADAM_arsip repositori lengkap.png` — struktur repositori final
+- `ADAM_catatan pengembangan lanjutan.png` — dokumen rencana lanjutan
 
 ---
 

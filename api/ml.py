@@ -58,8 +58,19 @@ def _build_row(features: dict, artifact: dict) -> pd.DataFrame:
     feature_order = artifact["feature_order"]
     categorical_features = artifact["categorical_features"]
     category_values = artifact["category_values"]
-    row = {col: features[col] for col in feature_order}
+    # Kolom yang tidak dikirim sama sekali diperlakukan sebagai nilai hilang,
+    # bukan dilempar sebagai KeyError. Aplikasi mobile bisa mengirim muatan tak
+    # lengkap (mis. pengguna melewatkan IMT), dan XGBoost sendiri sudah punya
+    # penanganan bawaan untuk data hilang -- mempelajari arah percabangan terbaik
+    # saat pelatihan. Membiarkan galat naik ke atas hanya membuat aplikasi rusak
+    # di tangan pengguna tanpa alasan yang perlu.
+    row = {col: features.get(col) for col in feature_order}
     frame = pd.DataFrame([row])[feature_order]
+
+    # Kolom numerik dipastikan bertipe angka agar None menjadi NaN, bukan objek
+    for col in feature_order:
+        if col not in categorical_features:
+            frame[col] = pd.to_numeric(frame[col], errors="coerce")
 
     if artifact["encoding"] == "native_categorical":
         for col in categorical_features:
