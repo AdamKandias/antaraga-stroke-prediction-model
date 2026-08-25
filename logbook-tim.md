@@ -85,6 +85,23 @@ Bimbingan bersama dosen pendamping sekaligus pencetakan dokumen informed consent
 
 ---
 
+## 13 Agustus 2026 — Ethical Clearance Keluar dan Finalisasi Berkas HKI (300 menit)
+
+**Kegiatan:**
+Menerima hasil ethical clearance dari KEPK FKM Universitas Airlangga, sekaligus menuntaskan penyiapan berkas pendaftaran HKI.
+
+**Hasil:**
+- Surat ethical clearance diterima, sehingga pengujian terhadap subjek dapat dijalankan penuh sesuai protokol yang disetujui komite
+- Finalisasi buku manual penggunaan sistem ANTARAGA
+- Pencetakan seluruh berkas HKI dari lima bagian: backend, dashboard, model AI, firmware, dan aplikasi mobile
+- Pengurusan tanda tangan basah dosen pendamping pada dokumen yang memerlukannya
+- Pemeriksaan akhir bahwa seluruh kredensial pada lampiran sudah disamarkan sebelum dokumen dicetak
+- Pengarsipan salinan berkas sebagai cadangan
+
+📸 **Bukti:** `ALL_surat ethical clearance.png`, `ALL_berkas hki tercetak lengkap.png`, `ALL_tanda tangan basah dosen.png`
+
+---
+
 ## 20 Agustus 2026 — Workshop Internal Teknis Pengajuan Hak Cipta (450 menit)
 
 **Kegiatan:**

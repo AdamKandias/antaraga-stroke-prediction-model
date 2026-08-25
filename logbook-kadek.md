@@ -89,3 +89,177 @@ Mengoordinasikan persiapan pengujian smartband terhadap relawan, mencakup kesiap
 - `KADEK_koordinasi persiapan pengujian.png` — foto rapat koordinasi
 
 ---
+
+# AGUSTUS 2026
+
+---
+
+## 2 Agustus 2026 — Weekly Meeting Progres dan Evaluasi (180 menit)
+
+**Kegiatan:**
+Memimpin rapat mingguan untuk meninjau progres tiap anggota dan mengevaluasi capaian terhadap target.
+
+**Hasil:**
+- Peninjauan progres: dashboard pemantauan sudah berjalan, firmware utama terpasang, konten media sosial sesuai jadwal
+- Evaluasi kendala pekan berjalan dan penyelesaiannya
+- Penetapan target pekan berikutnya dengan prioritas persiapan pengujian terhadap relawan
+- Pemeriksaan kelengkapan logbook tiap anggota, mengingatkan yang tertinggal
+- **Kendala yang dibahas**: status ethical clearance belum keluar padahal jadwal pengujian sudah mendesak
+
+📸 `KADEK_weekly meeting progres.png`, `KADEK_catatan evaluasi pekanan.png`
+
+---
+
+## 5 Agustus 2026 — Koordinasi Persiapan Pengujian dan Dokumen Perizinan (180 menit)
+
+**Kegiatan:**
+Mengoordinasikan persiapan pengujian terhadap relawan, mencakup kesiapan perangkat, kelengkapan dokumen, dan penjadwalan sesi.
+
+**Hasil:**
+- Pemeriksaan kesiapan tiga sisi: perangkat keras siap pakai, backend daring, dokumen informed consent tercetak
+- Penjadwalan sesi bersama relawan dengan mempertimbangkan ketersediaan waktu subjek lansia
+- Penetapan pembagian peran saat sesi: pemasangan alat, pengukuran dengan alat medis, dan pencatatan
+- Penyusunan daftar periksa sesi agar tiap perekaman mengikuti prosedur yang sama
+- Penetapan pengodean subjek anonim (S001, S002, dan seterusnya) tanpa mencantumkan identitas asli
+
+📸 `KADEK_daftar periksa kesiapan sesi.png`, `KADEK_jadwal dan pembagian peran.png`
+
+---
+
+## 6 Agustus 2026 — Koordinasi Pengujian 2 Smartband (360 menit)
+
+**Kegiatan:**
+Mengoordinasikan jalannya pengujian smartband kedua terhadap relawan.
+
+**Hasil:**
+- Pengurusan persetujuan subjek: penjelasan tujuan penelitian dan penandatanganan informed consent sebelum perekaman
+- Pengawasan agar prosedur perekaman dijalankan seragam sesuai daftar periksa
+- Pencatatan jalannya sesi beserta kendala yang muncul
+- Diperoleh 2 data kalibrasi yang lolos pemeriksaan mutu
+- **Kendala**: waktu yang dibutuhkan per subjek lebih lama dari perkiraan karena perlu menunggu sinyal stabil sebelum menyimpan
+
+📸 `KADEK_pengurusan informed consent subjek.png`, `KADEK_pengawasan jalannya sesi.png`
+
+---
+
+## 14 Agustus 2026 — Koordinasi Penyerahan Berkas HKI (180 menit)
+
+**Kegiatan:**
+Mengoordinasikan penyerahan berkas HKI ke sentra HKI kampus, memastikan seluruh lampiran lengkap sebelum diserahkan.
+
+**Hasil:**
+- Pemeriksaan akhir kelengkapan berkas dari lima bagian: backend, dashboard, model AI, firmware, dan aplikasi mobile
+- Pemeriksaan bahwa seluruh kredensial pada lampiran sudah disamarkan
+- Pengurusan tanda tangan yang diperlukan pada surat pernyataan kepemilikan
+- Pencatatan nomor penerimaan berkas dan perkiraan waktu proses
+
+📸 `KADEK_pemeriksaan kelengkapan berkas hki.png`, `KADEK_tanda terima penyerahan.png`
+
+---
+
+## 16 Agustus 2026 — Koordinasi Pengujian 4 Smartband (450 menit)
+
+**Kegiatan:**
+Mengoordinasikan pengujian smartband keempat, dengan prioritas melengkapi komposisi subjek yang masih kurang.
+
+**Hasil:**
+- Pengurusan persetujuan subjek dan pengawasan jalannya perekaman
+- **Prioritas komposisi ditetapkan** berdasarkan masukan tim AI: mencari subjek berkolesterol normal dan subjek usia di bawah 50 tahun, karena data yang terkumpul selama ini didominasi lansia dengan nilai klinis tinggi
+- Pencatatan hasil tiap perekaman beserta yang gagal dan sebabnya
+- **Kendala**: subjek muda lebih sulit dicari karena umumnya tidak merasa perlu diperiksa
+
+📸 `KADEK_koordinasi sesi keempat.png`, `KADEK_pencatatan komposisi subjek.png`
+
+---
+
+## 20 Agustus 2026 — Workshop Internal Teknis Pengajuan Hak Cipta (450 menit)
+
+**Kegiatan:**
+Mengikuti Workshop Internal Teknis Pengajuan Hak Cipta dan mengoordinasikan tindak lanjutnya.
+
+**Hasil:**
+- Memahami prosedur dan persyaratan pendaftaran hak cipta atas luaran PKM
+- Penetapan pembagian tugas penyusunan berkas beserta tenggatnya
+- Pencatatan kekurangan pada berkas yang sudah diajukan, bila ada yang perlu diperbaiki
+- Penjadwalan pengurusan lanjutan
+
+📸 `KADEK_workshop hak cipta.png`, `KADEK_pembagian tugas berkas hki.png`
+
+---
+
+## 23 Agustus 2026 — Koordinasi Penyusunan Laporan Kemajuan (360 menit)
+
+**Kegiatan:**
+Mengoordinasikan penyusunan laporan kemajuan, memastikan tiap bagian tergarap dan seragam gaya penulisannya.
+
+**Hasil:**
+- Penggabungan bagian yang ditulis tiap anggota menjadi satu dokumen utuh
+- Penyeragaman gaya penulisan dan penomoran
+- Pemeriksaan bahwa tiap capaian yang diklaim disertai bukti pendukung
+- **Kendala**: sebagian anggota menuliskan capaian tanpa angka, sehingga diminta melengkapi dengan data terukur
+- Penetapan tenggat internal penyelesaian sebelum asistensi ke dosen pendamping
+
+📸 `KADEK_penggabungan laporan kemajuan.png`, `KADEK_pemeriksaan bukti pendukung.png`
+
+---
+
+## 26 Agustus 2026 — Workshop Teknik Presentasi PKP2 (180 menit)
+
+**Kegiatan:**
+Mengikuti Workshop Teknik Presentasi PKP2 dan menyusun rencana pembagian peran saat penilaian.
+
+**Hasil:**
+- Memahami struktur presentasi yang diharapkan penilai dan alokasi waktu yang tersedia
+- Penetapan pembagian peran: siapa membawakan bagian apa, dan siapa menjawab pertanyaan di bidang mana
+- Penyusunan jadwal latihan presentasi sebelum penilaian resmi
+
+📸 `KADEK_workshop presentasi pkp2.png`, `KADEK_pembagian peran presentasi.png`
+
+---
+
+## 28 Agustus 2026 — Asistensi Laporan Kemajuan ke Dosen Pendamping (360 menit)
+
+**Kegiatan:**
+Memimpin asistensi laporan kemajuan ke dosen pendamping bersama seluruh anggota.
+
+**Hasil:**
+- Pemaparan laporan kemajuan secara menyeluruh
+- Pencatatan masukan dosen untuk tiap bagian
+- Pembagian tugas revisi beserta tenggatnya
+
+*(Catatan masukan dosen perlu dilengkapi sesuai asistensi yang sebenarnya.)*
+
+📸 `KADEK_asistensi laporan kemajuan.png`, `KADEK_catatan revisi dari dosen.png`
+
+---
+
+## 29 Agustus 2026 — Koordinasi Finalisasi Konten Media Sosial Ketiga (300 menit)
+
+**Kegiatan:**
+Mengoordinasikan finalisasi dan pengunggahan konten media sosial ketiga.
+
+**Hasil:**
+- Pemeriksaan isi konten sebelum diunggah, memastikan penjelasan teknisnya tidak keliru
+- Pemastian tidak ada kredensial, alamat server, maupun identitas subjek yang ikut tertayang
+- Penjadwalan waktu unggah beserta rencana pengiklanan
+- Pencatatan jangkauan unggahan sebagai bahan laporan luaran
+
+📸 `KADEK_pemeriksaan konten sebelum unggah.png`, `KADEK_konten ketiga terunggah.png`
+
+---
+
+## 30 Agustus 2026 — Koordinasi Pengujian 5 Smartband (300 menit)
+
+**Kegiatan:**
+Mengoordinasikan pengujian smartband kelima.
+
+**Hasil:**
+- Pengurusan persetujuan subjek dan pengawasan jalannya perekaman
+- Pemantauan pemenuhan komposisi subjek yang ditargetkan
+- Pencatatan hasil sesi beserta kendala yang muncul
+
+*(Jumlah subjek yang berhasil direkam perlu dilengkapi sesuai hasil sesi.)*
+
+📸 `KADEK_koordinasi sesi kelima.png`, `KADEK_pencatatan hasil sesi.png`
+
+---
