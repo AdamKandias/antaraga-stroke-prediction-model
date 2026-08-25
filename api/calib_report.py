@@ -11,6 +11,8 @@ Dipakai oleh endpoint GET /v1/calibrate/{record_id}/laporan.html (api/main.py).
 from __future__ import annotations
 
 import base64
+from functools import lru_cache
+from pathlib import Path
 import hashlib
 import pathlib
 from datetime import datetime, timedelta, timezone
@@ -105,6 +107,44 @@ def _classify_bp(sis: float | None, dia: float | None) -> tuple[str, str]:
     if s < 90 or (d and d < 60):
         return ("Hipotensi", "low")
     if s >= 120 or d >= 80:
+        return ("Normal", "ok")
+    return ("Optimal", "ok")
+
+
+def _classify_sys(sis: float | None) -> tuple[str, str]:
+    """Klasifikasi komponen sistolik saja (PERHI 2019 / WHO-ISH)."""
+    if sis is None:
+        return ("Tidak diukur", "na")
+    if sis >= 180:
+        return ("Hipertensi Derajat 3", "crit")
+    if sis >= 160:
+        return ("Hipertensi Derajat 2", "crit")
+    if sis >= 140:
+        return ("Hipertensi Derajat 1", "high")
+    if sis >= 130:
+        return ("Normal Tinggi", "watch")
+    if sis < 90:
+        return ("Hipotensi", "low")
+    if sis >= 120:
+        return ("Normal", "ok")
+    return ("Optimal", "ok")
+
+
+def _classify_dia(dia: float | None) -> tuple[str, str]:
+    """Klasifikasi komponen diastolik saja (PERHI 2019 / WHO-ISH)."""
+    if dia is None:
+        return ("Tidak diukur", "na")
+    if dia >= 110:
+        return ("Hipertensi Derajat 3", "crit")
+    if dia >= 100:
+        return ("Hipertensi Derajat 2", "crit")
+    if dia >= 90:
+        return ("Hipertensi Derajat 1", "high")
+    if dia >= 85:
+        return ("Normal Tinggi", "watch")
+    if dia < 60:
+        return ("Hipotensi", "low")
+    if dia >= 80:
         return ("Normal", "ok")
     return ("Optimal", "ok")
 
@@ -487,6 +527,7 @@ tbody tr:last-child td{border-bottom:1px solid var(--line)}
 .ref th{background:var(--bg2);text-align:left;padding:4px 6px;border:1px solid var(--line);font-size:7.4pt}
 .ref td{padding:4px 6px;border:1px solid var(--line);vertical-align:top}
 .ref .src{color:var(--mut);font-size:6.9pt;line-height:1.45}
+.ttd .sp{height:15mm}
 .ttd .sig{display:block;height:17mm;margin:2px auto 0;object-fit:contain}
 .ttd .nm{font-weight:700;border-top:1px solid var(--ink2);padding-top:3px;display:block}
 .ttd .rl{color:var(--mut);font-size:7.6pt}
@@ -520,6 +561,21 @@ tbody tr:last-child td{border-bottom:1px solid var(--line)}
 
 # ── Penyusun laporan ───────────────────────────────────────────────────────
 
+@lru_cache(maxsize=1)
+def _ttd_data_uri() -> str:
+    """Baca tanda tangan ketua tim dan sematkan sebagai data URI.
+
+    Disematkan langsung, bukan dirujuk lewat URL, agar gambar tetap tampil saat
+    halaman dicetak ke PDF maupun disimpan lalu dibuka tanpa sambungan server.
+    """
+    path = Path(__file__).parent / "static" / "ttd-ketua.png"
+    try:
+        data = base64.b64encode(path.read_bytes()).decode()
+        return f"data:image/png;base64,{data}"
+    except Exception:
+        return ""
+
+
 def build_record_report_html(rec, autoprint: bool = True) -> str:
     """Rakit laporan pemeriksaan A4 untuk satu rekaman kalibrasi."""
     gender = (rec.gender or "L").strip().upper()
@@ -541,7 +597,9 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
     sis, dia, bpm = rec.sistolik_mmhg, rec.diastolik_mmhg, rec.bpm
     gula, kol, au = rec.gula_darah_mg_dl, rec.kolesterol_mg_dl, rec.asam_urat_mg_dl
 
-    st_bp = _classify_bp(sis, dia)
+    st_bp = _classify_bp(sis, dia)      # penilaian gabungan, dipakai ringkasan
+    st_sis = _classify_sys(sis)         # komponen, dipakai baris tabel
+    st_dia = _classify_dia(dia)
     st_bpm = _classify_bpm(bpm)
     st_gula = _classify_glucose(gula, rec.kondisi)
     st_kol = _classify_chol(kol)
@@ -569,11 +627,15 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
     ])
 
     # ── Tabel hasil ──────────────────────────────────────────────────────
+    _t = _ttd_data_uri()
+    _ttd_html = (f'<img class="sig" src="{_t}" alt="">' if _t
+                 else '<div class="sp"></div>')
+
     rows = "".join([
         _row("gauge", "Tekanan Darah Sistolik", "Sfigmomanometer digital",
-             _num(sis, 0), "mmHg", "< 120", st_bp),
+             _num(sis, 0), "mmHg", "< 120", st_sis),
         _row("gauge", "Tekanan Darah Diastolik", "Sfigmomanometer digital",
-             _num(dia, 0), "mmHg", "< 80", st_bp),
+             _num(dia, 0), "mmHg", "< 80", st_dia),
         _row("heart", "Denyut Jantung (HR)", "Fotopletismografi inframerah",
              _num(bpm, 0), "bpm", "60 - 100", st_bpm),
         _row("droplet", "Gula Darah", f"Glukometer · {kondisi_txt}",
@@ -794,7 +856,7 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
     </div>
     <div class="ttd">
       <div>Surabaya, {_tgl_panjang(terbit)}</div>
-      <img class="sig" src="/static/ttd-ketua.png" alt="">
+      {_ttd_html}
       <span class="nm">Kadek Savita Dyutianaya</span>
       <span class="rl">Ketua Tim Riset ANTARAGA</span>
       <span class="rl">PKM-KC 2026 · Politeknik Elektronika Negeri Surabaya</span>
