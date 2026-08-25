@@ -1,5 +1,5 @@
 """
-Laporan hasil pemeriksaan per-rekaman kalibrasi — siap cetak / simpan PDF.
+Laporan hasil pemeriksaan per-rekaman kalibrasi, siap cetak / simpan PDF.
 
 Menghasilkan satu halaman HTML berukuran A4 yang di-render browser lalu
 dicetak lewat dialog "Save as PDF".  Tidak memakai library PDF sama sekali:
@@ -21,7 +21,7 @@ BRAND = "#007e73"          # teal wordmark antaraga
 BRAND_DARK = "#005b53"
 _ASSETS = pathlib.Path(__file__).resolve().parent.parent / "assets"
 
-# WIB — semua timestamp DB disimpan UTC (datetime.utcnow), laporan tampil lokal.
+# WIB, semua timestamp DB disimpan UTC (datetime.utcnow), laporan tampil lokal.
 _WIB = timezone(timedelta(hours=7))
 
 _BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -59,6 +59,7 @@ _ICON_BODY = {
     "heart": '<path d="M12 20.5S3.5 15 3.5 9.2A4.7 4.7 0 0 1 12 6.4a4.7 4.7 0 0 1 8.5 2.8c0 5.8-8.5 11.3-8.5 11.3Z"/>',
     "gauge": '<path d="M4 18a8.5 8.5 0 1 1 16 0"/><path d="M12 18V9"/><path d="m12 9 4-2.5"/><circle cx="12" cy="18" r="1.3"/>',
     "droplet": '<path d="M12 3s5.5 6 5.5 9.7A5.5 5.5 0 0 1 6.5 12.7C6.5 9 12 3 12 3Z"/>',
+    "book": '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
     "flask": '<path d="M9.5 3h5"/><path d="M10.5 3v6.2L5.8 17.4A2 2 0 0 0 7.5 20.5h9a2 2 0 0 0 1.7-3.1L13.5 9.2V3"/><path d="M8 14.5h8"/>',
     "molecule": '<circle cx="12" cy="5.5" r="2.2"/><circle cx="5.5" cy="17" r="2.2"/><circle cx="18.5" cy="17" r="2.2"/><path d="M10.6 7.4 7 14.2M13.4 7.4 17 14.2M7.7 17h8.6"/>',
     "wave": '<path d="M2 12h3l2.5-6 4 13L15 9l2 3h5"/>',
@@ -84,7 +85,7 @@ def _icon(name: str, size: int = 14, stroke: float = 1.7) -> str:
 # tone: ok | low | watch | high | crit | na  → dipetakan ke warna badge di CSS.
 
 def _classify_bp(sis: float | None, dia: float | None) -> tuple[str, str]:
-    """Klasifikasi tekanan darah — ESC/ESH & Konsensus PERHI.
+    """Klasifikasi tekanan darah, ESC/ESH & Konsensus PERHI.
 
     Bila sistolik dan diastolik jatuh di kategori berbeda, yang dipakai adalah
     kategori tertinggi (aturan baku pada guideline hipertensi).
@@ -133,14 +134,14 @@ _KONDISI_LABEL = {
 def _glucose_ref(kondisi: str | None) -> str:
     k = (kondisi or "sewaktu").lower()
     if k == "puasa":
-        return "70 – 99 (puasa)"
+        return "70 - 99 (puasa)"
     if k.startswith("2j"):
         return "< 140 (2 jam PP)"
     return "< 140 (sewaktu)"
 
 
 def _classify_glucose(val: float | None, kondisi: str | None) -> tuple[str, str]:
-    """Ambang ADA / PERKENI — batasnya berbeda per kondisi pengambilan."""
+    """Ambang ADA / PERKENI, batasnya berbeda per kondisi pengambilan."""
     if val is None:
         return ("Tidak diukur", "na")
     k = (kondisi or "sewaktu").lower()
@@ -172,33 +173,64 @@ def _classify_chol(val: float | None) -> tuple[str, str]:
     return ("Tinggi (Hiperkolesterolemia)", "high")
 
 
-def _classify_uric(val: float | None, gender: str) -> tuple[str, str]:
+# Ambang jenuh monosodium urat dalam serum pada 37 C dan pH 7,4.
+# Di atas nilai ini kristal dapat terbentuk, sehingga dipakai sebagai batas
+# hiperurisemia yang tidak bergantung jenis kelamin.
+_URAT_JENUH = 6.8
+
+# Estrogen bersifat urikosurik (membantu pembuangan urat lewat ginjal).
+# Setelah menopause kadarnya menurun, sehingga batas atas rujukan pada
+# perempuan bergeser naik mendekati nilai laki-laki.
+_USIA_MENOPAUSE = 50
+
+
+def _uric_range(gender: str, usia: float | None) -> tuple[float, float, str]:
+    """Kembalikan (batas bawah, batas atas, keterangan kelompok)."""
+    if gender == "L":
+        return (3.4, 7.0, "laki-laki")
+    if usia is not None and usia >= _USIA_MENOPAUSE:
+        return (2.4, 6.5, "perempuan pascamenopause")
+    return (2.4, 6.0, "perempuan usia subur")
+
+
+def _classify_uric(val: float | None, gender: str,
+                   usia: float | None = None) -> tuple[str, str]:
+    """Klasifikasi asam urat menurut jenis kelamin dan status menopause.
+
+    Batas atas perempuan bergeser dari 6,0 menjadi 6,5 mg/dL setelah usia 50
+    tahun. Nilai antara batas atas rujukan dan ambang jenuh 6,8 mg/dL ditandai
+    sebagai batas atas, bukan langsung hiperurisemia, karena pada rentang itu
+    kristal urat belum terbentuk.
+    """
     if val is None:
         return ("Tidak diukur", "na")
-    lo, hi = (3.4, 7.0) if gender == "L" else (2.4, 6.0)
+    lo, hi, _ = _uric_range(gender, usia)
     if val < lo:
         return ("Di Bawah Rujukan", "low")
     if val <= hi:
         return ("Normal", "ok")
+    if val < _URAT_JENUH:
+        return ("Batas Atas", "watch")
     return ("Hiperurisemia", "high")
 
 
-def _uric_ref(gender: str) -> str:
-    return "3,4 – 7,0 (pria)" if gender == "L" else "2,4 – 6,0 (wanita)"
+def _uric_ref(gender: str, usia: float | None = None) -> str:
+    lo, hi, ket = _uric_range(gender, usia)
+    return f"{_num(lo,1)} - {_num(hi,1)} ({ket})"
 
 
 # ── Utilitas format (locale Indonesia: koma desimal, titik ribuan) ─────────
 
 def _num(v: float | None, dec: int = 1) -> str:
     if v is None:
-        return "—"
+        return "-"
     s = f"{float(v):,.{dec}f}"
     return s.replace(",", " ").replace(".", ",")
 
 
 def _int(v: float | None) -> str:
     if v is None:
-        return "—"
+        return "-"
     return f"{int(round(float(v))):,}".replace(",", ".")
 
 
@@ -220,8 +252,7 @@ def _parse_raw(raw: str | None) -> np.ndarray:
 def _ppg_strip_svg(ir: np.ndarray, fs: float, seconds: float = 8.0) -> str:
     """Gelombang denyut inframerah pada kertas berpetak, gaya strip rekam medis.
 
-    Mengembalikan string kosong bila sinyal terlalu pendek untuk difilter —
-    lebih baik menghilangkan panelnya daripada mencetak garis datar palsu.
+    Mengembalikan string kosong bila sinyal terlalu pendek untuk difilter, lebih baik menghilangkan panelnya daripada mencetak garis datar palsu.
     """
     if ir.size < 60:
         return ""
@@ -272,7 +303,7 @@ def _ppg_strip_svg(ir: np.ndarray, fs: float, seconds: float = 8.0) -> str:
                   stroke-linejoin="round" stroke-linecap="round"/>
       </svg>
       <div class="strip-cap">
-        <span>Kanal inframerah · komponen denyut (bandpass 0,5–5 Hz)</span>
+        <span>Kanal inframerah · komponen denyut (bandpass 0,5-5 Hz)</span>
         <span>Durasi {_num(dur, 1)} dtk · laju cuplik {_num(fs, 0)} Hz · {_int(seg.size)} sampel</span>
       </div>
     </div>"""
@@ -452,7 +483,11 @@ tbody tr:last-child td{border-bottom:1px solid var(--line)}
   padding-top:7px}
 .note b{color:var(--ink2)}
 .ttd{width:58mm;text-align:center;font-size:8.2pt;border-top:1px solid var(--line);padding-top:7px}
-.ttd .sp{height:15mm}
+.ref{width:100%%;border-collapse:collapse;font-size:7.6pt;margin-bottom:9px}
+.ref th{background:var(--bg2);text-align:left;padding:4px 6px;border:1px solid var(--line);font-size:7.4pt}
+.ref td{padding:4px 6px;border:1px solid var(--line);vertical-align:top}
+.ref .src{color:var(--mut);font-size:6.9pt;line-height:1.45}
+.ttd .sig{display:block;height:17mm;margin:2px auto 0;object-fit:contain}
 .ttd .nm{font-weight:700;border-top:1px solid var(--ink2);padding-top:3px;display:block}
 .ttd .rl{color:var(--mut);font-size:7.6pt}
 
@@ -460,7 +495,7 @@ tbody tr:last-child td{border-bottom:1px solid var(--line)}
   justify-content:space-between;gap:12px;font-size:7.3pt;color:var(--mut);font-weight:600;
   letter-spacing:.02em}
 
-/* Bilah aksi — tidak ikut tercetak */
+/* Bilah aksi, tidak ikut tercetak */
 .bar{position:sticky;top:0;z-index:9;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
   justify-content:center;padding:10px;background:#16211f;color:#e7efee;font-size:9pt}
 .bar button{font:inherit;font-weight:700;padding:7px 16px;border:0;border-radius:6px;
@@ -510,9 +545,9 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
     st_bpm = _classify_bpm(bpm)
     st_gula = _classify_glucose(gula, rec.kondisi)
     st_kol = _classify_chol(kol)
-    st_au = _classify_uric(au, gender)
+    st_au = _classify_uric(au, gender, rec.age_years)
 
-    # Rasio-of-ratios merah/inframerah — indeks teknis mutu sinyal dua kanal,
+    # Rasio-of-ratios merah/inframerah, indeks teknis mutu sinyal dua kanal,
     # bukan nilai SpO2 (sensor belum dikalibrasi terhadap ko-oksimeter).
     ratio_r = None
     if all(v for v in (rec.red_ac_p2p, rec.red_dc_mean, rec.ir_ac_p2p, rec.ir_dc_mean)):
@@ -525,7 +560,7 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
     durasi = ir.size / fs if ir.size else None
 
     # ── Kartu ringkas ────────────────────────────────────────────────────
-    bp_val = f"{_int(sis)}/{_int(dia)}" if sis is not None and dia is not None else "—"
+    bp_val = f"{_int(sis)}/{_int(dia)}" if sis is not None and dia is not None else "-"
     tiles = "".join([
         _tile("gauge", "Tekanan Darah", bp_val, "mmHg", st_bp[0], st_bp[1]),
         _tile("heart", "Denyut Jantung", _num(bpm, 0), "bpm", st_bpm[0], st_bpm[1]),
@@ -540,13 +575,13 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
         _row("gauge", "Tekanan Darah Diastolik", "Sfigmomanometer digital",
              _num(dia, 0), "mmHg", "< 80", st_bp),
         _row("heart", "Denyut Jantung (HR)", "Fotopletismografi inframerah",
-             _num(bpm, 0), "bpm", "60 – 100", st_bpm),
+             _num(bpm, 0), "bpm", "60 - 100", st_bpm),
         _row("droplet", "Gula Darah", f"Glukometer · {kondisi_txt}",
              _num(gula, 0), "mg/dL", _glucose_ref(rec.kondisi), st_gula),
         _row("flask", "Kolesterol Total", "Strip enzimatik POCT",
              _num(kol, 0), "mg/dL", "< 200", st_kol),
         _row("molecule", "Asam Urat", "Strip enzimatik POCT",
-             _num(au, 1), "mg/dL", _uric_ref(gender), st_au),
+             _num(au, 1), "mg/dL", _uric_ref(gender, rec.age_years), st_au),
     ])
 
     # ── Faktor risiko stroke yang dapat dimodifikasi ─────────────────────
@@ -560,7 +595,7 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
          kol is not None and kol >= 200),
         ("Hiperurisemia", f"Di atas rujukan {'pria' if gender == 'L' else 'wanita'}",
          st_au[1] == "high"),
-        ("Aritmia / laju tidak normal", "Denyut di luar rentang 60–100 bpm",
+        ("Aritmia / laju tidak normal", "Denyut di luar rentang 60-100 bpm",
          st_bpm[1] in ("watch", "high")),
     ]
     risk_html = "".join(
@@ -573,7 +608,7 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
     poin: list[str] = []
     if sis is not None and dia is not None:
         poin.append(
-            f"Tekanan darah tercatat <b>{_int(sis)}/{_int(dia)} mmHg</b> — "
+            f"Tekanan darah tercatat <b>{_int(sis)}/{_int(dia)} mmHg</b>, "
             f"masuk kategori <b>{st_bp[0]}</b>."
         )
     if bpm is not None:
@@ -584,20 +619,20 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
     if gula is not None:
         poin.append(
             f"Gula darah <b>{_num(gula, 0)} mg/dL</b> pada kondisi "
-            f"<b>{kondisi_txt.lower()}</b> — interpretasi <b>{st_gula[0]}</b> "
+            f"<b>{kondisi_txt.lower()}</b>, interpretasi <b>{st_gula[0]}</b> "
             f"(rujukan {_glucose_ref(rec.kondisi)} mg/dL)."
         )
     if kol is not None:
-        poin.append(f"Kolesterol total <b>{_num(kol, 0)} mg/dL</b> — <b>{st_kol[0]}</b>.")
+        poin.append(f"Kolesterol total <b>{_num(kol, 0)} mg/dL</b>, <b>{st_kol[0]}</b>.")
     if au is not None:
-        poin.append(f"Asam urat <b>{_num(au, 1)} mg/dL</b> — <b>{st_au[0]}</b>.")
+        poin.append(f"Asam urat <b>{_num(au, 1)} mg/dL</b>, <b>{st_au[0]}</b>.")
     if durasi:
         poin.append(
             f"Sinyal PPG pendamping direkam <b>{_num(durasi, 1)} detik</b> "
             f"pada laju cuplik {_num(fs, 0)} Hz."
         )
     if not poin:
-        # Semua nilai rujukan kosong — jangan cetak kotak interpretasi melompong.
+        # Semua nilai rujukan kosong, jangan cetak kotak interpretasi melompong.
         poin.append(
             "Tidak ada nilai alat rujukan yang terisi pada sesi ini. Laporan hanya "
             "memuat identitas subjek dan parameter teknis sensor."
@@ -606,16 +641,16 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
 
     # ── Panel teknis sensor ──────────────────────────────────────────────
     tech = "".join([
-        _kv("IR — DC", _int(rec.ir_dc_mean)),
-        _kv("IR — AC p-p", _int(rec.ir_ac_p2p)),
-        _kv("Merah — DC", _int(rec.red_dc_mean)),
-        _kv("Merah — AC p-p", _int(rec.red_ac_p2p)),
+        _kv("IR, DC", _int(rec.ir_dc_mean)),
+        _kv("IR, AC p-p", _int(rec.ir_ac_p2p)),
+        _kv("Merah, DC", _int(rec.red_dc_mean)),
+        _kv("Merah, AC p-p", _int(rec.red_ac_p2p)),
         _kv("Rasio R (merah/IR)", _num(ratio_r, 3)),
         _kv("Laju Cuplik", f"{_num(fs, 0)} Hz"),
-        # Dipecah jadi dua sel supaya grid tetap genap 4 kolom — aturan border
+        # Dipecah jadi dua sel supaya grid tetap genap 4 kolom, aturan border
         # .tech mengandalkan jumlah sel kelipatan empat.
-        _kv("Durasi Rekaman", f"{_num(durasi, 1)} dtk" if durasi else "—"),
-        _kv("Jumlah Sampel", _int(ir.size) if ir.size else "—"),
+        _kv("Durasi Rekaman", f"{_num(durasi, 1)} dtk" if durasi else "-"),
+        _kv("Jumlah Sampel", _int(ir.size) if ir.size else "-"),
     ])
 
     strip = _ppg_strip_svg(ir, fs)
@@ -623,11 +658,11 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
                    if strip else "")
 
     ident = "".join([
-        _kv("ID Subjek", rec.subject_id or "—"),
+        _kv("ID Subjek", rec.subject_id or "-"),
         _kv("Usia", f"{_num(usia, 0)} tahun"),
         _kv("Jenis Kelamin", gender_txt),
         _kv("Kondisi Pengambilan", kondisi_txt),
-        _kv("Perangkat", rec.device_id or "—"),
+        _kv("Perangkat", rec.device_id or "-"),
         _kv("Waktu Sesi", sesi.strftime("%d/%m/%Y · %H:%M WIB")),
     ])
 
@@ -706,20 +741,63 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
   <h2>{_icon("shield")}Faktor Risiko Stroke</h2>
   <div class="risk">{risk_html}</div>
 
+  <h2>{_icon("book")}Landasan Nilai Rujukan</h2>
+  <table class="ref">
+    <thead><tr><th>Parameter</th><th>Klasifikasi</th><th>Acuan</th></tr></thead>
+    <tbody>
+      <tr>
+        <td rowspan="4"><b>Tekanan Darah</b><br><span class="src">Perhimpunan Dokter Hipertensi Indonesia (PERHI) 2019<br>WHO/ISH, sejalan dengan ESC/ESH 2018</span></td>
+        <td>Optimal &lt; 120/80 · Normal 120-129/80-84</td><td rowspan="4" class="src">Batas hipertensi 140/90 mmHg dipakai di Indonesia, berbeda dari ACC/AHA 2017 yang memakai 130/80. Laporan ini memakai ambang PERHI agar sesuai praktik klinis setempat.</td>
+      </tr>
+      <tr><td>Normal Tinggi 130-139/85-89</td></tr>
+      <tr><td>Hipertensi Derajat 1: 140-159/90-99</td></tr>
+      <tr><td>Derajat 2: 160-179/100-109 · Derajat 3: &ge; 180/110</td></tr>
+
+      <tr>
+        <td rowspan="3"><b>Gula Darah</b><br><span class="src">PERKENI 2021<br>ADA Standards of Care</span></td>
+        <td>Puasa: normal 70-99 · prediabetes 100-125 · diabetes &ge; 126</td>
+        <td rowspan="3" class="src">Ambang berbeda menurut kondisi pengambilan, sehingga kondisi puasa atau setelah makan wajib dicatat saat perekaman.</td>
+      </tr>
+      <tr><td>2 jam setelah makan: normal &lt; 140 · prediabetes 140-199 · diabetes &ge; 200</td></tr>
+      <tr><td>Sewaktu: normal &lt; 140 · waspada 140-199 · rentang diabetes &ge; 200</td></tr>
+
+      <tr>
+        <td><b>Kolesterol Total</b><br><span class="src">NCEP ATP III</span></td>
+        <td>Optimal &lt; 200 · Batas Tinggi 200-239 · Tinggi &ge; 240</td>
+        <td class="src">Kolesterol total, bukan LDL maupun HDL. Sensor optik tidak dapat memisahkan fraksinya.</td>
+      </tr>
+
+      <tr>
+        <td rowspan="3"><b>Asam Urat</b><br><span class="src">Rentang laboratorium klinik baku<br>Ambang jenuh urat 6,8 mg/dL</span></td>
+        <td>Laki-laki: 3,4-7,0 mg/dL</td>
+        <td rowspan="3" class="src">Estrogen bersifat urikosurik. Setelah menopause kadarnya menurun sehingga batas atas perempuan bergeser naik. Nilai di antara batas rujukan dan 6,8 mg/dL ditandai batas atas, karena pada rentang itu kristal monosodium urat belum terbentuk pada 37 &deg;C dan pH 7,4.</td>
+      </tr>
+      <tr><td>Perempuan usia subur (&lt; 50 th): 2,4-6,0 mg/dL</td></tr>
+      <tr><td>Perempuan pascamenopause (&ge; 50 th): 2,4-6,5 mg/dL</td></tr>
+
+      <tr>
+        <td><b>Detak Jantung</b><br><span class="src">Rentang sinus dewasa istirahat</span></td>
+        <td>Normal 60-100 bpm · Bradikardia &lt; 60 · Takikardia &gt; 100</td>
+        <td class="src">Nilai diambil dari sinyal PPG kanal inframerah setelah melewati penyaring lonjakan.</td>
+      </tr>
+    </tbody>
+  </table>
+
   <div class="sign">
     <div class="note">
       <b>Catatan:</b> Nilai gula darah, kolesterol, asam urat, dan tekanan darah pada laporan ini
       berasal dari alat ukur rujukan (invasif/standar medis) yang direkam berdampingan dengan
-      sinyal PPG sebagai data kalibrasi model. Nilai rujukan mengacu pada pedoman PERKENI, PERHI,
-      dan NCEP ATP III. Laporan ini merupakan dokumen hasil pengukuran penelitian dan
-      <b>bukan pengganti diagnosis dokter</b>. Interpretasi akhir tetap memerlukan penilaian
-      tenaga medis berwenang beserta riwayat klinis subjek.
+      sinyal PPG sebagai data kalibrasi model. Laporan ini merupakan dokumen hasil pengukuran
+      penelitian dan <b>bukan pengganti diagnosis dokter</b>. Interpretasi akhir tetap
+      memerlukan penilaian tenaga medis berwenang beserta riwayat klinis subjek.
+      Rentang rujukan antar laboratorium dapat sedikit berbeda.
     </div>
     <div class="ttd">
       <div>Surabaya, {_tgl_panjang(terbit)}</div>
-      <div class="sp"></div>
-      <span class="nm">Penanggung Jawab Pengukuran</span>
-      <span class="rl">Tim Riset ANTARAGA · PKM-KC 2026</span>
+      <img class="sig" src="/static/ttd-ketua.png" alt="">
+      <span class="nm">Kadek Savita Dyutianaya</span>
+      <span class="rl">Ketua Tim Riset ANTARAGA</span>
+      <span class="rl">PKM-KC 2026 · Politeknik Elektronika Negeri Surabaya</span>
     </div>
   </div>
 
