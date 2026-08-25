@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, field_serializer
 
 
 class Gender(str, Enum):
@@ -124,6 +124,18 @@ class VitalReadingResponse(BaseModel):
     spo2_percent: float | None
     blood_glucose_mg_dl: float
     timestamp: datetime
+
+    @field_serializer("timestamp")
+    def _ts_utc(self, v: datetime, _info) -> str:
+        """Sertakan penanda zona UTC saat serialisasi.
+
+        Kolom waktu disimpan sebagai UTC tanpa penanda zona. Tanpa akhiran
+        "+00:00", aplikasi mobile menganggapnya waktu setempat sehingga jam
+        yang tampil mundur 7 jam bagi pengguna WIB.
+        """
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        return v.isoformat()
 
 
 class LatestVitalResponse(BaseModel):

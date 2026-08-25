@@ -154,6 +154,24 @@ def root() -> FileResponse:
     return FileResponse(_HOME_HTML, media_type="text/html")
 
 
+def _utc_iso(dt) -> str | None:
+    """Ubah datetime dari basis data menjadi ISO 8601 bertanda zona UTC.
+
+    Kolom waktu disimpan sebagai UTC tanpa penanda zona (naive). Bila
+    di-serialisasi apa adanya, hasilnya berupa "2026-08-25T08:26:09" tanpa
+    akhiran apa pun, dan peramban menganggapnya waktu setempat -- sehingga
+    tampil mundur 7 jam bagi pengguna WIB.
+
+    Dengan menambahkan penanda "+00:00", peramban maupun aplikasi mobile
+    otomatis mengubahnya ke zona waktu perangkat masing-masing.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "dev_mode": DEV_MODE}
@@ -432,16 +450,34 @@ def get_latest_vital(
 @app.get("/vitals/history", response_model=list[schemas.VitalReadingResponse])
 def get_vital_history(
     date_: date | None = Query(None, alias="date"),
+    tz_offset: int = Query(
+        420, ge=-840, le=840,
+        description="Selisih zona waktu perangkat terhadap UTC dalam menit. "
+                    "Menentukan batas awal dan akhir hari. Bawaan 420 (WIB), "
+                    "dipakai bila perangkat tidak mengirimkan zonanya.",
+    ),
     profile_id: str | None = None,
     db: Session = Depends(get_db),
     user_id: str = Depends(get_current_user_id),
 ) -> list[schemas.VitalReadingResponse]:
-    """All vital-signs readings for the resolved profile on `date_` (server
-    local date, defaults to today), oldest first. Empty list, not 404, if
-    there's simply no data yet for that day."""
+    """Seluruh pembacaan vital milik profil aktif pada tanggal `date_`.
+
+    Batas hari dihitung menurut zona waktu perangkat, bukan UTC. Tanpa itu,
+    pengguna WIB yang memilih tanggal 10 Agustus akan menerima data dari
+    10 Agustus pukul 07.00 sampai 11 Agustus pukul 07.00 waktu setempat:
+    tujuh jam pertama harinya hilang, dan tujuh jam milik hari berikutnya
+    ikut terbawa.
+
+    Mengembalikan daftar kosong (bukan 404) bila memang belum ada data.
+    """
     profile = _resolve_profile_for_request(db, user_id, profile_id)
-    day = date_ or datetime.now(timezone.utc).date()
-    day_start = datetime.combine(day, datetime.min.time())
+    tz = timezone(timedelta(minutes=tz_offset))
+    day = date_ or datetime.now(tz).date()
+
+    # Tengah malam waktu setempat, lalu diubah ke UTC agar sebanding dengan
+    # kolom created_at yang disimpan sebagai UTC tanpa penanda zona.
+    day_start = (datetime.combine(day, datetime.min.time(), tzinfo=tz)
+                 .astimezone(timezone.utc).replace(tzinfo=None))
     day_end = day_start + timedelta(days=1)
 
     readings = (
@@ -650,7 +686,7 @@ def list_logs(limit: int = 50, db: Session = Depends(get_db)) -> list[dict]:
             "response_payload": row.response_payload,
             "risk_level": row.risk_level,
             "latency_ms": row.latency_ms,
-            "created_at": row.created_at.isoformat(),
+            "created_at": _utc_iso(row.created_at),
         }
         for row in rows
     ]
@@ -1369,7 +1405,7 @@ def _compute_xgboost(device_id: str, db: Session) -> dict:
         "risk_level": resp.get("risk_level"),
         "threshold": resp.get("threshold"),
         "model_name": resp.get("model_name"),
-        "predicted_at": log.created_at.isoformat(),
+        "predicted_at": _utc_iso(log.created_at),
         "risk_flags": all_flags,
     }
 
@@ -1572,7 +1608,7 @@ def calibrate_export(
             "id": r.id,
             "device_id": r.device_id,
             "subject_id": r.subject_id,
-            "session_ts": r.created_at.isoformat(),
+            "session_ts": _utc_iso(r.created_at),
             "age_years": r.age_years,
             "gender": r.gender,
             "kondisi": r.kondisi or "",
@@ -1756,7 +1792,7 @@ def _calib_to_dict(r: models_db.CalibrationRecord) -> dict:
         "id": r.id, "device_id": r.device_id,
         "subject_id": r.subject_id, "age_years": r.age_years,
         "gender": r.gender, "kondisi": r.kondisi,
-        "session_ts": r.created_at.isoformat(),
+        "session_ts": _utc_iso(r.created_at),
         "ir_dc_mean": r.ir_dc_mean, "ir_ac_p2p": r.ir_ac_p2p,
         "red_dc_mean": r.red_dc_mean, "bpm": r.bpm,
         "gula_darah_mg_dl": r.gula_darah_mg_dl,
