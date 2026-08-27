@@ -86,19 +86,28 @@ Menyusun dokumentasi teknis sisi perangkat keras untuk melengkapi berkas pendaft
 
 ---
 
-## 16 Agustus 2026 — Pendampingan Pengujian 4 Smartband (450 menit)
+## 16 Agustus 2026 - Analisis Sinyal Empat Sesi dan Penyusunan Bagian Hardware (450 menit)
 
 **Kegiatan:**
-Mendampingi pengujian smartband keempat dari sisi perangkat keras, memastikan mutu sinyal memadai sepanjang sesi dan mencatat perilaku perangkat selama pemakaian panjang.
+Mengolah data hasil empat sesi pengujian yang sudah terkumpul dari sisi perangkat keras, lalu menyusun bagian perangkat keras pada laporan kemajuan. Hari ini tidak ada perekaman baru; seluruh waktu dipakai menelaah rekaman yang sudah ada dan menuliskan temuannya.
 
-**Hasil:**
-- Pemantauan mutu sinyal tiap perekaman lewat dashboard, memastikan perfusi inframerah berada di rentang wajar
-- Pencatatan penurunan daya baterai selama sesi berlangsung sebagai bahan analisis ketahanan
-- **Kendala yang ditemukan**: sinyal kanal hijau menurun mutunya bila subjek menggerakkan jari, sehingga posisi tangan perlu dijaga tetap
-- Penyesuaian kekencangan tali pada tiap subjek agar sensor menempel tanpa menekan pembuluh
-- Perekaman yang tidak lolos pemeriksaan mutu diulang di tempat, tidak disimpan
+**Hasil - karakterisasi sinyal antar sesi:**
+- Peninjauan mutu sinyal seluruh rekaman dari sesi pertama sampai keempat: perfusi inframerah, amplitudo denyut, dan tingkat derau tiap subjek
+- Pembandingan perilaku sensor pada subjek dengan usia dan kondisi kulit berbeda
+- **Temuan**: perfisi inframerah tiap subjek berkisar 0,74 sampai 1,77 permil, seluruhnya di rentang PPG normal, sehingga mutu rekaman merah dan inframerah dinyatakan memadai
+- **Temuan kedua**: satu rekaman menunjukkan rasio merah terhadap inframerah menyimpang jauh dari subjek lain, menandakan posisi atau kontak sensor berbeda saat perekaman itu; direkomendasikan diulang pada sesi berikutnya
 
-📸 `ALLY_pemantauan mutu sinyal sesi keempat.png`, `ALLY_pencatatan daya baterai.png`
+**Hasil - analisis ketahanan daya:**
+- Penggabungan catatan penurunan daya baterai dari keempat sesi menjadi satu grafik
+- Perhitungan perkiraan lama pakai pada pengiriman data berkelanjutan
+- Pencatatan pengaruh kekuatan sinyal jaringan terhadap konsumsi daya
+
+**Hasil - penyusunan laporan:**
+- Penulisan bagian perangkat keras pada laporan kemajuan: rancangan rangkaian, analisis manajemen daya, dan hasil karakterisasi sinyal
+- Penyusunan daftar kendala perangkat keras dalam bentuk rantai masalah sampai penyelesaian, mulai dari kegagalan step down sampai penggantian mikrokontroler
+- Penyiapan gambar skematik dan tata letak PCB dengan keterangan agar dapat dibaca pemeriksa non-teknis
+
+📸 `ALLY_karakterisasi sinyal empat sesi.png`, `ALLY_temuan rasio merah inframerah menyimpang.png`, `ALLY_grafik ketahanan baterai.png`, `ALLY_laporan bagian hardware.png`
 
 ---
 

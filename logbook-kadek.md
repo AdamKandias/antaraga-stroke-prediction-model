@@ -157,18 +157,29 @@ Mengoordinasikan penyerahan berkas HKI ke sentra HKI kampus, memastikan seluruh 
 
 ---
 
-## 16 Agustus 2026 — Koordinasi Pengujian 4 Smartband (450 menit)
+## 16 Agustus 2026 - Peninjauan Dataset dan Koordinasi Laporan Kemajuan (450 menit)
 
 **Kegiatan:**
-Mengoordinasikan pengujian smartband keempat, dengan prioritas melengkapi komposisi subjek yang masih kurang.
+Meninjau kelengkapan data yang terkumpul dari empat sesi pengujian, lalu mengoordinasikan penyusunan laporan kemajuan agar tiap bagian tergarap sebelum tenggat asistensi.
 
-**Hasil:**
-- Pengurusan persetujuan subjek dan pengawasan jalannya perekaman
-- **Prioritas komposisi ditetapkan** berdasarkan masukan tim AI: mencari subjek berkolesterol normal dan subjek usia di bawah 50 tahun, karena data yang terkumpul selama ini didominasi lansia dengan nilai klinis tinggi
-- Pencatatan hasil tiap perekaman beserta yang gagal dan sebabnya
-- **Kendala**: subjek muda lebih sulit dicari karena umumnya tidak merasa perlu diperiksa
+**Hasil - peninjauan dataset:**
+- Peninjauan komposisi dataset terkini terhadap tiga target yang ditetapkan tim AI: jumlah subjek, sebaran usia, dan sebaran nilai klinis
+- **Temuan yang perlu ditindaklanjuti**: belum ada subjek dengan kolesterol di bawah 200 mg/dL, dan usia masih berhimpit dengan kondisi penyakit karena subjek muda yang terekam kebetulan juga yang paling sehat
+- Penetapan prioritas pencarian subjek untuk sesi kelima: lansia bertekanan darah normal dan orang muda bertekanan tinggi, agar model tidak sekadar menebak dari umur
+- Pemeriksaan kelengkapan berkas informed consent seluruh subjek terhadap data yang tersimpan
 
-📸 `KADEK_koordinasi sesi keempat.png`, `KADEK_pencatatan komposisi subjek.png`
+**Hasil - koordinasi laporan kemajuan:**
+- Penetapan pembagian bagian laporan beserta tenggat internal tiap anggota
+- Pemeriksaan bahwa tiap capaian yang akan diklaim disertai bukti pendukung
+- **Kendala**: sebagian anggota menuliskan capaian tanpa angka, sehingga diminta melengkapi dengan data terukur
+- Penyusunan kerangka bagian luaran: media sosial, dokumentasi, dan status pengajuan HKI yang sudah diserahkan dua hari sebelumnya
+
+**Hasil - perencanaan:**
+- Penjadwalan sesi pengujian kelima dengan mempertimbangkan ketersediaan subjek yang dicari
+- Penetapan target pekan berikutnya dan pemantauan progres tiap anggota
+- Pencatatan agenda yang akan datang: Workshop Internal Hak Cipta dan Workshop Teknik Presentasi PKP2
+
+📸 `KADEK_peninjauan komposisi dataset.png`, `KADEK_prioritas subjek sesi kelima.png`, `KADEK_pembagian bagian laporan.png`, `KADEK_pemeriksaan bukti pendukung.png`
 
 ---
 

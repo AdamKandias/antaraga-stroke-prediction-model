@@ -133,18 +133,29 @@ Mendampingi penyerahan berkas HKI ke sentra HKI kampus dan mengarsipkan dokumenn
 
 ---
 
-## 16 Agustus 2026 — Pendampingan Administrasi Pengujian 4 (450 menit)
+## 16 Agustus 2026 - Perapian Arsip Subjek dan Penulisan Laporan Kemajuan (450 menit)
 
 **Kegiatan:**
-Mendampingi pengujian smartband keempat dari sisi administrasi, kini dengan payung ethical clearance yang sudah terbit.
+Merapikan arsip administrasi dari empat sesi pengujian yang sudah berjalan, lalu menulis bagian laporan kemajuan yang menjadi tanggung jawabnya.
 
-**Hasil:**
-- Penjelasan penelitian dan pengumpulan informed consent dari tiap subjek
-- Pencatatan hasil pengukuran alat medis untuk tiap subjek
-- Pengarsipan berkas subjek secara terpisah dari data teknis, sesuai ketentuan kerahasiaan
-- **Kendala**: mencari subjek usia di bawah 50 tahun lebih sulit karena umumnya merasa tidak perlu diperiksa, sehingga perlu penjelasan tambahan mengenai tujuan penelitian
+**Hasil - perapian arsip:**
+- Pemeriksaan silang seluruh berkas informed consent terhadap data yang tersimpan di dashboard, memastikan tiap rekaman punya persetujuan tertulis
+- Pemeriksaan ulang catatan hasil alat medis tiap subjek terhadap yang tersimpan di sistem, memastikan tidak ada nilai yang tertukar antar subjek
+- Perapian pengarsipan berkas subjek secara terpisah dari data teknis sesuai ketentuan kerahasiaan, dengan penamaan berkas tertata per sesi
+- **Temuan**: pada satu subjek, kondisi pengambilan tidak tercatat lengkap padahal ambang nilai gula darah berbeda menurut kondisinya; dilengkapi dari catatan tertulis sesi
 
-📸 `TIWI_administrasi sesi keempat.png`, `TIWI_arsip berkas subjek.png`
+**Hasil - penulisan laporan kemajuan:**
+- Penyelesaian bagian pendahuluan dan metode pelaksanaan
+- Penyusunan bagian luaran: perkembangan media sosial, dokumentasi kegiatan, dan status pengajuan HKI
+- Penerjemahan penjelasan teknis dari tim perangkat lunak dan perangkat keras ke bahasa laporan yang dapat dipahami pembaca umum
+- **Kendala**: sebagian capaian teknis sulit dinyatakan tanpa istilah khusus, sehingga dibuatkan catatan kaki penjelas
+- Penyeragaman tata tulis, penomoran, dan penyusunan daftar pustaka
+
+**Hasil - administrasi lanjutan:**
+- Pengarsipan salinan berkas HKI yang sudah diserahkan beserta tanda terimanya
+- Penyiapan berkas administrasi untuk sesi pengujian kelima
+
+📸 `TIWI_pemeriksaan silang informed consent.png`, `TIWI_arsip berkas subjek per sesi.png`, `TIWI_laporan kemajuan bagian metode.png`, `TIWI_daftar pustaka laporan.png`
 
 ---
 

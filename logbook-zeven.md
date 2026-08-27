@@ -133,18 +133,30 @@ Mendokumentasikan proses penyerahan berkas HKI dan menyiapkan bahan visual untuk
 
 ---
 
-## 16 Agustus 2026 — Dokumentasi Pengujian 4 Smartband (450 menit)
+## 16 Agustus 2026 - Pengolahan Dokumentasi dan Penyiapan Visual Laporan (450 menit)
 
 **Kegiatan:**
-Mendokumentasikan pengujian smartband keempat, sekaligus mengumpulkan bahan visual untuk kebutuhan presentasi.
+Mengolah dokumentasi yang terkumpul dari empat sesi pengujian, lalu menyiapkan bahan visual untuk laporan kemajuan dan konten media sosial.
 
-**Hasil:**
-- Pemotretan dan perekaman proses perekaman data dari beberapa sudut
-- Pengambilan gambar tampilan dashboard saat sesi berlangsung sebagai bukti sistem berjalan
-- Penyusunan dokumentasi perkembangan jumlah subjek dari sesi ke sesi
-- Kerahasiaan subjek tetap dijaga: wajah tidak ditampilkan pada seluruh dokumentasi
+**Hasil - pengolahan dokumentasi:**
+- Penyortiran seluruh foto dan rekaman dari sesi pertama sampai keempat, dengan penamaan berkas tertata per sesi dan per kegiatan
+- Pemilihan gambar terbaik untuk tiap tahap: pemasangan alat, perekaman, pengukuran alat medis, dan pencatatan
+- **Kendala**: sebagian dokumentasi sesi awal pencahayaannya kurang merata, sehingga perlu penyesuaian kecerahan agar layak dicetak
+- Pemastian ulang bahwa tidak ada wajah subjek maupun identitas yang tertayang pada seluruh dokumentasi
 
-📸 `ZEVEN_dokumentasi pengujian keempat.png`, `ZEVEN_tampilan dashboard saat sesi.png`
+**Hasil - visual laporan kemajuan:**
+- Pembuatan diagram alur sistem dari sensor sampai notifikasi ke keluarga
+- Pembuatan grafik perkembangan jumlah subjek dari sesi pertama sampai keempat
+- Perapian tangkapan layar dashboard dan aplikasi agar seragam ukuran dan tetap terbaca saat dicetak
+- Penyusunan tata letak dokumen laporan beserta penomoran gambar
+- **Kendala**: sebagian tangkapan layar hasil kerja teknis terlalu padat untuk dicetak, sehingga dipotong dan diberi sorotan pada bagian penting
+
+**Hasil - bahan konten dan presentasi:**
+- Penyuntingan rekaman menjadi potongan pendek yang siap dipakai konten media sosial
+- Penyiapan gambar perbandingan purwarupa awal dengan perangkat versi sekarang
+- Penyiapan templat salindia dengan identitas visual ANTARAGA untuk keperluan PKP2
+
+📸 `ZEVEN_penyortiran dokumentasi empat sesi.png`, `ZEVEN_diagram alur sistem.png`, `ZEVEN_grafik perkembangan jumlah subjek.png`, `ZEVEN_tata letak laporan kemajuan.png`
 
 ---
 
