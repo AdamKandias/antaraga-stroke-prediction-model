@@ -154,6 +154,23 @@ def root() -> FileResponse:
     return FileResponse(_HOME_HTML, media_type="text/html")
 
 
+@app.get("/privacy", include_in_schema=False)
+@app.get("/kebijakan-privasi", include_in_schema=False)
+def privacy_policy() -> FileResponse:
+    """Kebijakan privasi. Alamatnya dicantumkan di listingan Google Play, jadi
+    tautannya harus tetap sama selamanya: sekali disetorkan ke Play Console,
+    mengubahnya berarti menyunting ulang listingan yang sudah tayang."""
+    return FileResponse(_PRIVACY_HTML, media_type="text/html")
+
+
+@app.get("/hapus-data", include_in_schema=False)
+@app.get("/data-deletion", include_in_schema=False)
+def data_deletion() -> RedirectResponse:
+    """Google Play meminta alamat khusus untuk permintaan penghapusan data,
+    terpisah dari kebijakan privasi. Diarahkan ke bagian yang bersangkutan."""
+    return RedirectResponse(url="/privacy#hapus-data", status_code=307)
+
+
 def _utc_iso(dt) -> str | None:
     """Ubah datetime dari basis data menjadi ISO 8601 bertanda zona UTC.
 
@@ -980,6 +997,7 @@ def _sqi_summary(batches: list[dict]) -> dict:
 
 _DASHBOARD_HTML = os.path.join(os.path.dirname(__file__), "static", "dashboard.html")
 _HOME_HTML = os.path.join(os.path.dirname(__file__), "static", "index.html")
+_PRIVACY_HTML = os.path.join(os.path.dirname(__file__), "static", "privacy.html")
 
 
 @app.get("/dashboard", include_in_schema=False)
@@ -1098,6 +1116,18 @@ def _resolve_device_key(device_id: str, db: Session) -> str | None:
         .first()
     )
     return row.device_key if row else None
+
+
+@app.get("/device/check/{device_id}", response_model=None)
+def check_device_exists_mobile(device_id: str, db: Session = Depends(get_db)) -> dict:
+    """Jalur yang dipakai aplikasi mobile, sengaja di luar awalan /v1/devices.
+
+    Awalan /v1/devices dijaga middleware sesi dashboard, sehingga panggilan dari
+    aplikasi mobile selalu dibalas 401 dan tidak pernah dapat menjawab
+    pertanyaan "perangkatnya ada atau tidak".  Rute ini seawalan dengan
+    /device/pair dan /device/status yang memang ditujukan untuk aplikasi.
+    """
+    return check_device_exists(device_id, db)
 
 
 @app.get("/v1/devices/{device_id}/check")
