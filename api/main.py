@@ -18,7 +18,7 @@ from fastapi.responses import (
     RedirectResponse,
     StreamingResponse,
 )
-from sqlalchemy import desc, or_
+from sqlalchemy import desc, func, or_
 from sqlalchemy.orm import Session
 
 from api import bpm_filter, dashboard_auth, ingest_buffer, models_db, schemas
@@ -709,10 +709,15 @@ def pair_device(
     if not key:
         raise HTTPException(status_code=400, detail="device_key tidak boleh kosong")
 
+    # Pakai ejaan yang tersimpan di server, bukan yang diketik pengguna.  Kalau
+    # yang tersimpan "antaraga-001" lalu pengguna mengetik "Antaraga-001", data
+    # masuk dari firmware tidak akan pernah cocok dengan akun ini.
+    key = _resolve_device_key(key, db) or key
+
     # Cek kalau device sudah di-pair ke akun lain
     existing = (
         db.query(models_db.User)
-        .filter(models_db.User.device_key == key)
+        .filter(func.lower(func.trim(models_db.User.device_key)) == key.lower())
         .filter(models_db.User.id != user_id)
         .first()
     )
@@ -1066,6 +1071,35 @@ def list_devices() -> list[str]:
     return ingest_buffer.list_devices()
 
 
+def _resolve_device_key(device_id: str, db: Session) -> str | None:
+    """Cari bentuk resmi device_id, tanpa mempermasalahkan besar kecil huruf
+    maupun spasi di ujung.
+
+    Pengguna mengetik kode perangkat secara manual di aplikasi, sedangkan yang
+    dipakai firmware adalah DEVICE_ID yang tertanam di config.h.  Mencocokkan
+    keduanya persis huruf demi huruf membuat "Antaraga-001" dianggap perangkat
+    yang berbeda dari "antaraga-001", padahal keduanya perangkat yang sama.
+
+    Mengembalikan kode dalam bentuk yang tersimpan di server (bukan bentuk yang
+    diketik pengguna), atau None bila memang tidak ada.
+    """
+    key = (device_id or "").strip()
+    if not key:
+        return None
+    lowered = key.lower()
+
+    for dev in ingest_buffer.list_devices():
+        if dev.strip().lower() == lowered:
+            return dev
+
+    row = (
+        db.query(models_db.User)
+        .filter(func.lower(func.trim(models_db.User.device_key)) == lowered)
+        .first()
+    )
+    return row.device_key if row else None
+
+
 @app.get("/v1/devices/{device_id}/check")
 def check_device_exists(device_id: str, db: Session = Depends(get_db)) -> dict:
     """Cek apakah perangkat dengan device_id ini pernah mengirim data ke server.
@@ -1075,17 +1109,11 @@ def check_device_exists(device_id: str, db: Session = Depends(get_db)) -> dict:
     - Tabel users: device sudah pernah di-pair (data historis di DB).
 
     Mobile app memanggil ini sebelum /device/pair untuk memastikan device nyata.
+    `device_key` pada balasan berisi bentuk resmi kode perangkat, supaya aplikasi
+    memasangkan dengan ejaan yang sama persis dengan yang dikirim firmware.
     """
-    in_buffer = device_id in ingest_buffer.list_devices()
-    if in_buffer:
-        return {"found": True}
-
-    in_db = (
-        db.query(models_db.User)
-        .filter(models_db.User.device_key == device_id)
-        .first()
-    ) is not None
-    return {"found": in_db}
+    resolved = _resolve_device_key(device_id, db)
+    return {"found": resolved is not None, "device_key": resolved}
 
 
 @app.get("/v1/ingest/latest")
