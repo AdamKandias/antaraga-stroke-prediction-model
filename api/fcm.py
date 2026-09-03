@@ -18,10 +18,14 @@ logger = logging.getLogger(__name__)
 
 _firebase_app = None
 _init_attempted = False
+# Dari mana kunci akhirnya terbaca. Dicatat saat inisialisasi, bukan ditebak
+# ulang belakangan: bila nilai env rusak lalu jatuh ke berkas, menebak dari
+# ada tidaknya env akan melaporkan sumber yang keliru.
+_sumber_kunci: str | None = None
 
 
 def _get_app():
-    global _firebase_app, _init_attempted
+    global _firebase_app, _init_attempted, _sumber_kunci
     if _init_attempted:
         return _firebase_app
 
@@ -45,8 +49,16 @@ def _get_app():
             isi_kunci = json.loads(base64.b64decode(b64))
             sumber = "variabel lingkungan FCM_SERVICE_ACCOUNT_B64"
         except Exception:
-            logger.exception("[fcm] FCM_SERVICE_ACCOUNT_B64 ada tetapi tidak dapat dibaca")
-            return None
+            # Nilainya rusak, misalnya JSON mentah yang tertempel apa adanya
+            # sehingga terbaca sepotong.  Jangan menyerah di sini: berkas kunci
+            # di disk mungkin justru baik-baik saja, dan mematikan notifikasi
+            # gara-gara satu baris .env yang salah ketik itu berlebihan.
+            logger.warning(
+                "[fcm] FCM_SERVICE_ACCOUNT_B64 terisi tetapi tidak dapat dibaca "
+                "(isinya harus base64 dari berkas kunci, bukan JSON mentah). "
+                "Beralih ke berkas kunci."
+            )
+            isi_kunci = None
 
     # Jalur kedua: berkas kunci di disk.  Dipakai saat mengembangkan di laptop.
     if isi_kunci is None:
@@ -71,6 +83,7 @@ def _get_app():
         cred = (credentials.Certificate(isi_kunci) if isi_kunci is not None
                 else credentials.Certificate(str(Path(FCM_SERVICE_ACCOUNT_PATH))))
         _firebase_app = firebase_admin.initialize_app(cred)
+        _sumber_kunci = sumber
         logger.info(
             "[fcm] Firebase Admin SDK siap (proyek %s, kunci dari %s)",
             _firebase_app.project_id, sumber,
@@ -195,3 +208,47 @@ def kirim_notifikasi_uji(
                            "Pastikan google-services.json aplikasi sama dengan "
                            "kunci layanan di server.")
         return False, f"{nama}: {exc}"
+
+
+def status() -> dict:
+    """Keadaan jalur notifikasi, untuk diperiksa tanpa mengirim apa pun.
+
+    Inisialisasi Firebase sengaja ditunda sampai pengiriman pertama, sehingga
+    log tidak memuat apa pun sampai ada yang benar-benar dikirim.  Fungsi ini
+    memaksa inisialisasinya lalu melaporkan hasilnya, supaya pemasangan kunci
+    di peladen dapat dipastikan lewat satu panggilan.
+    """
+    import os
+    from pathlib import Path
+
+    from api.config import FCM_SERVICE_ACCOUNT_PATH
+
+    berkas = Path(FCM_SERVICE_ACCOUNT_PATH)
+    b64 = os.getenv("FCM_SERVICE_ACCOUNT_B64", "").strip()
+    app = _get_app()
+
+    if app is not None:
+        sumber = _sumber_kunci or str(berkas)
+        pesan = "Jalur notifikasi siap."
+    elif b64:
+        sumber = "variabel lingkungan (gagal dibaca)"
+        pesan = ("FCM_SERVICE_ACCOUNT_B64 terisi tetapi tidak dapat dibaca, dan "
+                 "tidak ada berkas kunci sebagai cadangan. Isinya harus base64 "
+                 "dari berkas kunci, bukan JSON mentah. Kosongkan barisnya lalu "
+                 "pakai berkas kunci saja bila ragu.")
+    elif berkas.is_file():
+        sumber = str(berkas)
+        pesan = "Berkas kunci ada tetapi ditolak Firebase. Periksa isinya."
+    else:
+        sumber = None
+        pesan = (f"Kunci tidak ditemukan. Berkas '{berkas}' tidak ada, dan "
+                 "FCM_SERVICE_ACCOUNT_B64 kosong.")
+
+    return {
+        "siap": app is not None,
+        "project_id": getattr(app, "project_id", None),
+        "sumber_kunci": sumber,
+        "berkas_ada": berkas.is_file(),
+        "env_terisi": bool(b64),
+        "pesan": pesan,
+    }

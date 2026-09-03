@@ -201,6 +201,18 @@ def health() -> dict:
     return {"status": "ok", "dev_mode": DEV_MODE}
 
 
+@app.get("/health/fcm", include_in_schema=False)
+def health_fcm() -> dict:
+    """Periksa jalur notifikasi tanpa mengirim apa pun.
+
+    Berguna sesudah memasang kunci di peladen: log tidak menampilkan apa pun
+    sampai ada notifikasi pertama yang dikirim, sehingga tanpa endpoint ini
+    tidak ada cara memastikan kuncinya terbaca selain menunggu.
+    """
+    from api.fcm import status
+    return status()
+
+
 @app.post("/device/register-token", status_code=204)
 def register_device_token(
     body: schemas.RegisterDeviceTokenRequest,
