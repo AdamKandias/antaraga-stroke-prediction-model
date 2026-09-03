@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ANTARAGA — Plotter 3 kanal PPG mentah (MERAH / INFRAMERAH / HIJAU)
+ANTARAGA - Plotter 3 kanal PPG mentah (MERAH / INFRAMERAH / HIJAU)
 =====================================================================
 Pasangan PC untuk src/main.cpp. Membaca CSV dari serial, menggambar tiga
 kurva yang masing-masing bisa dimatikan/dinyalakan, menghitung statistik
@@ -52,19 +52,19 @@ NCOL = 5
 RING_CAP = 60000          # ~5 menit di 200 Hz
 PLOT_MAX_PTS = 1500       # titik per kurva yang digambar (sisanya di-decimate)
 # Satu penggambaran 3 kanal terukur 27-43 ms di mesin ini, jadi 70 ms
-# (~14 FPS) menyisakan ruang napas. PPG isinya < 5 Hz — 14 FPS sudah jauh
+# (~14 FPS) menyisakan ruang napas. PPG isinya < 5 Hz - 14 FPS sudah jauh
 # lebih dari cukup, dan 50 ms akan memakan hampir satu inti penuh terus-
 # menerus tanpa terlihat lebih mulus.
 PLOT_INTERVAL_MS = 70
 STAT_INTERVAL_MS = 250
 
-# Acuan dari rekaman optimasi (rekam_ppg_merah_v2_irred1.txt) —
+# Acuan dari rekaman optimasi (rekam_ppg_merah_v2_irred1.txt) -
 # supaya angka perfusi di panel statistik ada pembandingnya.
 REF_PI = {"red": 1.44, "ir": 3.03, "green": None}
 
 
 # =====================================================================
-# Penyangga cincin — dipakai daripada deque supaya tiap penggambaran
+# Penyangga cincin - dipakai daripada deque supaya tiap penggambaran
 # tidak perlu menyalin ulang puluhan ribu nilai ke array baru.
 # =====================================================================
 class Ring:
@@ -107,7 +107,7 @@ class Ring:
 
 
 # =====================================================================
-# Pembaca serial — thread terpisah
+# Pembaca serial - thread terpisah
 # =====================================================================
 class Reader(threading.Thread):
     def __init__(self, port, baud, row_q, log_q):
@@ -126,7 +126,7 @@ class Reader(threading.Thread):
         with self._rec_lock:
             self.rec_stop()
             self._rec = open(path, "w", encoding="utf-8", newline="\n")
-            self._rec.write("# ANTARAGA 3 kanal PPG mentah — %s\n"
+            self._rec.write("# ANTARAGA 3 kanal PPG mentah - %s\n"
                             % time.strftime("%Y-%m-%d %H:%M:%S"))
             for ln in header_lines:
                 self._rec.write(ln if ln.endswith("\n") else ln + "\n")
@@ -214,7 +214,7 @@ class Reader(threading.Thread):
 
 
 # =====================================================================
-# Analisis ringkas — dipakai panel statistik
+# Analisis ringkas - dipakai panel statistik
 # =====================================================================
 def movavg(x, win):
     """Rerata bergerak dengan jendela TERPANGKAS di tepi (lewat cumsum).
@@ -222,7 +222,7 @@ def movavg(x, win):
     Tepinya wajib begini, bukan np.convolve(mode='same'): konvolusi itu
     menganggap di luar array nilainya nol, jadi baseline di tepi meluruh
     ke nol dan sinyal tepinya ikut rusak. Menambalnya dengan meratakan
-    tepi ke satu konstanta lebih buruk lagi — plateau konstan berkorelasi
+    tepi ke satu konstanta lebih buruk lagi - plateau konstan berkorelasi
     sempurna dengan dirinya di SEMUA lag, sehingga autokorelasi derau
     murni pun terlihat sangat periodik (conf 0,45 padahal seharusnya
     0,05). Jendela yang menyusut di tepi tidak punya kedua cacat itu."""
@@ -249,7 +249,7 @@ def ac_signal(x, fs):
     Kenapa dua tingkat, bukan satu: gelombang napas ~0,25 Hz selalu ada di
     PPG nyata, dan satu tingkat rerata-bergerak hanya menekannya ke ~53%.
     Sisa sebesar itu membuat autokorelasi meluruh MONOTON sepanjang rentang
-    lag, sehingga puncaknya selalu jatuh di lag terpendek — BPM apa pun
+    lag, sehingga puncaknya selalu jatuh di lag terpendek - BPM apa pun
     dilaporkan sebagai ~220. Dua tingkat menekannya ke ~28% sementara
     denyut 43 bpm justru lolos dengan gain 1,23, jadi denyutnya kembali
     menang. (Terbukti: 43 & 60 bpm gagal dengan satu tingkat, lulus dengan
@@ -299,7 +299,7 @@ def bpm_autocorr(x, fs, bpm_min=40.0, bpm_max=180.0):
     seg = ac[lo:hi]
 
     # WAJIB maksimum LOKAL, bukan sekadar argmax rentang. np.argmax selalu
-    # mengembalikan sesuatu — termasuk saat kurvanya cuma meluruh monoton
+    # mengembalikan sesuatu - termasuk saat kurvanya cuma meluruh monoton
     # tanpa puncak sama sekali, dan maksimum kurva meluruh selalu jatuh di
     # ujung rentang, yaitu lag terpendek = 220 bpm. Itulah asal angka
     # "kadang 220 bpm" pada sinyal yang sebenarnya tidak punya denyut.
@@ -327,7 +327,7 @@ def bpm_autocorr(x, fs, bpm_min=40.0, bpm_max=180.0):
 class App:
     def __init__(self, root, port_hint=None):
         self.root = root
-        root.title("ANTARAGA — Plotter 3 Kanal PPG Mentah")
+        root.title("ANTARAGA - Plotter 3 Kanal PPG Mentah")
         root.geometry("1180x820")
 
         self.ring = Ring(RING_CAP, NCOL)
@@ -431,7 +431,7 @@ class App:
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         # constrained_layout SENGAJA tidak dipakai: ia menyelesaikan ulang tata
         # letak pada SETIAP penggambaran, dan dengan 3 subplot itu menembus
-        # 50 ms — lebih lama dari interval timer, sehingga callback menumpuk
+        # 50 ms - lebih lama dari interval timer, sehingga callback menumpuk
         # lebih cepat daripada yang bisa dilayani dan CPU langsung penuh.
         # Tata letak diatur sekali saja di _rebuild_axes().
         self.fig = Figure(figsize=(9, 6), dpi=100)
@@ -525,7 +525,7 @@ class App:
     # ---------------- sumbu ----------------
     def _rebuild_axes(self):
         """Tata ulang subplot. Kanal yang dimatikan tidak menyisakan ruang
-        kosong — sumbunya benar-benar dibuang, bukan cuma disembunyikan."""
+        kosong - sumbunya benar-benar dibuang, bukan cuma disembunyikan."""
         self.fig.clear()
         self.lines = {}
         active = [c for c in CHANNELS if self.var_en[c[0]].get()]
@@ -668,8 +668,8 @@ class App:
                     "%.0f" % dc,
                     "%.0f" % ac,
                     "%.2f" % pi,
-                    ("%.2f" % ref) if ref else "—",
-                    ("%.1f" % bpm) if bpm else "—",
+                    ("%.2f" % ref) if ref else "-",
+                    ("%.1f" % bpm) if bpm else "-",
                     ("%.2f" % conf) + ("" if conf >= 0.30 else "  (derau)"),
                 ))
             late = int(d[:, COL_AV].max())

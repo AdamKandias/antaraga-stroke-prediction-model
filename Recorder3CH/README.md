@@ -1,4 +1,4 @@
-# ANTARAGA — Perekam & Plotter 3 Kanal PPG Mentah
+# ANTARAGA - Perekam & Plotter 3 Kanal PPG Mentah
 
 Mengambil **data mentah** tiga panjang gelombang sekaligus dan menampilkannya
 sebagai tiga kurva langsung di GUI, masing-masing bisa dimatikan/dinyalakan.
@@ -15,7 +15,7 @@ pip install pyserial              # sekali saja
 python gui/plotter.py             # GUI (atau: python gui/plotter.py COM7)
 ```
 
-Jangan buka serial monitor PlatformIO bersamaan dengan GUI — satu port hanya
+Jangan buka serial monitor PlatformIO bersamaan dengan GUI - satu port hanya
 bisa dipegang satu proses.
 
 ## Catu daya menurut skematik
@@ -26,7 +26,7 @@ D2 LOW = nyala, dan R5 100k menariknya ke 3V3 supaya default-nya mati saat
 boot.
 
 Konsekuensi praktis, dan ini dipakai sebagai fitur: tombol **"Hijau
-mati/nyala"** di GUI (perintah `g`) hanya mematikan SON1303 — kanal merah dan
+mati/nyala"** di GUI (perintah `g`) hanya mematikan SON1303 - kanal merah dan
 inframerah terus mengalir. Itu cara termurah membuktikan apakah LED hijau
 525 nm ikut terbaca fotodioda MAX30102 lewat casing translusen: matikan hijau
 sambil melihat kolom DC merah/inframerah di panel statistik. Kalau DC-nya
@@ -76,7 +76,7 @@ dikalikan laju nominal. Ini bukan detail sepele: recorder lamamu
 (`max30102_recorder_pwa_xiao_c3.ino`) menghitung `t_ms` dari FS nominal, dan
 karena MAX30102 diam-diam meng-clamp SR ke 400 Hz, seluruh timing di file itu
 meleset 2× tanpa satu pun tanda. Dengan `t_ms` nyata, kelas kesalahan itu
-tidak bisa terjadi lagi — dan GUI menghitung `fs terukur` dari kolom itu.
+tidak bisa terjadi lagi - dan GUI menghitung `fs terukur` dari kolom itu.
 
 **Loop dikendalikan FIFO MAX30102, bukan tick FreeRTOS.** Setiap kali chip
 menghasilkan satu sampel, sampel itu diambil dan ADC hijau dibaca saat itu
@@ -88,10 +88,10 @@ baris = laju nyata chip. Kolom `av` (sampel yang menunggu di FIFO saat dibaca)
 Setelan bawaan: SR 400 Hz, SMP_AVE=2, PW 411 µs → **~196 Hz** keluaran.
 Mau ~392 Hz? Ganti `CFG_FIFO` ke `0x10` (SMP_AVE=1) di
 [src/main.cpp](src/main.cpp); tidak ada lagi yang perlu disentuh karena loop
-mengikuti laju chip. Jangan meminta SR di atas 400 Hz — chip meng-clamp diam-
+mengikuti laju chip. Jangan meminta SR di atas 400 Hz - chip meng-clamp diam-
 diam (sudah terukur di [../DiagMAX30102](../DiagMAX30102/)).
 
-## Penyetel otomatis — `gui/tune.py`
+## Penyetel otomatis - `gui/tune.py`
 
 ```
 python gui/tune.py COM3
@@ -104,9 +104,9 @@ ke `config.h`. Sekitar 50 detik; tempelkan sensor dan diam sampai selesai.
 Kenapa rentang ADC ikut disapu, bukan cuma arus LED: `ADC_RGE` menentukan arus
 foto skala penuh (2048/4096/8192/16384 nA). Rentang lebih kecil = lebih peka,
 jadi arus foto yang sama menghasilkan lebih banyak cacahan **tanpa menambah
-arus LED sedikit pun**. Karena derau di sini didominasi elektronik ADC — pada
+arus LED sedikit pun**. Karena derau di sini didominasi elektronik ADC - pada
 DC 81.552 LSB derau tembakan foton hanya ~1 LSB sementara derau terukur ~5,1
-LSB — memperkecil rentang menaikkan SNR hampir sebanding, dan malah
+LSB - memperkecil rentang menaikkan SNR hampir sebanding, dan malah
 memungkinkan arus LED *diturunkan* untuk cacahan yang sama. Menaikkan arus LED
 saja sampai ke DC yang sama dengan ongkos daya jauh lebih besar.
 
@@ -124,13 +124,13 @@ pernah berlaku.
 
 - **3 kurva, masing-masing bisa dimatikan.** Kanal yang dimatikan sumbunya
   benar-benar dibuang, bukan disembunyikan, jadi tidak menyisakan ruang kosong.
-- **Tumpuk 1 sumbu (ternormalisasi)** — ketiga kanal jadi z-score di satu
+- **Tumpuk 1 sumbu (ternormalisasi)** - ketiga kanal jadi z-score di satu
   sumbu. Ini satu-satunya cara membandingkan bentuk dan waktu-tunda antara
   hijau (525 nm, pantulan dangkal) dan inframerah (880 nm, menembus lebih
   dalam), karena skala mentahnya berbeda 60×.
-- **Tampilkan AC saja** — buang baseline, untuk melihat riak denyut saja.
+- **Tampilkan AC saja** - buang baseline, untuk melihat riak denyut saja.
 - Jendela 5/10/20/30/60 detik, tombol **Beku**, tombol **Bersihkan**.
-- **Rekam CSV** — menyimpan aliran mentah apa adanya plus blok `#` metadata,
+- **Rekam CSV** - menyimpan aliran mentah apa adanya plus blok `#` metadata,
   jadi filenya menjelaskan dirinya sendiri.
 - Tombol arus LED dan hijau mati/nyala, supaya bisa menyetel sambil melihat
   bentuk gelombangnya berubah.
@@ -158,7 +158,7 @@ perangkat, dan **dua bug nyata ketangkap oleh uji itu**:
 
 1. **Penanganan tepi `detrend` merusak analisis.** `np.convolve(mode='same')`
    menganggap di luar array nilainya nol, dan tambalan "ratakan tepi ke satu
-   konstanta" justru lebih buruk — plateau konstan berkorelasi sempurna dengan
+   konstanta" justru lebih buruk - plateau konstan berkorelasi sempurna dengan
    dirinya di semua lag, sehingga derau murni pun terlihat periodik (conf 0,45
    padahal seharusnya 0,05). Diganti rerata bergerak berjendela terpangkas.
 2. **High-pass satu tingkat membuat BPM selalu ~220.** Gelombang napas
@@ -190,7 +190,7 @@ sampai kosong, dan kelima ukuran jendela dicoba.
 
 Uji itu juga mengungkap **bug ketiga**: dengan `constrained_layout=True`,
 matplotlib menyelesaikan ulang tata letak pada setiap penggambaran sampai
-menembus interval timer — callback Tk lalu menumpuk lebih cepat daripada yang
+menembus interval timer - callback Tk lalu menumpuk lebih cepat daripada yang
 bisa dilayani, CPU penuh, jendela berhenti merespons. Sekarang tata letak
 diatur sekali di `_rebuild_axes()`, dan tiap tick menjadwalkan tick berikutnya
 berdasarkan biaya nyatanya sendiri. Biaya gambar terukur **27–43 ms (23–36

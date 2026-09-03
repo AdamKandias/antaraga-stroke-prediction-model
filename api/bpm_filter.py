@@ -2,18 +2,18 @@
 
 Masalah yang diselesaikan: pembacaan stabil di ~80 bpm tiba-tiba melompat ke 40
 selama beberapa detik lalu kembali ke 80.  Lompatan seperti itu bukan perubahan
-fisiologis — detak jantung tidak bisa berubah 50% dalam satu detik.  Penyebab
+fisiologis - detak jantung tidak bisa berubah 50% dalam satu detik.  Penyebab
 tersering adalah *octave error*: detektor puncak melewatkan satu dari dua denyut
 (→ setengah), atau mengunci takik dikrotik sebagai denyut (→ dua kali lipat).
 
 Empat lapis, berurutan:
-  1. Gerbang confidence  — conf < 0,30 dibuang (ambang yang sudah dipakai
+  1. Gerbang confidence  - conf < 0,30 dibuang (ambang yang sudah dipakai
      bpm_autocorr sendiri sebagai batas "tidak bermakna").
-  2. Koreksi oktaf       — nilai yang ≈ setengah / ≈ dua kali nilai terakhir
+  2. Koreksi oktaf       - nilai yang ≈ setengah / ≈ dua kali nilai terakhir
      dikalikan / dibagi 2 dan dipakai, bukan dibuang.
-  3. Batas laju          — sisanya yang menyimpang >20% dari nilai terakhir
+  3. Batas laju          - sisanya yang menyimpang >20% dari nilai terakhir
      ditolak; yang ditampilkan tetap nilai terakhir yang baik.
-  4. Median bergulir     — meredam riak kecil pada nilai yang sudah diterima.
+  4. Median bergulir     - meredam riak kecil pada nilai yang sudah diterima.
      Median, bukan rata-rata, karena rata-rata masih tertarik outlier.
 
 Penahanan dibatasi HOLD_MAX_S detik.  Lewat itu nilai dilepas menjadi None,
@@ -103,28 +103,28 @@ class BpmFilter:
                 return {"bpm": None, "held": False, "status": "KEDALUWARSA", "raw": bpm}
             return {"bpm": round(self.last_good, 1), "held": True, "status": status, "raw": bpm}
 
-        # 1 — tidak ada angka sama sekali
+        # 1 - tidak ada angka sama sekali
         if bpm is None or not (BPM_MIN <= float(bpm) <= BPM_MAX):
             return hold("DITAHAN_KOSONG")
 
         bpm = float(bpm)
 
-        # 2 — sinyal tidak cukup periodik
+        # 2 - sinyal tidak cukup periodik
         if conf < MIN_CONF:
             return hold("DITAHAN_DERAU")
 
-        # 3 — pembacaan pertama: tidak ada acuan, terima apa adanya
+        # 3 - pembacaan pertama: tidak ada acuan, terima apa adanya
         if self.last_good is None:
             self._commit(bpm, now)
             return {"bpm": round(bpm, 1), "held": False, "status": "OK", "raw": bpm}
 
-        # 4 — masih dalam batas laju fisiologis
+        # 4 - masih dalam batas laju fisiologis
         if self._dev_pct(bpm, self.last_good) <= MAX_JUMP_PCT:
             self._commit(bpm, now)
             smoothed = median(self.accepted)
             return {"bpm": round(smoothed, 1), "held": False, "status": "OK", "raw": bpm}
 
-        # 5 — lompatan: coba dulu sebagai kesalahan oktaf
+        # 5 - lompatan: coba dulu sebagai kesalahan oktaf
         fixed = self._octave_fix(bpm)
         if fixed is not None:
             self._commit(fixed, now)
@@ -132,7 +132,7 @@ class BpmFilter:
             return {"bpm": round(smoothed, 1), "held": False,
                     "status": "OKTAF_DIKOREKSI", "raw": bpm}
 
-        # 6 — lompatan nyata: tahan, tapi catat untuk kemungkinan resync
+        # 6 - lompatan nyata: tahan, tapi catat untuk kemungkinan resync
         self._pending.append(bpm)
         if len(self._pending) >= RESYNC_N:
             ref = self._pending[-1]

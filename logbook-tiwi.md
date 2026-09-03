@@ -1,11 +1,11 @@
 # LOGBOOK KEGIATAN HARIAN
-## PKM-KC: ANTARAGA — Smartband Deteksi Risiko Stroke Berbasis PPG dan Kecerdasan Buatan
+## PKM-KC: ANTARAGA - Smartband Deteksi Risiko Stroke Berbasis PPG dan Kecerdasan Buatan
 
 | | |
 |---|---|
 | **Nama** | Tiwi |
 | **Peran dalam Tim** | Content Writer · Administrasi & Perizinan · Dokumentasi Laporan |
-| **Periode** | 23 Mei 2026 — 25 September 2026 |
+| **Periode** | 23 Mei 2026 - 25 September 2026 |
 
 ---
 
@@ -14,7 +14,7 @@
 
 ---
 
-## 8 Juli 2026 — Riset Lokasi dan Berkas Pengajuan Ethical Clearance
+## 8 Juli 2026 - Riset Lokasi dan Berkas Pengajuan Ethical Clearance
 
 **Kegiatan:**
 Mendampingi proses pencarian informasi mengenai lokasi dan berkas yang diperlukan untuk pengajuan ethical clearance, sekaligus menyiapkan naskah dokumen pendukung yang menjadi tanggung jawab bagian administrasi.
@@ -27,13 +27,13 @@ Mendampingi proses pencarian informasi mengenai lokasi dan berkas yang diperluka
 - **Kendala**: sebagian format dokumen mensyaratkan tanda tangan dosen pendamping, sehingga jadwal pengumpulan disesuaikan dengan ketersediaan waktu beliau
 
 📸 **Bukti yang perlu dilampirkan:**
-- `TIWI_draf informed consent.png` — dokumen informed consent
-- `TIWI_lembar penjelasan penelitian.png` — dokumen penjelasan untuk subjek
-- `TIWI_daftar berkas persyaratan kepk.png` — daftar periksa persyaratan
+- `TIWI_draf informed consent.png` - dokumen informed consent
+- `TIWI_lembar penjelasan penelitian.png` - dokumen penjelasan untuk subjek
+- `TIWI_daftar berkas persyaratan kepk.png` - daftar periksa persyaratan
 
 ---
 
-## 13 Juli 2026 — Finalisasi dan Pengiriman Berkas Ethical Clearance
+## 13 Juli 2026 - Finalisasi dan Pengiriman Berkas Ethical Clearance
 
 **Kegiatan:**
 Mendampingi finalisasi dan pengiriman berkas ethical clearance ke KEPK FKM Universitas Airlangga, sekaligus mendokumentasikan proses pengajuannya.
@@ -46,9 +46,9 @@ Mendampingi finalisasi dan pengiriman berkas ethical clearance ke KEPK FKM Unive
 - Pengarsipan salinan seluruh berkas yang dikirim sebagai cadangan
 
 📸 **Bukti yang perlu dilampirkan:**
-- `TIWI_berkas ethical clearance lengkap.png` — seluruh dokumen sebelum dikirim
-- `TIWI_bukti pengiriman berkas kepk.png` — tanda terima pengajuan
-- `TIWI_arsip salinan berkas.png` — folder arsip dokumen
+- `TIWI_berkas ethical clearance lengkap.png` - seluruh dokumen sebelum dikirim
+- `TIWI_bukti pengiriman berkas kepk.png` - tanda terima pengajuan
+- `TIWI_arsip salinan berkas.png` - folder arsip dokumen
 
 ---
 
@@ -56,7 +56,7 @@ Mendampingi finalisasi dan pengiriman berkas ethical clearance ke KEPK FKM Unive
 
 ---
 
-## 2 Agustus 2026 — Penyusunan Naskah Konten dan Laporan Progres (180 menit)
+## 2 Agustus 2026 - Penyusunan Naskah Konten dan Laporan Progres (180 menit)
 
 **Kegiatan:**
 Mengikuti rapat mingguan lalu menyusun naskah konten media sosial serta merapikan catatan progres tim untuk bahan laporan kemajuan.
@@ -71,7 +71,7 @@ Mengikuti rapat mingguan lalu menyusun naskah konten media sosial serta merapika
 
 ---
 
-## 5 Agustus 2026 — Penyiapan Dokumen Perizinan Subjek (180 menit)
+## 5 Agustus 2026 - Penyiapan Dokumen Perizinan Subjek (180 menit)
 
 **Kegiatan:**
 Menyiapkan dokumen yang diperlukan untuk pengujian terhadap subjek, mencakup pencetakan dan penggandaan berkas persetujuan.
@@ -86,7 +86,7 @@ Menyiapkan dokumen yang diperlukan untuk pengujian terhadap subjek, mencakup pen
 
 ---
 
-## 6 Agustus 2026 — Pendampingan Administrasi Pengujian 2 (360 menit)
+## 6 Agustus 2026 - Pendampingan Administrasi Pengujian 2 (360 menit)
 
 **Kegiatan:**
 Mendampingi pengujian smartband kedua dari sisi administrasi dan pencatatan.
@@ -102,7 +102,7 @@ Mendampingi pengujian smartband kedua dari sisi administrasi dan pencatatan.
 
 ---
 
-## 13 Agustus 2026 — Ethical Clearance Keluar dan Finalisasi Berkas (300 menit)
+## 13 Agustus 2026 - Ethical Clearance Keluar dan Finalisasi Berkas (300 menit)
 
 **Kegiatan:**
 Mengurus penerimaan hasil ethical clearance dan mendampingi finalisasi berkas HKI.
@@ -118,7 +118,7 @@ Mengurus penerimaan hasil ethical clearance dan mendampingi finalisasi berkas HK
 
 ---
 
-## 14 Agustus 2026 — Pendampingan Penyerahan Berkas HKI (180 menit)
+## 14 Agustus 2026 - Pendampingan Penyerahan Berkas HKI (180 menit)
 
 **Kegiatan:**
 Mendampingi penyerahan berkas HKI ke sentra HKI kampus dan mengarsipkan dokumennya.
@@ -159,7 +159,7 @@ Merapikan arsip administrasi dari empat sesi pengujian yang sudah berjalan, lalu
 
 ---
 
-## 20 Agustus 2026 — Workshop Internal Teknis Pengajuan Hak Cipta (450 menit)
+## 20 Agustus 2026 - Workshop Internal Teknis Pengajuan Hak Cipta (450 menit)
 
 **Kegiatan:**
 Mengikuti Workshop Internal Teknis Pengajuan Hak Cipta, dengan perhatian pada persyaratan administrasi berkasnya.
@@ -173,7 +173,7 @@ Mengikuti Workshop Internal Teknis Pengajuan Hak Cipta, dengan perhatian pada pe
 
 ---
 
-## 23 Agustus 2026 — Penyusunan Laporan Kemajuan (360 menit)
+## 23 Agustus 2026 - Penyusunan Laporan Kemajuan (360 menit)
 
 **Kegiatan:**
 Menyusun laporan kemajuan bagian pendahuluan, metode, dan luaran, sekaligus merapikan tata tulis keseluruhan dokumen.
@@ -189,7 +189,7 @@ Menyusun laporan kemajuan bagian pendahuluan, metode, dan luaran, sekaligus mera
 
 ---
 
-## 26 Agustus 2026 — Workshop Teknik Presentasi PKP2 (180 menit)
+## 26 Agustus 2026 - Workshop Teknik Presentasi PKP2 (180 menit)
 
 **Kegiatan:**
 Mengikuti Workshop Teknik Presentasi PKP2 dan menyiapkan naskah pembawaan presentasi.
@@ -203,7 +203,7 @@ Mengikuti Workshop Teknik Presentasi PKP2 dan menyiapkan naskah pembawaan presen
 
 ---
 
-## 28 Agustus 2026 — Asistensi Laporan Kemajuan ke Dosen Pendamping (360 menit)
+## 28 Agustus 2026 - Asistensi Laporan Kemajuan ke Dosen Pendamping (360 menit)
 
 **Kegiatan:**
 Mengikuti asistensi laporan kemajuan dan menerapkan revisi pada bagian yang menjadi tanggung jawabnya.
@@ -219,7 +219,7 @@ Mengikuti asistensi laporan kemajuan dan menerapkan revisi pada bagian yang menj
 
 ---
 
-## 29 Agustus 2026 — Finalisasi dan Pengunggahan Konten Media Sosial Ketiga (300 menit)
+## 29 Agustus 2026 - Finalisasi dan Pengunggahan Konten Media Sosial Ketiga (300 menit)
 
 **Kegiatan:**
 Menyusun naskah akhir konten media sosial ketiga, lalu mengunggah dan mengiklankannya.
@@ -234,7 +234,7 @@ Menyusun naskah akhir konten media sosial ketiga, lalu mengunggah dan mengiklank
 
 ---
 
-## 30 Agustus 2026 — Pendampingan Administrasi Pengujian 5 (300 menit)
+## 30 Agustus 2026 - Pendampingan Administrasi Pengujian 5 (300 menit)
 
 **Kegiatan:**
 Mendampingi pengujian smartband kelima dari sisi administrasi dan pencatatan.

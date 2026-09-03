@@ -3,7 +3,7 @@
 Folder ini kosong sampai prototipe fisik ANTARAGA selesai dan tahap
 "Pengujian Alat" di proposal dijalankan. `model/train_ppg_vitals.py` akan
 gagal dengan pesan jelas kalau file `calibration_data.csv` di sini belum ada
-— itu sengaja, supaya tidak ada yang tergoda melatih model dengan data yang
+- itu sengaja, supaya tidak ada yang tergoda melatih model dengan data yang
 belum valid.
 
 ## Format yang diharapkan: `calibration_data.csv`
@@ -27,7 +27,7 @@ konstan) + nilai ground truth dari alat medis pembanding pada saat yang sama.
 
 Catatan:
 - Ground truth **wajib** dari alat medis pembanding yang diukur pada waktu
-  yang (hampir) bersamaan dengan sinyal PPG — sama seperti metode jurnal
+  yang (hampir) bersamaan dengan sinyal PPG - sama seperti metode jurnal
   Gusti et al. (2025) yang membandingkan ke Elvasense/tensimeter.
 - Targetkan minimal puluhan responden lintas rentang usia & kondisi (bukan
   cuma mahasiswa sehat) supaya model tidak bias ke satu kelompok demografis.
@@ -37,7 +37,7 @@ Catatan:
   multi-output (`systolic_bp_mmhg`, `diastolic_bp_mmhg`,
   `blood_glucose_mg_dl`).
 - Kalau jumlah baris masih sangat kecil (puluhan), evaluasi pakai
-  leave-one-out CV, bukan train/test split biasa — dan tetap laporkan
+  leave-one-out CV, bukan train/test split biasa - dan tetap laporkan
   interval ketidakpastian, jangan klaim angka akurasi tunggal seperti
   90% tanpa konteks ukuran sampel (lihat keterbatasan yang diakui sendiri
   oleh Gusti et al. 2025 di bagian kesimpulan mereka).

@@ -5,7 +5,7 @@ Masukan : deretan sampel ADC SON1303 mentah pada laju tetap fs Hz.
 Keluaran: dict berisi bpm, conf, status, ibi_list, sdnn_ms, peaks, dll.
 
 Filter: sosfilt KAUSAL dengan semai DC (zi * sig[0]), identik perilakunya
-dengan firmware — tidak ada transien awal, tidak ada artefak edge.
+dengan firmware - tidak ada transien awal, tidak ada artefak edge.
 sosfiltfilt (zero-phase) SENGAJA dihindari karena transiennya membuat
 env_hi melonjak di awal dan menyebabkan banyak puncak terlewat.
 
@@ -152,7 +152,7 @@ def compute_bpm(raw: list, fs: float = 200.0) -> dict:
         # update pelacak amplitudo
         # env_lo hanya diperbarui di LUAR eksursi (fase diastolik):
         # selama sistol, sinyal selalu di atas env_lo sehingga env_lo merayap naik
-        # dan menggelembungkan thr_hi — puncak berikutnya jadi tak terjangkau.
+        # dan menggelembungkan thr_hi - puncak berikutnya jadi tak terjangkau.
         # Firmware tidak punya masalah ini karena beroperasi menerus (menit/jam)
         # dan env_lo selalu pulih saat diastol panjang antar batch.
         amp_p = env_hi - env_lo

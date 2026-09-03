@@ -6,6 +6,11 @@ __pycache__/
 .venv/
 logs/
 api/serviceAccountKey.json
+# Kunci Firebase Admin apa pun namanya. Berkas ini memberi kendali penuh
+# atas proyek Firebase, jadi polanya dibuat lebar supaya berkas yang baru
+# diunduh dari Console tidak ikut ter-commit karena namanya belum terdaftar.
+*firebase-adminsdk*.json
+**/serviceAccountKey.json
 .vscode/
 # Created by https://www.toptal.com/developers/gitignore/api/windows,linux,visualstudiocode,macos,platformio,python,virtualenv,dotenv
 # Edit at https://www.toptal.com/developers/gitignore?templates=windows,linux,visualstudiocode,macos,platformio,python,virtualenv,dotenv

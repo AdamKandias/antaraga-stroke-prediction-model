@@ -1,0 +1,121 @@
+=================================================================
+TEKS SIAP TEMPEL UNTUK PLAY CONSOLE > LISTINGAN PLAY STORE
+Bahasa Indonesia (bahasa bawaan listingan)
+=================================================================
+
+
+-----------------------------------------------------------------
+NAMA APLIKASI  (maks 30)  -- sudah terisi, biarkan
+-----------------------------------------------------------------
+ANTARAGA
+
+
+-----------------------------------------------------------------
+DESKRIPSI SINGKAT  (maks 80)
+-----------------------------------------------------------------
+Pantau tanda vital lansia dan dapat peringatan dini risiko stroke.
+
+
+-----------------------------------------------------------------
+DESKRIPSI LENGKAP  (maks 4000)
+-----------------------------------------------------------------
+ANTARAGA membantu keluarga memantau kondisi kesehatan orang tua dari jauh, lalu memberi peringatan lebih awal ketika ada tanda yang perlu diperiksakan ke dokter.
+
+Stroke sering datang tanpa keluhan yang jelas. Tekanan darah yang perlahan naik, gula darah yang menyimpang, atau detak jantung yang tidak beraturan biasanya tidak terasa apa-apa sampai semuanya terlambat. ANTARAGA dibuat untuk menangkap perubahan itu sejak dini.
+
+
+APA YANG BISA DILAKUKAN
+
+Memantau tanda vital
+Lihat tekanan darah, detak jantung, kadar oksigen darah, dan gula darah orang tua Anda langsung dari ponsel, tanpa harus berada di tempat yang sama.
+
+Peringatan yang langsung sampai
+Ketika sistem mendeteksi tanda yang perlu diwaspadai, notifikasi dikirim ke ponsel Anda saat itu juga.
+
+Grafik perkembangan
+Riwayat harian, mingguan, dan bulanan ditampilkan dalam grafik yang mudah dibaca. Berguna dibawa saat kontrol ke dokter.
+
+Penilaian risiko berbasis kecerdasan buatan
+Model dilatih dari lebih dari lima ribu catatan kesehatan, memakai delapan faktor risiko stroke seperti usia, tekanan darah, kadar gula, riwayat penyakit jantung, dan indeks massa tubuh.
+
+Beberapa orang dalam satu akun
+Satu akun keluarga dapat memantau lebih dari satu orang tua sekaligus.
+
+Kuesioner risiko terarah
+Serangkaian pertanyaan terstruktur untuk membantu menilai keadaan saat gejala mendadak muncul.
+
+
+CARA KERJANYA
+
+1. Buat akun keluarga pemantau
+2. Isi data orang tua yang akan dipantau
+3. Sambungkan gelang ANTARAGA, atau masukkan hasil pengukuran secara manual
+4. Terima peringatan bila ada tanda yang perlu diperiksakan
+
+
+TENTANG GELANG ANTARAGA
+
+Gelang ANTARAGA membaca denyut nadi memakai sensor cahaya tiga panjang gelombang, lalu mengirimkan hasilnya ke aplikasi. Aplikasi ini juga tetap dapat dipakai tanpa gelang, dengan memasukkan hasil pengukuran alat kesehatan secara manual.
+
+
+PENTING UNTUK DIPAHAMI
+
+ANTARAGA adalah alat bantu pemantauan dan penyaringan risiko tahap awal. Aplikasi ini BUKAN alat diagnosis dan tidak dirancang untuk mendiagnosis, mengobati, menyembuhkan, atau mencegah penyakit apa pun.
+
+Hasil yang ditampilkan adalah perkiraan, bukan kesimpulan medis. Ambang deteksinya sengaja dipasang rendah agar sedikit mungkin kondisi berisiko yang terlewat, sehingga peringatan dapat muncul pada orang yang ternyata sehat.
+
+Setiap peringatan perlu ditindaklanjuti dengan pemeriksaan tenaga kesehatan. Jangan menunda mencari pertolongan medis, dan jangan mengubah pengobatan yang sedang dijalani, hanya berdasarkan tampilan aplikasi ini.
+
+Bila muncul gejala stroke seperti wajah mendadak perot, salah satu sisi tubuh melemah, atau bicara menjadi pelo, segera hubungi layanan gawat darurat. Jangan menunggu aplikasi.
+
+
+PRIVASI
+
+Data kesehatan Anda tidak dijual dan tidak dibagikan ke pihak ketiga untuk keperluan iklan. Aplikasi ini tidak menampilkan iklan, tidak melacak lokasi, dan tidak mengakses kontak, foto, kamera, maupun mikrofon. Satu-satunya izin yang diminta adalah izin menampilkan notifikasi, karena itulah cara peringatan sampai kepada Anda.
+
+Anda dapat meminta penghapusan akun beserta seluruh datanya kapan saja.
+Kebijakan privasi: https://antaraga.web.id/privacy
+
+
+TENTANG PENGEMBANG
+
+ANTARAGA dikembangkan tim mahasiswa Politeknik Elektronika Negeri Surabaya sebagai bagian dari Program Kreativitas Mahasiswa bidang Karsa Cipta tahun 2026.
+
+Pertanyaan dan masukan: privasi@antaraga.web.id
+
+
+=================================================================
+ASET VISUAL YANG MASIH PERLU DISIAPKAN
+=================================================================
+
+1. IKON APLIKASI  512x512  -- SUDAH ADA, tinggal unggah
+   Berkas: antaraga/assets/icon.png
+   Sudah 512x512, PNG RGB tanpa kanal alfa. Play Store menolak ikon
+   bertransparansi, dan berkas ini sudah aman.
+
+2. GAMBAR FITUR  1024x500  -- BELUM ADA
+   Wajib. Isi yang disarankan: logo ANTARAGA, kalimat "Deteksi Dini
+   Risiko Stroke untuk Lansia", dan gambar gelang. Hindari menaruh
+   tulisan penting di 100 piksel tepi kiri dan kanan, karena bagian
+   itu kerap terpotong pada layar sempit.
+
+3. SCREENSHOT PONSEL  -- BELUM ADA, minimal 2, disarankan 4 sampai 8
+   Rasio 9:16, sisi terpendek minimal 1080 piksel agar memenuhi syarat
+   promosi. Ambil dari perangkat sungguhan memakai akun peragaan
+   playreview@antaraga.web.id yang sudah berisi 30 hari riwayat.
+
+   Urutan yang disarankan:
+     1. Dashboard, memperlihatkan tanda vital terkini
+     2. Grafik riwayat tanda vital
+     3. Rincian satu tanda vital
+     4. Layar penilaian risiko
+     5. Layar profil lansia yang dipantau
+     6. Layar penyambungan gelang
+
+   Jangan menampilkan data orang sungguhan pada screenshot.
+
+4. SCREENSHOT TABLET 7 dan 10 INCI  -- BELUM ADA
+   Ditandai wajib pada formulir. Dapat diambil dari emulator tablet
+   bila tidak ada perangkatnya.
+
+5. VIDEO YOUTUBE  -- opsional, boleh dilewati

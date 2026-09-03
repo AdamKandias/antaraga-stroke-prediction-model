@@ -1,5 +1,5 @@
 """
-OTA — manajemen firmware Over-The-Air untuk ANTARAGA smartband.
+OTA - manajemen firmware Over-The-Air untuk ANTARAGA smartband.
 
 Alur:
   Dashboard                        Server                    ESP32
@@ -64,7 +64,7 @@ def _save_state(s: dict) -> None:
 def _verify_key(authorization: str) -> None:
     if authorization != f"Bearer {DEVICE_INGEST_KEY}":
         got = authorization[:20] + "…" if len(authorization) > 20 else authorization
-        logger.warning("[OTA] 403 — kunci ditolak: %r", got)
+        logger.warning("[OTA] 403 - kunci ditolak: %r", got)
         raise HTTPException(status_code=403, detail="Invalid device key")
 
 
@@ -97,7 +97,7 @@ async def upload_firmware(
     version: str = Query(default=""),
     file: UploadFile = ...,
 ) -> dict:
-    """Upload file .bin hasil pio run. Belum langsung di-deploy — pilih dulu device-nya.
+    """Upload file .bin hasil pio run. Belum langsung di-deploy - pilih dulu device-nya.
 
     `version` harus sama persis dengan FW_VERSION di config.h agar anti-loop reflash bekerja.
     """
@@ -105,7 +105,7 @@ async def upload_firmware(
         raise HTTPException(400, "File harus berekstensi .bin")
     content = await file.read()
     if len(content) < 4096:
-        raise HTTPException(400, "File terlalu kecil — bukan firmware valid")
+        raise HTTPException(400, "File terlalu kecil - bukan firmware valid")
 
     fw_id = uuid.uuid4().hex[:12]
     (_OTA_DIR / f"{fw_id}.bin").write_bytes(content)
@@ -169,7 +169,7 @@ def deploy_firmware(
     firmware_id: str = Query(...),
     device_id: str = Query(...),
 ) -> dict:
-    """Tandai firmware_id sebagai pending untuk device_id — device akan download saat cek berikutnya."""
+    """Tandai firmware_id sebagai pending untuk device_id - device akan download saat cek berikutnya."""
     meta = _load_meta()
     if firmware_id not in meta:
         raise HTTPException(404, "Firmware tidak ditemukan")

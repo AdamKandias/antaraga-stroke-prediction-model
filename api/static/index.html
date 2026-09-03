@@ -1270,11 +1270,11 @@
           if (d.ukuran) bagian.push(mb(d.ukuran));
           bagian.push('Android');
           if (infoEl) infoEl.textContent = bagian.join(' · ') +
-            (d.catatan ? ' — ' + d.catatan : '');
+            (d.catatan ? ' - ' + d.catatan : '');
         } else if (infoEl) {
           infoEl.textContent = 'Aplikasi sedang disiapkan untuk rilis.';
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   })();
 </script>

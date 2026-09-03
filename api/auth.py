@@ -2,7 +2,7 @@
 api/models_db.py::User. No third-party auth provider involved.
 
 In DEV_MODE, requests without an Authorization header are allowed through as
-a fixed dev user — useful for curl/dashboard testing without registering.
+a fixed dev user - useful for curl/dashboard testing without registering.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -72,7 +72,7 @@ def get_ingest_user_id(
     sebagai static key untuk firmware yang tidak bisa refresh JWT.
 
     Kalau device key dipakai, endpoint memakai user yang paling terakhir
-    aktif (last_seen_at) — cocok untuk 1-device + 1-akun di PKM prototype."""
+    aktif (last_seen_at) - cocok untuk 1-device + 1-akun di PKM prototype."""
     if authorization == f"Bearer {DEVICE_INGEST_KEY}":
         user = (
             db.query(models_db.User)
@@ -83,6 +83,6 @@ def get_ingest_user_id(
             return user.id
         if DEV_MODE:
             return DEV_USER_ID
-        raise HTTPException(status_code=401, detail="Belum ada user terdaftar — daftar dulu via mobile app")
+        raise HTTPException(status_code=401, detail="Belum ada user terdaftar - daftar dulu via mobile app")
 
     return get_current_user_id(authorization=authorization, db=db)

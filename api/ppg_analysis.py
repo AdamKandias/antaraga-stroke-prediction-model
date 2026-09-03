@@ -5,7 +5,7 @@ Identik dengan plotter.py: ac_signal (= "buang baseline"), bpm_autocorr
 (= BPM via autokorelasi FFT + periodisitas).  Dipakai oleh /v1/ingest/latest
 untuk memproses ketiga kanal (hijau, merah, inframerah).
 
-Referensi: Recorder3CH/gui/plotter.py — fungsi movavg, detrend, ac_signal,
+Referensi: Recorder3CH/gui/plotter.py - fungsi movavg, detrend, ac_signal,
 bpm_autocorr.
 """
 from __future__ import annotations
@@ -46,7 +46,7 @@ def ac_signal(x: np.ndarray, fs: float) -> np.ndarray:
     0.5 Hz high-pass: buang DC, drift termal, dan modulasi napas (~0.15–0.3 Hz).
     5 Hz low-pass: buang noise frekuensi tinggi; harmonik denyut hingga ~75 bpm
     ke-4 (4 × 75/60 = 5 Hz) masih lolos utuh.
-    filtfilt = zero-phase (tidak ada delay grup) — puncak akurat di posisi asli.
+    filtfilt = zero-phase (tidak ada delay grup) - puncak akurat di posisi asli.
     """
     from scipy.signal import butter, filtfilt
 
@@ -107,7 +107,7 @@ def bpm_autocorr(
         return None, 0.0
     seg = ac[lo:hi]
 
-    # Wajib maksimum LOKAL — np.argmax selalu mengembalikan sesuatu, termasuk
+    # Wajib maksimum LOKAL - np.argmax selalu mengembalikan sesuatu, termasuk
     # kurva meluruh tanpa puncak, yang selalu jatuh di ujung = 220 bpm.
     inner = seg[1:-1]
     peak  = (inner > seg[:-2]) & (inner >= seg[2:])
@@ -179,9 +179,9 @@ def channel_stats(
     }
 
 
-# ── Estimasi gula darah / kolesterol / asam urat — regresi linier ─────────
+# ── Estimasi gula darah / kolesterol / asam urat - regresi linier ─────────
 # Koefisien dari Gusti et al. (IJCS Vol.12 No.6, 2023).
-# Input = rata-rata nilai IR mentah (DC).  BELUM DIKALIBRASI ke sensor ANTARAGA —
+# Input = rata-rata nilai IR mentah (DC).  BELUM DIKALIBRASI ke sensor ANTARAGA -
 # hanya untuk demo pipeline sebelum data kalibrasi nyata terkumpul.
 _LINREG: dict[str, tuple[float, float]] = {
     "gula_darah":  (0.0036,   -294.18),   # R²=0.80
@@ -197,7 +197,7 @@ def compute_linreg_vitals(
     """Estimasi gula darah, kolesterol, asam urat via regresi linier DC-IR.
 
     Identik dengan metode Gusti et al. 2023: pakai rata-rata (DC) nilai IR
-    mentah sebagai satu-satunya prediktor.  Hasil ini BELUM DIKALIBRASI —
+    mentah sebagai satu-satunya prediktor.  Hasil ini BELUM DIKALIBRASI -
     koefisien bawaan dari dataset mereka, bukan dari rekaman ANTARAGA.
     """
     arr = np.asarray(ir_raw, dtype=np.float64)

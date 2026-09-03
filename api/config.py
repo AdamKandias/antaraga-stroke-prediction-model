@@ -11,7 +11,7 @@ DEV_MODE = os.getenv("DEV_MODE", "false").strip().lower() == "true"
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./antaraga.db")
 
 # Secret used to sign/verify our own access tokens (api/security.py).
-# Set a long random value in .env for anything beyond local development —
+# Set a long random value in .env for anything beyond local development -
 # anyone with this secret can mint valid tokens for any user.
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-insecure-secret-change-me")
 
@@ -32,7 +32,7 @@ FCM_SERVICE_ACCOUNT_PATH = os.getenv("FCM_SERVICE_ACCOUNT_PATH", "api/serviceAcc
 
 # Akun operator untuk dashboard web (/dashboard). Satu akun untuk tim riset,
 # terpisah dari tabel users milik aplikasi mobile.
-# WAJIB diganti lewat .env sebelum dipasang di server yang bisa diakses publik —
+# WAJIB diganti lewat .env sebelum dipasang di server yang bisa diakses publik -
 # nilai default di bawah ada di repo, jadi siapa pun yang melihat kode ini tahu
 # password-nya.
 DASHBOARD_EMAIL = os.getenv("DASHBOARD_EMAIL", "antaraga@gmail.com")
@@ -42,7 +42,7 @@ DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "password")
 # diisi sendiri; mengganti nilainya membuat semua sesi lama otomatis logout.
 # "or JWT_SECRET", bukan default getenv: baris kosong di .env (DASHBOARD_
 # SESSION_SECRET=) menghasilkan string kosong, dan itu berarti cookie
-# ditandatangani dengan kunci kosong — siapa pun bisa memalsukannya.
+# ditandatangani dengan kunci kosong - siapa pun bisa memalsukannya.
 DASHBOARD_SESSION_SECRET = os.getenv("DASHBOARD_SESSION_SECRET", "").strip() or JWT_SECRET
 
 DASHBOARD_SESSION_DAYS = int(os.getenv("DASHBOARD_SESSION_DAYS", "7"))
@@ -52,6 +52,6 @@ FCM_NOTIFICATION_COOLDOWN_SECONDS = int(os.getenv("FCM_NOTIFICATION_COOLDOWN_SEC
 
 # Kunci statis untuk perangkat keras (firmware). Dikirim sebagai
 # "Authorization: Bearer <DEVICE_INGEST_KEY>" dari config.h CLOUD_API_KEY.
-# Berbeda dari JWT (yang expire) — kunci ini permanen sampai diubah manual.
+# Berbeda dari JWT (yang expire) - kunci ini permanen sampai diubah manual.
 # Ganti ke nilai random sebelum production!
 DEVICE_INGEST_KEY = os.getenv("DEVICE_INGEST_KEY", "antaraga-hw-2026-01")

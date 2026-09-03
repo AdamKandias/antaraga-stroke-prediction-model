@@ -1,4 +1,4 @@
-# Alur Model ANTARAGA — Teknis & Parameter
+# Alur Model ANTARAGA - Teknis & Parameter
 
 > Dokumen ini menjelaskan arsitektur lengkap pipeline prediksi risiko stroke,
 > dari sinyal PPG sensor hingga skor akhir, beserta bobot, parameter, dan
@@ -26,11 +26,11 @@
 ┌─────────────────────────────────────────────────────────┐
 │              TAHAP 1: EKSTRAKSI FITUR PPG               │
 │                                                         │
-│  ir_dc_mean   — rata-rata komponen DC kanal IR          │
-│  ir_ac_p2p    — amplitudo AC puncak-ke-lembah IR        │
-│  red_dc_mean  — rata-rata komponen DC kanal RED         │
-│  red_ac_p2p   — amplitudo AC puncak-ke-lembah RED       │
-│  bpm          — detak jantung (autocorrelation)         │
+│  ir_dc_mean   - rata-rata komponen DC kanal IR          │
+│  ir_ac_p2p    - amplitudo AC puncak-ke-lembah IR        │
+│  red_dc_mean  - rata-rata komponen DC kanal RED         │
+│  red_ac_p2p   - amplitudo AC puncak-ke-lembah RED       │
+│  bpm          - detak jantung (autocorrelation)         │
 └────────────────────┬────────────────────────────────────┘
                      │  + age_years, gender_code (dari profil)
                      ▼
@@ -53,7 +53,7 @@
                      ▼
 ┌─────────────────────────────────────────────────────────┐
 │              TAHAP 3: XGBOOST STROKE RISK               │
-│         XGBClassifier — 8 fitur — threshold 0.705       │
+│         XGBClassifier - 8 fitur - threshold 0.705       │
 │                                                         │
 │  Output: probabilitas risiko stroke 0.0–1.0             │
 │  Klasifikasi: LOW (<0.705) / HIGH (≥0.705)              │
@@ -132,7 +132,7 @@ min_child_weight: 5
 subsample:      1.0
 colsample_bytree: 1.0
 reg_lambda:     1.0
-scale_pos_weight: 19.56  (kompensasi class imbalance — rasio negatif/positif)
+scale_pos_weight: 19.56  (kompensasi class imbalance - rasio negatif/positif)
 tree_method:    hist
 eval_metric:    aucpr
 ```
@@ -200,8 +200,8 @@ Sensitivity (Recall): 37 dari 75 kasus nyata terdeteksi = 49.3%
 | `heartDisease` (bool) | XGBoost | `heart_disease` (0/1) |
 | `residenceType` (Urban/Rural) | XGBoost | `residence_type` |
 | `smokingStatus` (3 pilihan) | XGBoost | `smoking_status` |
-| `hasDiabetes` (bool) | — | Dikumpulkan, belum dipakai di model |
-| `isWorking` (bool) | — | Dikumpulkan, belum dipakai di model |
+| `hasDiabetes` (bool) | - | Dikumpulkan, belum dipakai di model |
+| `isWorking` (bool) | - | Dikumpulkan, belum dipakai di model |
 
 ### Data dari Sensor ANTARAGA (setiap pengukuran)
 
@@ -220,10 +220,10 @@ Sensitivity (Recall): 37 dari 75 kasus nyata terdeteksi = 49.3%
 | `kolesterol_mg_dl` (dari MLP) | Belum di XGBoost | Perlu dataset publik yang mencantumkan kolesterol + stroke |
 | `asam_urat_mg_dl` (dari MLP) | Belum di XGBoost | Hubungan asam urat-stroke ada tapi tidak sekuat gula darah |
 | `isWorking` (dari profil) | Belum di XGBoost | Bisa dimasukkan jika retrain dengan data yang memiliki fitur ini |
-| `hasDiabetes` (dari profil) | Belum di XGBoost | Berkorelasi kuat dengan avg_glucose_level — perlu uji multikolinearitas |
+| `hasDiabetes` (dari profil) | Belum di XGBoost | Berkorelasi kuat dengan avg_glucose_level - perlu uji multikolinearitas |
 
 **Rekomendasi:** Untuk PKM saat ini, kolesterol dan asam urat lebih bernilai sebagai
-output informatif ke pengguna (dashboard) daripada fitur tambahan XGBoost — karena
+output informatif ke pengguna (dashboard) daripada fitur tambahan XGBoost - karena
 dataset publik yang dipakai untuk pelatihan tidak memuat kedua variabel tersebut.
 
 ---
@@ -236,8 +236,8 @@ Opsi ke depan:
 | Pendekatan | Keterangan |
 |---|---|
 | **Snapshot (sekarang)** | Nilai dari sesi terakhir langsung dikirim ke XGBoost |
-| **Rolling average (7 hari)** | Rata-rata 7 hari terakhir untuk gula darah & TD — mengurangi noise pengukuran tunggal |
-| **Tren (slope)** | Apakah gula darah naik atau turun dalam N hari terakhir — fitur tambahan yang lebih informatif |
+| **Rolling average (7 hari)** | Rata-rata 7 hari terakhir untuk gula darah & TD - mengurangi noise pengukuran tunggal |
+| **Tren (slope)** | Apakah gula darah naik atau turun dalam N hari terakhir - fitur tambahan yang lebih informatif |
 
 Implementasi rolling average membutuhkan tabel riwayat vital reading dan query per profil.
 

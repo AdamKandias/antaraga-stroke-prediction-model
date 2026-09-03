@@ -1,4 +1,4 @@
-"""Simulator perangkat keras ANTARAGA — menyuntikkan batch PPG sintetis
+"""Simulator perangkat keras ANTARAGA - menyuntikkan batch PPG sintetis
 ke pipeline yang SAMA persis dengan yang dipakai firmware asli.
 
 Tujuannya menguji alur ujung-ke-ujung tanpa perangkat fisik:
@@ -14,11 +14,11 @@ Dua hal yang sengaja dijaga realistis:
 
 1. FASE BERSAMBUNG antar batch.  Fase kardiak disimpan sebagai state dan
    dilanjutkan di batch berikutnya.  Kalau tiap batch dimulai dari fase nol,
-   akan muncul diskontinuitas 1 Hz di setiap sambungan — persis artefak yang
+   akan muncul diskontinuitas 1 Hz di setiap sambungan - persis artefak yang
    membuat BPM kanal hijau terkunci di ~60 (lihat catatan ppg_analysis.py).
 
 2. POLARITAS BENAR.  MAX30102 (merah/IR) mengeluarkan cacah mentah: saat
-   sistol, darah menyerap lebih banyak cahaya sehingga cacah TURUN — sinyal
+   sistol, darah menyerap lebih banyak cahaya sehingga cacah TURUN - sinyal
    terbalik.  SEN0203 (hijau) sudah AC-coupled di hardware dan tidak terbalik.
 """
 
@@ -156,7 +156,7 @@ def build_batch() -> dict:
         "batt_mv": 3980,
         "batt_pct": 87,
         "ovf": 0,
-        # SQI: sinyal sintetis ini memang bersih — laporkan apa adanya
+        # SQI: sinyal sintetis ini memang bersih - laporkan apa adanya
         "sqi": 92,
         "sqi_flags": 0,
         "ir_dc": int(ir_arr.mean()),
@@ -190,7 +190,7 @@ async def _loop() -> None:
             payload = build_batch()
             batch   = schemas.IngestBatch(**payload)
 
-            # Pakai user yang paling terakhir aktif — perilaku yang sama dengan
+            # Pakai user yang paling terakhir aktif - perilaku yang sama dengan
             # DEVICE_INGEST_KEY pada firmware asli (lihat auth.get_ingest_user_id).
             user = db.query(models_db.User).order_by(
                 models_db.User.last_seen_at.desc()

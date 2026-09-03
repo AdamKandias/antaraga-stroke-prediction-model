@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Analisis & plot rekaman PPG mentah DUA KANAL (RED + IR) — KHUSUS 400 Hz.
+Analisis & plot rekaman PPG mentah DUA KANAL (RED + IR) - KHUSUS 400 Hz.
 Untuk tiap kanal: band-pass, FFT, turunan-1 (VPG), turunan-2 (SDPPG/APG).
 
 Disetel untuk sampling 400 Hz (profil PWA recorder):
@@ -36,7 +36,7 @@ try:
 except ImportError:
     HAVE_SCIPY = False
 
-DERIV_WIN_MS = 50.0   # target lebar jendela turunan (ms) — diskalakan ke fs
+DERIV_WIN_MS = 50.0   # target lebar jendela turunan (ms) - diskalakan ke fs
 
 
 def load_recording(path):
@@ -104,7 +104,7 @@ def analyze_channel(raw, fs, lo, hi, invert=True):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Plot PPG RED & IR — khusus 400 Hz.")
+    ap = argparse.ArgumentParser(description="Plot PPG RED & IR - khusus 400 Hz.")
     ap.add_argument("file")
     ap.add_argument("--fs", type=float, default=400.0,
                     help="laju sampel Hz (default 400)")
@@ -147,7 +147,7 @@ def main():
 
     nrow = len(channels)
     fig, ax = plt.subplots(nrow, 4, figsize=(20, 4.2 * nrow), squeeze=False)
-    fig.suptitle(f"Analisis PPG RED & IR @ {fs:.0f} Hz — {args.file}  "
+    fig.suptitle(f"Analisis PPG RED & IR @ {fs:.0f} Hz - {args.file}  "
                  f"(band {lo}-{hi} Hz, SG~{sg_window(fs)} smp)", fontsize=13)
 
     for r, (name, raw, color) in enumerate(channels):

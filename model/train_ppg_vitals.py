@@ -4,7 +4,7 @@ This is the "pipeline now, model later" piece: the feature extraction
 (`model/ppg_features.py`) has no learned parameters and is ready today, but
 this script refuses to produce a model until real calibration data from the
 ANTARAGA prototype exists (see `data/calibration/README.md`). There is no
-synthetic or borrowed-journal data fallback here on purpose — training on
+synthetic or borrowed-journal data fallback here on purpose - training on
 data that isn't from ANTARAGA's own hardware/population would produce a
 model that looks accurate on paper but has no real predictive validity for
 an actual user's wrist. The 30-row reference dataset from Gusti et al.

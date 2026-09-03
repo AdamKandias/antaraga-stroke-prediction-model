@@ -45,6 +45,12 @@ from model.abcd2 import calculate_abcd2
 
 Base.metadata.create_all(bind=engine)
 
+# create_all tidak menyentuh tabel yang sudah ada, jadi kolom baru pada basis
+# data lama ditambahkan terpisah di sini.
+from api import migrasi as _migrasi  # noqa: E402
+
+_migrasi.jalankan(engine)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -88,7 +94,7 @@ async def dashboard_session_middleware(request: Request, call_next):
         return RedirectResponse(
             f"{dashboard_auth.LOGIN_PATH}?next={quote(nxt, safe='')}", status_code=303
         )
-    return JSONResponse({"detail": "Sesi dashboard tidak valid — silakan login"}, status_code=401)
+    return JSONResponse({"detail": "Sesi dashboard tidak valid - silakan login"}, status_code=401)
 
 
 @app.middleware("http")
@@ -126,6 +132,7 @@ def _profile_to_response(profile: models_db.Profile) -> schemas.ProfileResponse:
         residence_type=profile.residence_type,
         has_diabetes=profile.has_diabetes,
         family_history_stroke=getattr(profile, "family_history_stroke", False),
+        device_key=getattr(profile, "device_key", None),
     )
 
 
@@ -313,7 +320,7 @@ def get_active_profile(
     db: Session = Depends(get_db), user_id: str = Depends(get_current_user_id)
 ) -> schemas.ProfileResponse:
     """The profile the app should open by default: last-viewed, else the
-    first one ever created. 404 means the account has zero profiles yet —
+    first one ever created. 404 means the account has zero profiles yet -
     the app should show the profile-creation form (POST /profiles)."""
     profile = resolve_active_profile(db, user_id)
     if profile is None:
@@ -596,7 +603,7 @@ def estimate_vitals_from_ppg(
 
 
 # ---------------------------------------------------------------------------
-# /v1/sim — simulator perangkat keras (uji alur ujung-ke-ujung tanpa alat)
+# /v1/sim - simulator perangkat keras (uji alur ujung-ke-ujung tanpa alat)
 # ---------------------------------------------------------------------------
 
 @app.post("/v1/sim/start")
@@ -606,7 +613,7 @@ async def sim_start(
 ) -> dict:
     """Nyalakan simulator: batch PPG sintetis dikirim tiap detik ke /v1/ingest.
 
-    Alur hilirnya identik dengan perangkat asli — MLP vital, XGBoost risiko,
+    Alur hilirnya identik dengan perangkat asli - MLP vital, XGBoost risiko,
     penyimpanan reading, sampai notifikasi FCM ke mobile app.
     """
     from api import hw_simulator
@@ -710,7 +717,7 @@ def list_logs(limit: int = 50, db: Session = Depends(get_db)) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# /v1/ingest — menerima batch PPG dari firmware XIAO ESP32-S3
+# /v1/ingest - menerima batch PPG dari firmware XIAO ESP32-S3
 # ---------------------------------------------------------------------------
 
 @app.post("/device/pair", response_model=schemas.DeviceStatusResponse)
@@ -731,21 +738,112 @@ def pair_device(
     # masuk dari firmware tidak akan pernah cocok dengan akun ini.
     key = _resolve_device_key(key, db) or key
 
-    # Cek kalau device sudah di-pair ke akun lain
-    existing = (
+    # Orang tua mana yang memakai gelang ini.  Bila aplikasi tidak menyebutkan,
+    # dipakai profil yang sedang aktif -- perilaku aplikasi versi lama.
+    if body.profile_id:
+        profile = db.get(models_db.Profile, body.profile_id)
+        if profile is None or profile.user_id != user_id:
+            raise HTTPException(status_code=404, detail="Profil tidak ditemukan")
+    else:
+        profile = resolve_active_profile(db, user_id)
+    if profile is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Belum ada profil orang tua - tambahkan dulu sebelum menyambungkan gelang",
+        )
+
+    # Satu gelang hanya boleh menempel pada satu orang tua.  Tanpa penjagaan
+    # ini, dua profil dapat mengaku memiliki gelang yang sama dan bacaannya
+    # jatuh ke salah satu secara acak.
+    bentrok = (
+        db.query(models_db.Profile)
+        .filter(func.lower(func.trim(models_db.Profile.device_key)) == key.lower())
+        .filter(models_db.Profile.id != profile.id)
+        .first()
+    )
+    if bentrok:
+        if bentrok.user_id != user_id:
+            # Milik akun lain: tidak ada jalan keluar dari sini.  Pemiliknyalah
+            # yang harus melepas sendiri dari aplikasinya.
+            raise HTTPException(
+                status_code=409,
+                detail="Perangkat ini sudah terhubung ke akun lain",
+            )
+        if not body.pindahkan:
+            # Masih di akun yang sama, jadi memindahkannya sah.  Tetapi harus
+            # diminta secara sadar, bukan terjadi diam-diam: melepas gelang
+            # dari seorang lansia berarti pemantauannya berhenti.
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "kode": "dipakai_profil_lain",
+                    "pesan": f"Gelang ini sedang dipakai {bentrok.name}.",
+                    "profil_id": bentrok.id,
+                    "profil_nama": bentrok.name,
+                },
+            )
+        bentrok.device_key = None
+
+    bentrok_akun = (
         db.query(models_db.User)
         .filter(func.lower(func.trim(models_db.User.device_key)) == key.lower())
         .filter(models_db.User.id != user_id)
         .first()
     )
-    if existing:
+    if bentrok_akun:
         raise HTTPException(status_code=409, detail="Perangkat ini sudah terhubung ke akun lain")
 
+    profile.device_key = key
     user = db.query(models_db.User).filter(models_db.User.id == user_id).first()
     if user:
+        # Tetap diisi demi aplikasi versi lama yang masih membaca dari akun.
         user.device_key = key
-        db.commit()
-    return schemas.DeviceStatusResponse(paired=True, device_key=key)
+    db.commit()
+    return schemas.DeviceStatusResponse(
+        paired=True, device_key=key,
+        profile_id=profile.id, profile_name=profile.name,
+    )
+
+
+@app.delete("/device/pair", response_model=schemas.DeviceStatusResponse)
+def unpair_device(
+    profile_id: str | None = Query(
+        None, description="Orang tua yang gelangnya dilepas. Kosong = profil aktif."
+    ),
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+) -> schemas.DeviceStatusResponse:
+    """Lepas gelang dari seorang lansia.
+
+    Diperlukan supaya gelang dapat dipindahkan ke orang lain, dan supaya
+    gelang yang rusak atau hilang tidak menyandera profil selamanya.
+
+    Bacaan yang sudah tersimpan tidak ikut terhapus: riwayat itu memang milik
+    lansia yang bersangkutan, terlepas dari gelang mana yang merekamnya.
+    """
+    if profile_id:
+        profile = db.get(models_db.Profile, profile_id)
+        if profile is None or profile.user_id != user_id:
+            raise HTTPException(status_code=404, detail="Profil tidak ditemukan")
+    else:
+        profile = resolve_active_profile(db, user_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profil tidak ditemukan")
+
+    dilepas = profile.device_key
+    profile.device_key = None
+
+    # Kolom lama di tingkat akun ikut dibersihkan bila memang gelang yang sama,
+    # supaya aplikasi versi lama tidak menampilkan gelang yang sudah dilepas.
+    user = db.query(models_db.User).filter(models_db.User.id == user_id).first()
+    if user and dilepas and (user.device_key or "").strip().lower() == dilepas.strip().lower():
+        user.device_key = None
+    db.commit()
+
+    return schemas.DeviceStatusResponse(
+        paired=False, device_key=None,
+        profile_id=profile.id, profile_name=profile.name,
+    )
 
 
 @app.get("/device/status", response_model=schemas.DeviceStatusResponse)
@@ -754,9 +852,21 @@ def device_status(
     user_id: str = Depends(get_current_user_id),
 ) -> schemas.DeviceStatusResponse:
     """Cek apakah akun ini sudah terhubung ke perangkat."""
+    profile = resolve_active_profile(db, user_id)
+    if profile is not None and profile.device_key:
+        return schemas.DeviceStatusResponse(
+            paired=True, device_key=profile.device_key,
+            profile_id=profile.id, profile_name=profile.name,
+        )
+
+    # Basis data lama: gelang masih tersambung di tingkat akun.
     user = db.query(models_db.User).filter(models_db.User.id == user_id).first()
     if user and user.device_key:
-        return schemas.DeviceStatusResponse(paired=True, device_key=user.device_key)
+        return schemas.DeviceStatusResponse(
+            paired=True, device_key=user.device_key,
+            profile_id=profile.id if profile else None,
+            profile_name=profile.name if profile else None,
+        )
     return schemas.DeviceStatusResponse(paired=False)
 
 
@@ -772,19 +882,37 @@ def ingest_firmware_batch(
     → simpan reading → FCM kalau HIGH."""
     start = time.perf_counter()
 
-    # Cari user yang sudah pair device ini — prioritas utama
-    paired_user = (
-        db.query(models_db.User)
-        .filter(models_db.User.device_key == batch.id)
+    # Cari orang tua yang gelangnya ini - prioritas utama.
+    #
+    # Penyambungan gelang melekat pada profil, bukan pada akun, karena satu
+    # akun keluarga dapat memantau beberapa orang tua sekaligus dan tiap orang
+    # tua memakai gelangnya sendiri.  Mengandalkan "profil yang sedang dibuka"
+    # membuat bacaan dari gelang Ibu jatuh ke profil Bapak begitu aplikasi
+    # kebetulan sedang menampilkan Bapak.
+    profile = (
+        db.query(models_db.Profile)
+        .filter(models_db.Profile.device_key == batch.id)
         .first()
     )
-    if paired_user:
-        user_id = paired_user.id
+    if profile is not None:
+        user_id = profile.user_id
+    else:
+        # Basis data lama: gelang masih tersambung di tingkat akun.  Jatuh
+        # kembali ke perilaku sebelumnya supaya perangkat yang sudah dipakai
+        # di lapangan tidak mendadak berhenti mengirim.
+        paired_user = (
+            db.query(models_db.User)
+            .filter(models_db.User.device_key == batch.id)
+            .first()
+        )
+        if paired_user:
+            user_id = paired_user.id
 
     # Simpan ke buffer dulu (sebelum early-return) supaya dashboard bisa membaca
     ingest_buffer.store(batch.id, batch.model_dump())
 
-    profile = resolve_active_profile(db, user_id)
+    if profile is None:
+        profile = resolve_active_profile(db, user_id)
     if profile is None:
         return schemas.IngestResponse(ok=True, seq=batch.seq)
 
@@ -803,14 +931,14 @@ def ingest_firmware_batch(
             pass  # model belum dilatih atau sinyal terlalu pendek
 
     if not vitals:
-        # Jatuh ke MLP KALIBRASI (mlp_calibration.joblib) — model yang dilatih
+        # Jatuh ke MLP KALIBRASI (mlp_calibration.joblib) - model yang dilatih
         # lewat tab Kalibrasi.  Tanpa cabang ini, model hasil latihan tidak
         # pernah terpakai di alur ingest: ml_vitals mencari artefak lain
         # (ppg_vitals_model.joblib) yang belum tentu ada, sehingga vitals tetap
         # kosong dan seluruh tahap hilir (XGBoost, simpan reading, FCM) dilewati.
         #
         # Usia dan jenis kelamin diambil dari PROFIL yang di-pair via mobile app,
-        # bukan nilai bawaan — keduanya fitur masukan model.
+        # bukan nilai bawaan - keduanya fitur masukan model.
         from api.ml_calibration import is_calibration_model_available, predict_vitals
         if is_calibration_model_available() and batch.ir and batch.red:
             try:
@@ -875,7 +1003,7 @@ def ingest_firmware_batch(
     result = predict_stroke_risk(features)
 
     # --- Simpan reading -------------------------------------------------
-    # BPM ikut disimpan — kolom heart_rate_bpm sudah ada di VitalReading tapi
+    # BPM ikut disimpan - kolom heart_rate_bpm sudah ada di VitalReading tapi
     # sebelumnya tidak pernah diisi, sehingga kartu "Detak Jantung" di mobile
     # app selamanya menampilkan "--".
     _hr = vitals.get("heart_rate_bpm")
@@ -930,7 +1058,7 @@ def ingest_firmware_batch(
 
 
 # ---------------------------------------------------------------------------
-# SQI helpers — filter batch berkualitas buruk sebelum analisis
+# SQI helpers - filter batch berkualitas buruk sebelum analisis
 # Flag bitmask sesuai Firmware/include/antaraga.h
 # ---------------------------------------------------------------------------
 
@@ -944,7 +1072,7 @@ _SQI_F_SHORT     = 0x20  # batch terlalu pendek
 # Flag yang membuat data IR/RED tidak dapat dipakai untuk BPM dan analisis sinyal
 _SQI_DISCARD = _SQI_F_NO_FINGER | _SQI_F_SATURATED | _SQI_F_FLAT | _SQI_F_MOTION
 
-# Untuk kanal hijau (SON1303): MOTION dari IR tidak ikut — kanal hijau punya flag
+# Untuk kanal hijau (SON1303): MOTION dari IR tidak ikut - kanal hijau punya flag
 # PPG_BAD sendiri. Gerakan ringan yang men-trigger tortuosity IR tidak harus
 # memblokir green, karena bandpass 0.5–5 Hz sudah meredam sebagian besar artefak.
 _SQI_DISCARD_GREEN = _SQI_F_NO_FINGER | _SQI_F_SATURATED | _SQI_F_FLAT | _SQI_F_PPG_BAD
@@ -992,8 +1120,88 @@ def _sqi_summary(batches: list[dict]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# /dashboard — web dashboard untuk monitoring hardware
+# /dashboard - web dashboard untuk monitoring hardware
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Uji kirim notifikasi dari dashboard
+#
+# Jalur notifikasi melibatkan banyak pihak: token yang didaftarkan aplikasi,
+# kunci layanan di server, proyek Firebase, sampai izin notifikasi di ponsel.
+# Menunggu risiko benar-benar terdeteksi HIGH hanya untuk mengetahui rantai itu
+# putus di mana jelas tidak praktis, karena itu disediakan pengiriman percobaan.
+# ---------------------------------------------------------------------------
+
+@app.get("/v1/notify/targets", include_in_schema=False)
+def notify_targets(db: Session = Depends(get_db)) -> dict:
+    """Daftar akun beserta orang tua yang dipantaunya, untuk pemilih di dashboard."""
+    akun = []
+    for user in db.query(models_db.User).order_by(desc(models_db.User.last_seen_at)).all():
+        profil = (
+            db.query(models_db.Profile)
+            .filter(models_db.Profile.user_id == user.id)
+            .order_by(models_db.Profile.created_at)
+            .all()
+        )
+        akun.append({
+            "user_id": user.id,
+            "label": user.email or user.phone or user.id[:8],
+            "punya_token": bool(user.fcm_token),
+            "terakhir_aktif": _utc_iso(user.last_seen_at),
+            "terakhir_dinotifikasi": _utc_iso(user.last_notified_at),
+            "profiles": [
+                {
+                    "profile_id": p.id,
+                    "nama": p.name,
+                    "device_key": p.device_key or user.device_key,
+                }
+                for p in profil
+            ],
+        })
+    return {"akun": akun}
+
+
+@app.post("/v1/notify/test", include_in_schema=False)
+def notify_test(
+    user_id: str = Query(..., description="Akun keluarga yang akan menerima"),
+    profile_id: str | None = Query(None, description="Orang tua yang disebut di isi pesan"),
+    judul: str | None = Query(None, max_length=120),
+    isi: str | None = Query(None, max_length=400),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Kirim satu notifikasi percobaan ke akun yang dipilih.
+
+    Sengaja tidak menyentuh `last_notified_at`. Kolom itu menahan peringatan
+    sungguhan selama masa jeda, dan mengisinya dari sini berarti percobaan
+    dapat membungkam peringatan asli yang menyusul sesudahnya.
+    """
+    from api.fcm import kirim_notifikasi_uji
+
+    user = db.get(models_db.User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Akun tidak ditemukan")
+
+    nama_profil = "orang tua Anda"
+    if profile_id:
+        profil = db.get(models_db.Profile, profile_id)
+        if profil is None or profil.user_id != user_id:
+            raise HTTPException(status_code=404, detail="Profil tidak ditemukan pada akun ini")
+        nama_profil = profil.name
+    else:
+        profil = resolve_active_profile(db, user_id)
+        if profil is not None:
+            nama_profil = profil.name
+
+    berhasil, keterangan = kirim_notifikasi_uji(
+        user.fcm_token or "", nama_profil, judul=judul, isi=isi,
+    )
+    return {
+        "ok": berhasil,
+        "keterangan": keterangan,
+        "tujuan": user.email or user.phone or user.id[:8],
+        "profil": nama_profil,
+    }
+
 
 _DASHBOARD_HTML = os.path.join(os.path.dirname(__file__), "static", "dashboard.html")
 _HOME_HTML = os.path.join(os.path.dirname(__file__), "static", "index.html")
@@ -1002,13 +1210,13 @@ _PRIVACY_HTML = os.path.join(os.path.dirname(__file__), "static", "privacy.html"
 
 @app.get("/dashboard", include_in_schema=False)
 def serve_dashboard() -> FileResponse:
-    """Dijaga oleh dashboard_session_middleware — tanpa cookie sesi yang sah,
+    """Dijaga oleh dashboard_session_middleware - tanpa cookie sesi yang sah,
     permintaan tidak pernah sampai ke sini."""
     return FileResponse(_DASHBOARD_HTML, media_type="text/html")
 
 
 # ---------------------------------------------------------------------------
-# /login — pintu masuk dashboard.  include_in_schema=False: tidak muncul di
+# /login - pintu masuk dashboard.  include_in_schema=False: tidak muncul di
 # /docs maupun openapi.json, dan tidak ditautkan dari halaman mana pun.
 # ---------------------------------------------------------------------------
 
@@ -1016,7 +1224,7 @@ def _safe_next(raw: str | None) -> str:
     """Terima hanya path internal.
 
     Tanpa saringan ini "?next=https://situs-lain/..." akan mengubah /login jadi
-    open redirect — halaman login asli yang melempar korban ke situs penyerang.
+    open redirect - halaman login asli yang melempar korban ke situs penyerang.
     """
     if not raw or not raw.startswith("/") or raw.startswith("//"):
         return "/dashboard"
@@ -1110,6 +1318,14 @@ def _resolve_device_key(device_id: str, db: Session) -> str | None:
         if dev.strip().lower() == lowered:
             return dev
 
+    profil = (
+        db.query(models_db.Profile)
+        .filter(func.lower(func.trim(models_db.Profile.device_key)) == lowered)
+        .first()
+    )
+    if profil is not None:
+        return profil.device_key
+
     row = (
         db.query(models_db.User)
         .filter(func.lower(func.trim(models_db.User.device_key)) == lowered)
@@ -1202,7 +1418,7 @@ def ingest_latest_dashboard(
     # --- BPM siap-tampil: disaring dari lonjakan + tahan nilai terakhir ------
     # Kanal IR dipakai sebagai sumber utama (perfusinya paling stabil), merah
     # sebagai cadangan.  Kanal hijau TIDAK dipakai di sini: sambungan antar-batch
-    # membuatnya mengunci di 1 Hz (≈60 bpm) — lihat catatan di ppg_analysis.py.
+    # membuatnya mengunci di 1 Hz (≈60 bpm) - lihat catatan di ppg_analysis.py.
     _ir_a, _red_a = stage_analysis.get("ir", {}), stage_analysis.get("red", {})
     _src_bpm, _src_conf, _src_name = _ir_a.get("bpm"), _ir_a.get("conf", 0.0), "ir"
     if _src_bpm is None or _src_conf < 0.30:
@@ -1265,7 +1481,7 @@ def _compute_pwa(ppg: list, red: list, ir: list, fs_ppg: int, fs_max: int) -> di
         _prom = float(_np.std(sig_for_peaks) * cfg["prominence_multiplier"])
         _pk, _ = _fp(sig_for_peaks, distance=_min_dist, prominence=_prom)
         result[f"peaks_{key}"] = [int(p) for p in _pk]
-        # BPM via Welch spectrum (primary method — matches firmware scripts)
+        # BPM via Welch spectrum (primary method - matches firmware scripts)
         if key == "ppg" and result["bpm"] is None:
             bpm = bpm_from_spectrum(filt, float(fs))
             if bpm is not None:
@@ -1283,7 +1499,7 @@ def _compute_pwa(ppg: list, red: list, ir: list, fs_ppg: int, fs_max: int) -> di
     if len(ppg) < min_samples and len(red) < min_samples:
         result["note"] = (
             f"Window sinyal terlalu pendek ({len(ppg)}/{min_samples} sampel PPG). "
-            "Tunggu beberapa detik — backend mengakumulasi data otomatis."
+            "Tunggu beberapa detik - backend mengakumulasi data otomatis."
         )
     else:
         try:
@@ -1393,7 +1609,7 @@ def _compute_mlp(ppg: list, red: list, ir: list, fs_ppg: int) -> dict:
         except Exception as exc:
             out = {"available": False, "message": str(exc)}
     else:
-        out["message"] = "Model MLP belum dilatih — menunggu data kalibrasi dari hardware"
+        out["message"] = "Model MLP belum dilatih - menunggu data kalibrasi dari hardware"
 
     # --- Calibration MLP (gula, kolesterol, asam_urat, sistolik, diastolik) ---
     if is_calibration_model_available() and ir and red:
@@ -1414,7 +1630,7 @@ def _compute_mlp(ppg: list, red: list, ir: list, fs_ppg: int) -> dict:
             out["available"]    = True
             out["source"]       = "mlp_calibration.joblib"
             # Pesan "belum dilatih" dari model lama menyesatkan begitu MLP
-            # kalibrasi berhasil — buang supaya UI tidak menampilkan keduanya.
+            # kalibrasi berhasil - buang supaya UI tidak menampilkan keduanya.
             out.pop("message", None)
         except Exception:
             out.setdefault("risk_flags", [])
@@ -1431,7 +1647,7 @@ def _compute_xgboost(device_id: str, db: Session) -> dict:
         .first()
     )
     if not user:
-        return {"available": False, "message": "Perangkat belum di-pair ke akun — pair dulu via mobile app"}
+        return {"available": False, "message": "Perangkat belum di-pair ke akun - pair dulu via mobile app"}
 
     log = (
         db.query(models_db.PredictionLog)
@@ -1441,7 +1657,7 @@ def _compute_xgboost(device_id: str, db: Session) -> dict:
         .first()
     )
     if not log:
-        return {"available": False, "message": "Belum ada prediksi risiko stroke — tunggu batch berikutnya"}
+        return {"available": False, "message": "Belum ada prediksi risiko stroke - tunggu batch berikutnya"}
 
     resp = json.loads(log.response_payload)
 
@@ -1469,7 +1685,7 @@ def _compute_xgboost(device_id: str, db: Session) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# /v1/calibrate — rekam sesi kalibrasi (sinyal PPG + nilai invasif)
+# /v1/calibrate - rekam sesi kalibrasi (sinyal PPG + nilai invasif)
 # ---------------------------------------------------------------------------
 
 @app.post("/v1/calibrate", status_code=201)
@@ -1493,7 +1709,7 @@ def calibrate_create(
     """
     batches = ingest_buffer.get_window_s(device_id, 10.0)
     if not batches:
-        raise HTTPException(status_code=404, detail=f"Belum ada sinyal dari '{device_id}' — pastikan firmware sedang berjalan")
+        raise HTTPException(status_code=404, detail=f"Belum ada sinyal dari '{device_id}' - pastikan firmware sedang berjalan")
 
     latest = batches[-1]
     fs_max = float(latest.get("fs_max", 200))
@@ -1508,7 +1724,7 @@ def calibrate_create(
     red_st = channel_stats(all_red, fs_max, "red")
     bpm_raw, bpm_conf = bpm_autocorr(np.array(all_ir, dtype=float), fs_max) if all_ir else (None, 0.0)
 
-    # Saring sebelum disimpan.  Rekaman kalibrasi adalah SATU cuplikan — bila
+    # Saring sebelum disimpan.  Rekaman kalibrasi adalah SATU cuplikan - bila
     # cuplikan itu kebetulan jatuh saat octave error, baris latihnya tercemar
     # permanen.  Dengan dataset sekecil ini, satu baris rusak = 20% data.
     from api.bpm_filter import filter_bpm
@@ -1607,7 +1823,7 @@ def calibrate_record_report(
     autoprint: bool = True,
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    """Laporan hasil pemeriksaan A4 untuk satu rekaman — dibuka lalu disimpan PDF.
+    """Laporan hasil pemeriksaan A4 untuk satu rekaman - dibuka lalu disimpan PDF.
 
     Sengaja HTML, bukan PDF biner: dialog cetak browser sudah menghasilkan PDF
     A4 yang rapi tanpa menambah dependensi (reportlab/weasyprint) ke image
@@ -1629,7 +1845,7 @@ def calibrate_training_report() -> dict:
     import pathlib
     metrics_path = pathlib.Path(__file__).resolve().parent.parent / "model" / "artifacts" / "mlp_calibration_metrics.json"
     if not metrics_path.exists():
-        return {"available": False, "message": "Model belum dilatih — jalankan: python model/train_mlp_calibration.py"}
+        return {"available": False, "message": "Model belum dilatih - jalankan: python model/train_mlp_calibration.py"}
     import json as _json
     data = _json.loads(metrics_path.read_text())
     return {"available": True, "metrics": data}
@@ -1716,13 +1932,13 @@ def calibrate_recompute_bpm(
 
     Yang TIDAK disentuh:
       - Nilai alat ukur medis (gula darah, kolesterol, asam urat, sistolik,
-        diastolik) — itu diketik peneliti dari hasil lab, bukan hasil hitung.
-      - Sinyal mentah (green_raw, red_raw, infrared_raw) — rekaman sensor apa adanya.
+        diastolik) - itu diketik peneliti dari hasil lab, bukan hasil hitung.
+      - Sinyal mentah (green_raw, red_raw, infrared_raw) - rekaman sensor apa adanya.
       - Fitur turunan lain (ir_dc_mean, ir_ac_p2p, red_dc_mean, red_ac_p2p).
 
     Kolom `bpm` adalah hasil hitung server atas sinyal mentah, bukan hasil ukur.
     Bila autokorelasi salah mengunci oktaf (mis. terbaca 42,9 padahal 84), nilai
-    itu bisa dipulihkan dari sinyal yang masih utuh — dan hasilnya bisa diaudit
+    itu bisa dipulihkan dari sinyal yang masih utuh - dan hasilnya bisa diaudit
     ulang kapan saja karena sinyalnya tetap tersimpan.
 
     Konservatif secara sengaja: sebuah baris hanya diperbaiki bila selisihnya
@@ -1773,12 +1989,12 @@ def calibrate_recompute_bpm(
         if selisih_pct <= threshold_pct:
             continue
         if oktaf:
-            item["alasan"] = "kesalahan oktaf — dipulihkan dari sinyal mentah"
+            item["alasan"] = "kesalahan oktaf - dipulihkan dari sinyal mentah"
             diperbaiki.append(item)
             if apply:
                 r.bpm = round(bpm_baru, 1)
         else:
-            item["alasan"] = "selisih besar tapi bukan kelipatan oktaf — TIDAK diubah, periksa manual"
+            item["alasan"] = "selisih besar tapi bukan kelipatan oktaf - TIDAK diubah, periksa manual"
             ditandai.append(item)
 
     if apply and diperbaiki:
@@ -1804,7 +2020,7 @@ def calibrate_recompute_bpm(
         "catatan": (
             "Hanya kolom bpm yang diubah. Nilai alat ukur medis dan sinyal mentah "
             "tidak tersentuh." if apply else
-            "PRATINJAU — belum ada yang ditulis. Ulangi dengan apply=true untuk menerapkan."
+            "PRATINJAU - belum ada yang ditulis. Ulangi dengan apply=true untuk menerapkan."
         ),
     }
 
@@ -1862,7 +2078,7 @@ def _calib_to_dict(r: models_db.CalibrationRecord) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# /v1/calibrate/generate-demo  — data sintetis realistis untuk uji pipeline
+# /v1/calibrate/generate-demo  - data sintetis realistis untuk uji pipeline
 # ---------------------------------------------------------------------------
 
 @app.post("/v1/calibrate/generate-demo")
@@ -1875,7 +2091,7 @@ def calibrate_generate_demo(
 
     rng = np.random.default_rng(seed=int(time.time()) % (2**31))
 
-    # Awalan "DEMO-" wajib: subjek asli memakai S001, S002, ... — tanpa awalan
+    # Awalan "DEMO-" wajib: subjek asli memakai S001, S002, ... - tanpa awalan
     # keduanya bertabrakan dan pengelompokan CV per-subjek menganggapnya orang
     # yang sama.
     #
@@ -1984,7 +2200,7 @@ def calibrate_clear_demo(db: Session = Depends(get_db)) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# /v1/calibrate/train  — latih MLP inline dari data di DB
+# /v1/calibrate/train  - latih MLP inline dari data di DB
 # ---------------------------------------------------------------------------
 
 @app.post("/v1/calibrate/train")
@@ -1994,9 +2210,9 @@ def calibrate_train(
 ) -> dict:
     """Latih model MLP kalibrasi dari calibration_records di DB, simpan artifact.
 
-    mode='real'  — hanya rekaman nyata (bukan demo-device)
-    mode='demo'  — hanya rekaman demo (device_id = demo-device)
-    mode='all'   — semua rekaman (default)
+    mode='real'  - hanya rekaman nyata (bukan demo-device)
+    mode='demo'  - hanya rekaman demo (device_id = demo-device)
+    mode='all'   - semua rekaman (default)
     """
     import pathlib as _pl, json as _json
     import joblib
@@ -2028,7 +2244,7 @@ def calibrate_train(
         "diastolik_mmhg":    "Diastolik (mmHg)",
     }
     # 5 = batas bawah teknis (LOO butuh minimal 3, di bawah 5 tidak ada sisa
-    # untuk diuji sama sekali).  Metrik di bawah 30 subjek TIDAK bermakna —
+    # untuk diuji sama sekali).  Metrik di bawah 30 subjek TIDAK bermakna -
     # lihat field "reliability" pada tiap target.
     MIN_ROWS_T = 5
 
@@ -2098,7 +2314,7 @@ def calibrate_train(
                                n_iter_no_change=15, validation_fraction=0.1)
 
         # Skema CV: bila satu subjek punya >1 rekaman, kelompokkan per subjek.
-        # Tanpa ini, rekaman orang yang sama masuk ke data latih DAN data uji —
+        # Tanpa ini, rekaman orang yang sama masuk ke data latih DAN data uji -
         # metrik jadi optimistis palsu (leakage), model terlihat akurat padahal menghafal.
         cv_groups = None
         if n_subj < n and n_subj >= 2:
@@ -2126,7 +2342,7 @@ def calibrate_train(
         pct_err = float(np.mean(np.abs(y - y_cv) / np.maximum(np.abs(y), 1e-9)) * 100)
         acc  = round(100 - pct_err, 2)
 
-        # Status keterandalan — dilaporkan apa adanya agar angka di bawah ini
+        # Status keterandalan - dilaporkan apa adanya agar angka di bawah ini
         # tidak dibaca sebagai validasi alat.
         if n_subj < 10:
             reliability = "TIDAK VALID"
@@ -2137,12 +2353,12 @@ def calibrate_train(
         elif n_subj < 30:
             reliability = "LEMAH"
             reliability_note = (
-                f"{n_subj} subjek — metrik masih sangat goyah. "
+                f"{n_subj} subjek - metrik masih sangat goyah. "
                 "Target ≥30 subjek untuk angka yang bisa dipertanggungjawabkan."
             )
         else:
             reliability = "MEMADAI"
-            reliability_note = f"{n_subj} subjek — metrik dapat dilaporkan."
+            reliability_note = f"{n_subj} subjek - metrik dapat dilaporkan."
 
         all_models[target_col] = {"scaler": scaler, "mlp": mlp, "features": FEATURES_T}
         all_metrics[target_col] = {
@@ -2192,18 +2408,18 @@ def calibrate_train(
 
 
 # ---------------------------------------------------------------------------
-# /v1/calibrate/report.html  — laporan lengkap, dapat diunduh
+# /v1/calibrate/report.html  - laporan lengkap, dapat diunduh
 # ---------------------------------------------------------------------------
 
 @app.get("/v1/calibrate/report.html")
 def calibrate_report_html() -> StreamingResponse:
-    """Hasilkan laporan HTML lengkap (scatter plots, metrik, interpretasi) — siap diunduh."""
+    """Hasilkan laporan HTML lengkap (scatter plots, metrik, interpretasi) - siap diunduh."""
     import pathlib as _pl, json as _json, base64, io
 
     metrics_path = _pl.Path(__file__).resolve().parent.parent / "model" / "artifacts" / "mlp_calibration_metrics.json"
     if not metrics_path.exists():
         raise HTTPException(status_code=404,
-                            detail="Model belum dilatih — klik 'Jalankan Training' dulu")
+                            detail="Model belum dilatih - klik 'Jalankan Training' dulu")
 
     full = _json.loads(metrics_path.read_text())
     meta = full.get("_meta", {})
@@ -2242,7 +2458,7 @@ def calibrate_report_html() -> StreamingResponse:
         if r2 >= 0.8:  return "Sangat kuat"
         if r2 >= 0.5:  return "Kuat"
         if r2 >= 0.0:  return "Sedang (lebih baik dari rata-rata)"
-        return "Di bawah rata-rata — perlu data lebih banyak"
+        return "Di bawah rata-rata - perlu data lebih banyak"
 
     # ── Scatter plots as base64 PNG ───────────────────────────────────────
     def _scatter_b64(key: str, data: dict) -> str | None:
@@ -2317,7 +2533,7 @@ def calibrate_report_html() -> StreamingResponse:
               </div>
             </div>"""
 
-    trained_at_str = meta.get("trained_at", "—")
+    trained_at_str = meta.get("trained_at", "-")
     try:
         from datetime import datetime as _dt
         trained_at_str = _dt.fromisoformat(trained_at_str).strftime("%d %b %Y, %H:%M UTC")
@@ -2332,7 +2548,7 @@ def calibrate_report_html() -> StreamingResponse:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Laporan Kalibrasi MLP — ANTARAGA</title>
+<title>Laporan Kalibrasi MLP - ANTARAGA</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Segoe UI',Arial,sans-serif; font-size:13px; color:#1a1a2e;
@@ -2390,7 +2606,7 @@ def calibrate_report_html() -> StreamingResponse:
 
 <h2>Apa yang Diukur Model Ini?</h2>
 <p>Model MLP (Multi-Layer Perceptron) ANTARAGA menggunakan sinyal cahaya sensor PPG di pergelangan tangan untuk
-memperkirakan 5 parameter vital secara non-invasif — tanpa tusuk jarum, tanpa alat laboratorium.
+memperkirakan 5 parameter vital secara non-invasif - tanpa tusuk jarum, tanpa alat laboratorium.
 Model ini dilatih dari data kalibrasi berpasangan: sinyal sensor vs hasil alat medis standar.</p>
 <p>Berikut adalah ringkasan seberapa akurat model saat ini berdasarkan <b>{meta.get('n_total', '?')} rekaman</b>
 dari <b>{meta.get('n_subjects', '?')} subjek</b>, divalidasi dengan metode <i>cross-validation</i>.</p>
@@ -2414,7 +2630,7 @@ dari <b>{meta.get('n_subjects', '?')} subjek</b>, divalidasi dengan metode <i>cr
 <p>Setiap titik mewakili satu rekaman kalibrasi. Semakin dekat titik-titik ke garis diagonal putus-putus,
 semakin akurat model. Garis diagonal = prediksi sempurna.</p>
 <div class="scatter-grid">
-{scatter_html if scatter_html else '<p style="color:#888">Tidak ada data visualisasi (data cv_data tidak tersimpan — latih ulang model).</p>'}
+{scatter_html if scatter_html else '<p style="color:#888">Tidak ada data visualisasi (data cv_data tidak tersimpan - latih ulang model).</p>'}
 </div>
 
 <h2>Cara Membaca Laporan Ini</h2>
@@ -2422,21 +2638,21 @@ semakin akurat model. Garis diagonal = prediksi sempurna.</p>
   <h3>Akurasi (%)</h3>
   <p>Persentase ketepatan prediksi dibandingkan nilai referensi (alat medis). Semakin tinggi semakin baik.</p>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-    <span class="badge badge-green">≥ 90% — Sangat Baik</span>
-    <span class="badge badge-blue">80–89% — Baik</span>
-    <span class="badge badge-amber">70–79% — Cukup</span>
-    <span class="badge badge-red">&lt; 70% — Perlu Data Lebih</span>
+    <span class="badge badge-green">≥ 90% - Sangat Baik</span>
+    <span class="badge badge-blue">80–89% - Baik</span>
+    <span class="badge badge-amber">70–79% - Cukup</span>
+    <span class="badge badge-red">&lt; 70% - Perlu Data Lebih</span>
   </div>
 </div>
 <div class="legend-box">
   <div class="legend-row">
     <div style="min-width:90px;font-weight:700">MAE</div>
-    <div><i>Mean Absolute Error</i> — rata-rata selisih absolut antara prediksi dan referensi dalam satuan asli
+    <div><i>Mean Absolute Error</i> - rata-rata selisih absolut antara prediksi dan referensi dalam satuan asli
     (mis. mg/dL untuk gula darah). MAE 10 mg/dL berarti prediksi rata-rata meleset ±10 mg/dL.</div>
   </div>
   <div class="legend-row">
     <div style="min-width:90px;font-weight:700">RMSE</div>
-    <div><i>Root Mean Squared Error</i> — serupa MAE namun menghukum kesalahan besar lebih berat.
+    <div><i>Root Mean Squared Error</i> - serupa MAE namun menghukum kesalahan besar lebih berat.
     Berguna untuk melihat seberapa buruk outlier terparah.</div>
   </div>
   <div class="legend-row">
@@ -2447,7 +2663,7 @@ semakin akurat model. Garis diagonal = prediksi sempurna.</p>
   <div class="legend-row">
     <div style="min-width:90px;font-weight:700">LOO / 5-fold</div>
     <div><i>Leave-One-Out</i> (untuk data kecil &lt;30) atau <i>5-fold Cross-Validation</i> (data ≥30):
-    tiap rekaman diuji oleh model yang tidak melihat rekaman tersebut saat training — hasilnya lebih jujur
+    tiap rekaman diuji oleh model yang tidak melihat rekaman tersebut saat training - hasilnya lebih jujur
     dari sekadar memeriksa data training.</div>
   </div>
 </div>
@@ -2479,7 +2695,7 @@ semakin akurat model. Garis diagonal = prediksi sempurna.</p>
 
 
 # ---------------------------------------------------------------------------
-# /v1/calibrate/predict-test  — uji prediksi pada sampel acak dari DB
+# /v1/calibrate/predict-test  - uji prediksi pada sampel acak dari DB
 # ---------------------------------------------------------------------------
 
 @app.post("/v1/calibrate/predict-test")
@@ -2493,7 +2709,7 @@ def calibrate_predict_test(
 
     if not is_calibration_model_available():
         raise HTTPException(status_code=400,
-                            detail="Model belum dilatih — klik 'Jalankan Training' dulu")
+                            detail="Model belum dilatih - klik 'Jalankan Training' dulu")
 
     rows = (
         db.query(models_db.CalibrationRecord)
@@ -2574,7 +2790,7 @@ def calibrate_predict_test(
 
 
 # ---------------------------------------------------------------------------
-# /serial — monitor port serial firmware via WebSocket
+# /serial - monitor port serial firmware via WebSocket
 # ---------------------------------------------------------------------------
 
 @app.get("/serial/ports")

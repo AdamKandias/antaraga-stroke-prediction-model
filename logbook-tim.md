@@ -1,12 +1,12 @@
 # LOGBOOK KEGIATAN TIM (PIC: ALL)
-## PKM-KC: ANTARAGA — Smartband Deteksi Risiko Stroke Berbasis PPG dan Kecerdasan Buatan
+## PKM-KC: ANTARAGA - Smartband Deteksi Risiko Stroke Berbasis PPG dan Kecerdasan Buatan
 
 > Berkas ini memuat entri berlabel **PIC: ALL** yang belum terisi pada logbook tim (CSV).
 > Isi entri berlaku untuk seluruh anggota yang hadir.
 
 ---
 
-## 23 Juli 2026 — Workshop Penulisan Laporan Kemajuan & Monev Internal 2 (360 menit)
+## 23 Juli 2026 - Workshop Penulisan Laporan Kemajuan & Monev Internal 2 (360 menit)
 
 **Kegiatan:**
 Mengikuti seluruh rangkaian Workshop Penulisan Laporan Kemajuan dan Monitoring Evaluasi Internal kedua yang diselenggarakan PKM Center PENS.
@@ -22,7 +22,7 @@ Mengikuti seluruh rangkaian Workshop Penulisan Laporan Kemajuan dan Monitoring E
 
 ---
 
-## 31 Juli 2026 — Bimbingan Hybrid bersama Dosen Pendamping (240 menit)
+## 31 Juli 2026 - Bimbingan Hybrid bersama Dosen Pendamping (240 menit)
 
 **Kegiatan:**
 Bimbingan hybrid bersama dosen pendamping untuk meninjau progres menyeluruh dan membahas kesiapan tahap pengujian terhadap subjek.
@@ -38,7 +38,7 @@ Bimbingan hybrid bersama dosen pendamping untuk meninjau progres menyeluruh dan 
 
 ---
 
-## 2 Agustus 2026 — Weekly Meeting Progres dan Evaluasi
+## 2 Agustus 2026 - Weekly Meeting Progres dan Evaluasi
 
 **Kegiatan:**
 Rapat mingguan untuk meninjau progres tiap anggota dan mengevaluasi capaian terhadap target yang ditetapkan.
@@ -53,7 +53,7 @@ Rapat mingguan untuk meninjau progres tiap anggota dan mengevaluasi capaian terh
 
 ---
 
-## 3 Agustus 2026 — Pengujian 1 Smartband ANTARAGA terhadap Relawan (240 menit)
+## 3 Agustus 2026 - Pengujian 1 Smartband ANTARAGA terhadap Relawan (240 menit)
 
 **Kegiatan:**
 Pengujian pertama smartband ANTARAGA terhadap relawan, sekaligus uji coba prosedur pengambilan data yang sudah disusun.
@@ -69,7 +69,7 @@ Pengujian pertama smartband ANTARAGA terhadap relawan, sekaligus uji coba prosed
 
 ---
 
-## 4 Agustus 2026 — Bimbingan dan Pencetakan Informed Consent (180 menit)
+## 4 Agustus 2026 - Bimbingan dan Pencetakan Informed Consent (180 menit)
 
 **Kegiatan:**
 Bimbingan bersama dosen pendamping sekaligus pencetakan dokumen informed consent untuk kebutuhan pengujian terhadap subjek.
@@ -85,7 +85,7 @@ Bimbingan bersama dosen pendamping sekaligus pencetakan dokumen informed consent
 
 ---
 
-## 13 Agustus 2026 — Ethical Clearance Keluar dan Finalisasi Berkas HKI (300 menit)
+## 13 Agustus 2026 - Ethical Clearance Keluar dan Finalisasi Berkas HKI (300 menit)
 
 **Kegiatan:**
 Menerima hasil ethical clearance dari KEPK FKM Universitas Airlangga, sekaligus menuntaskan penyiapan berkas pendaftaran HKI.
@@ -102,7 +102,7 @@ Menerima hasil ethical clearance dari KEPK FKM Universitas Airlangga, sekaligus 
 
 ---
 
-## 20 Agustus 2026 — Workshop Internal Teknis Pengajuan Hak Cipta (450 menit)
+## 20 Agustus 2026 - Workshop Internal Teknis Pengajuan Hak Cipta (450 menit)
 
 **Kegiatan:**
 Mengikuti Workshop Internal Teknis Pengajuan Hak Cipta yang diselenggarakan kampus, untuk memahami prosedur dan persyaratan pendaftaran HKI atas luaran PKM.
@@ -118,7 +118,7 @@ Mengikuti Workshop Internal Teknis Pengajuan Hak Cipta yang diselenggarakan kamp
 
 ---
 
-## 10–11 September 2026 — Technical Meeting dan Simulasi PKP2 (300 menit)
+## 10–11 September 2026 - Technical Meeting dan Simulasi PKP2 (300 menit)
 
 **Kegiatan:**
 Mengikuti technical meeting penyelenggara dan menjalankan simulasi Penilaian Kemajuan Program PKM (PKP2) sebagai persiapan penilaian resmi.

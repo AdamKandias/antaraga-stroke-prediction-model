@@ -1,0 +1,43 @@
+=================================================================
+TEKS SIAP TEMPEL UNTUK PLAY CONSOLE > DETAIL LOGIN
+Wajib berbahasa Inggris. Salin apa adanya ke tiap kolom.
+=================================================================
+
+-----------------------------------------------------------------
+KOLOM 1  "Nama"  (maks 60 karakter)
+-----------------------------------------------------------------
+Family caregiver demo account
+
+-----------------------------------------------------------------
+KOLOM 2  "Nama pengguna, alamat email, atau nomor telepon"  (maks 100)
+-----------------------------------------------------------------
+playreview@antaraga.web.id
+
+-----------------------------------------------------------------
+KOLOM 3  "Sandi"  (maks 100)
+-----------------------------------------------------------------
+AntaragaReview2026
+
+-----------------------------------------------------------------
+KOLOM 4  "Informasi lain yang diperlukan untuk mengakses aplikasi"
+         (maks 500 karakter)
+-----------------------------------------------------------------
+No 2-step verification, biometrics, QR code or payment is required.
+Sign in with the email and password above on the login screen.
+
+The account is pre-loaded with a demo elderly profile ("Ibu Sartika")
+and 30 days of vital-sign history, so every screen has content without
+the ANTARAGA wristband. All data is fictitious.
+
+The wristband is optional for review: readings are already stored on
+our server. Tap the wristband icon in the top bar to see the paired
+device screen.
+
+-----------------------------------------------------------------
+CENTANG kotak pernyataan di bagian bawah
+-----------------------------------------------------------------
+"Detail login dalam pernyataan ini memberikan akses penuh ke semua
+ fitur dan konten dalam aplikasi ini"
+
+Boleh dicentang. Aplikasi tidak punya konten berbayar, langganan,
+maupun tingkat akses. Akun ini melihat seluruh fitur yang ada.

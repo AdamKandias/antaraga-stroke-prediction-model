@@ -6,12 +6,12 @@ ANTARAGA's threshold/anomaly trigger fires.
 
 The Flutter app's assessment form already resolves each component to its
 point value before sending it (age >= 60, BP elevated, clinical feature
-0-2, duration 0-2, diabetes) — see `AssessmentResult` in
-lib/models/assessment.dart — so this module just sums and categorizes
+0-2, duration 0-2, diabetes) - see `AssessmentResult` in
+lib/models/assessment.dart - so this module just sums and categorizes
 rather than re-deriving the components from raw inputs.
 
 Risk-by-category percentages below are the original ABCD2 validation cohort
-figures (Johnston et al., 2007 — the same source physio-pedia's Stroke:
+figures (Johnston et al., 2007 - the same source physio-pedia's Stroke:
 Assessment page tabulates), used here only to give the family a concrete,
 literature-backed number alongside the urgency label.
 """

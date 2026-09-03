@@ -1,11 +1,11 @@
 # LOGBOOK KEGIATAN HARIAN
-## PKM-KC: ANTARAGA — Smartband Deteksi Risiko Stroke Berbasis PPG dan Kecerdasan Buatan
+## PKM-KC: ANTARAGA - Smartband Deteksi Risiko Stroke Berbasis PPG dan Kecerdasan Buatan
 
 | | |
 |---|---|
 | **Nama** | Zeven |
 | **Peran dalam Tim** | Desainer Visual · Dokumentasi · Konten Media Sosial |
-| **Periode** | 23 Mei 2026 — 25 September 2026 |
+| **Periode** | 23 Mei 2026 - 25 September 2026 |
 
 ---
 
@@ -14,7 +14,7 @@
 
 ---
 
-## 11 Juni 2026 — Dokumentasi Progres Pengembangan dan Penyiapan Aset Visual
+## 11 Juni 2026 - Dokumentasi Progres Pengembangan dan Penyiapan Aset Visual
 
 **Kegiatan:**
 Mendokumentasikan progres pengembangan sistem pada pekan pengembangan autentikasi API dan pengujian daya, sekaligus menyiapkan aset visual untuk kebutuhan unggahan berikutnya.
@@ -26,13 +26,13 @@ Mendokumentasikan progres pengembangan sistem pada pekan pengembangan autentikas
 - **Kendala**: sebagian progres berupa kode dan grafik sinyal yang sulit ditampilkan menarik, sehingga disiapkan pendekatan visual berupa penyederhanaan diagram alur
 
 📸 **Bukti yang perlu dilampirkan:**
-- `ZEVEN_dokumentasi progres tim.png` — foto proses kerja
-- `ZEVEN_aset visual templat konten.png` — kumpulan templat yang disiapkan
-- `ZEVEN_penyederhanaan diagram alur.png` — diagram yang disusun untuk konten
+- `ZEVEN_dokumentasi progres tim.png` - foto proses kerja
+- `ZEVEN_aset visual templat konten.png` - kumpulan templat yang disiapkan
+- `ZEVEN_penyederhanaan diagram alur.png` - diagram yang disusun untuk konten
 
 ---
 
-## 18 Juni 2026 — Diskusi Konsep Konten Kedua
+## 18 Juni 2026 - Diskusi Konsep Konten Kedua
 
 **Kegiatan:**
 Mengikuti diskusi perencanaan konsep konten kedua bersama tim, lalu menyusun rancangan visualnya.
@@ -45,13 +45,13 @@ Mengikuti diskusi perencanaan konsep konten kedua bersama tim, lalu menyusun ran
 - **Kendala yang dibahas**: penjelasan teknis PPG dan kecerdasan buatan berisiko membingungkan pembaca awam, sehingga disepakati memakai perumpamaan sederhana dan menghindari istilah teknis
 
 📸 **Bukti yang perlu dilampirkan:**
-- `ZEVEN_konsep konten kedua.png` — dokumen konsep beserta alur cerita
-- `ZEVEN_rancangan tata letak carousel.png` — sketsa tata letak
-- `ZEVEN_diskusi konsep bersama tim.png` — foto saat diskusi
+- `ZEVEN_konsep konten kedua.png` - dokumen konsep beserta alur cerita
+- `ZEVEN_rancangan tata letak carousel.png` - sketsa tata letak
+- `ZEVEN_diskusi konsep bersama tim.png` - foto saat diskusi
 
 ---
 
-## 30 Juli 2026 — Dokumentasi Persiapan Pengujian dan Konten Progres
+## 30 Juli 2026 - Dokumentasi Persiapan Pengujian dan Konten Progres
 
 **Kegiatan:**
 Mendokumentasikan persiapan pengujian smartband terhadap relawan, sekaligus menyiapkan bahan konten yang menampilkan progres sistem yang sudah berjalan.
@@ -63,9 +63,9 @@ Mendokumentasikan persiapan pengujian smartband terhadap relawan, sekaligus meny
 - **Kendala**: perekaman layar dashboard perlu dipastikan tidak menampilkan alamat server internal maupun data subjek, sehingga bagian tersebut ditutup saat pengambilan gambar
 
 📸 **Bukti yang perlu dilampirkan:**
-- `ZEVEN_dokumentasi perangkat lengkap.png` — foto smartband dalam kondisi siap pakai
-- `ZEVEN_rekaman dashboard untuk konten.png` — cuplikan rekaman dashboard
-- `ZEVEN_rancangan unggahan progres.png` — rancangan konten perkembangan
+- `ZEVEN_dokumentasi perangkat lengkap.png` - foto smartband dalam kondisi siap pakai
+- `ZEVEN_rekaman dashboard untuk konten.png` - cuplikan rekaman dashboard
+- `ZEVEN_rancangan unggahan progres.png` - rancangan konten perkembangan
 
 ---
 
@@ -73,7 +73,7 @@ Mendokumentasikan persiapan pengujian smartband terhadap relawan, sekaligus meny
 
 ---
 
-## 2 Agustus 2026 — Dokumentasi Progres dan Rancangan Konten (180 menit)
+## 2 Agustus 2026 - Dokumentasi Progres dan Rancangan Konten (180 menit)
 
 **Kegiatan:**
 Mengikuti rapat mingguan lalu mendokumentasikan progres sistem yang sudah berjalan sebagai bahan konten berikutnya.
@@ -88,7 +88,7 @@ Mengikuti rapat mingguan lalu mendokumentasikan progres sistem yang sudah berjal
 
 ---
 
-## 5 Agustus 2026 — Penyiapan Aset Visual Dokumen Perizinan (180 menit)
+## 5 Agustus 2026 - Penyiapan Aset Visual Dokumen Perizinan (180 menit)
 
 **Kegiatan:**
 Menyiapkan aset visual pendukung dokumen perizinan dan pengambilan data, agar berkas yang dibagikan ke subjek mudah dipahami.
@@ -103,7 +103,7 @@ Menyiapkan aset visual pendukung dokumen perizinan dan pengambilan data, agar be
 
 ---
 
-## 6 Agustus 2026 — Dokumentasi Pengujian 2 Smartband (360 menit)
+## 6 Agustus 2026 - Dokumentasi Pengujian 2 Smartband (360 menit)
 
 **Kegiatan:**
 Mendokumentasikan jalannya pengujian smartband kedua terhadap relawan.
@@ -118,7 +118,7 @@ Mendokumentasikan jalannya pengujian smartband kedua terhadap relawan.
 
 ---
 
-## 14 Agustus 2026 — Dokumentasi Penyerahan Berkas HKI (180 menit)
+## 14 Agustus 2026 - Dokumentasi Penyerahan Berkas HKI (180 menit)
 
 **Kegiatan:**
 Mendokumentasikan proses penyerahan berkas HKI dan menyiapkan bahan visual untuk laporan.
@@ -160,7 +160,7 @@ Mengolah dokumentasi yang terkumpul dari empat sesi pengujian, lalu menyiapkan b
 
 ---
 
-## 20 Agustus 2026 — Workshop Internal Teknis Pengajuan Hak Cipta (450 menit)
+## 20 Agustus 2026 - Workshop Internal Teknis Pengajuan Hak Cipta (450 menit)
 
 **Kegiatan:**
 Mengikuti Workshop Internal Teknis Pengajuan Hak Cipta, dengan perhatian pada perlindungan karya visual.
@@ -174,7 +174,7 @@ Mengikuti Workshop Internal Teknis Pengajuan Hak Cipta, dengan perhatian pada pe
 
 ---
 
-## 23 Agustus 2026 — Penyusunan Visual Laporan Kemajuan (360 menit)
+## 23 Agustus 2026 - Penyusunan Visual Laporan Kemajuan (360 menit)
 
 **Kegiatan:**
 Menyusun bahan visual untuk laporan kemajuan: diagram alur sistem, tangkapan layar, dan tata letak dokumen.
@@ -189,7 +189,7 @@ Menyusun bahan visual untuk laporan kemajuan: diagram alur sistem, tangkapan lay
 
 ---
 
-## 26 Agustus 2026 — Workshop Teknik Presentasi PKP2 (180 menit)
+## 26 Agustus 2026 - Workshop Teknik Presentasi PKP2 (180 menit)
 
 **Kegiatan:**
 Mengikuti Workshop Teknik Presentasi PKP2 dan mulai menyusun rancangan salindia presentasi.
@@ -203,7 +203,7 @@ Mengikuti Workshop Teknik Presentasi PKP2 dan mulai menyusun rancangan salindia 
 
 ---
 
-## 28 Agustus 2026 — Penyelesaian Salindia dan Asistensi Laporan (360 menit)
+## 28 Agustus 2026 - Penyelesaian Salindia dan Asistensi Laporan (360 menit)
 
 **Kegiatan:**
 Menyelesaikan salindia presentasi dan mengikuti asistensi laporan kemajuan ke dosen pendamping.
@@ -219,7 +219,7 @@ Menyelesaikan salindia presentasi dan mengikuti asistensi laporan kemajuan ke do
 
 ---
 
-## 29 Agustus 2026 — Finalisasi dan Pengunggahan Konten Media Sosial Ketiga (300 menit)
+## 29 Agustus 2026 - Finalisasi dan Pengunggahan Konten Media Sosial Ketiga (300 menit)
 
 **Kegiatan:**
 Menyelesaikan desain konten media sosial ketiga lalu mengunggahnya bersama tim.
@@ -234,7 +234,7 @@ Menyelesaikan desain konten media sosial ketiga lalu mengunggahnya bersama tim.
 
 ---
 
-## 30 Agustus 2026 — Dokumentasi Pengujian 5 Smartband (300 menit)
+## 30 Agustus 2026 - Dokumentasi Pengujian 5 Smartband (300 menit)
 
 **Kegiatan:**
 Mendokumentasikan pengujian smartband kelima.

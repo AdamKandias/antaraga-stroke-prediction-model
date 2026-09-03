@@ -9,7 +9,7 @@ from api.database import Base
 class User(Base):
     """A family account that logs in and can monitor multiple elderly
     profiles ("parent"). Login is by email OR phone (at least one set) +
-    password — no email verification, no third-party auth provider."""
+    password - no email verification, no third-party auth provider."""
 
     __tablename__ = "users"
 
@@ -68,6 +68,15 @@ class Profile(Base):
     residence_type: Mapped[str] = mapped_column(String, default="Urban")
     has_diabetes: Mapped[bool] = mapped_column(Boolean, default=False)
     family_history_stroke: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # DEVICE_ID gelang milik lansia ini, misal "antaraga-001".
+    #
+    # Sengaja diletakkan di Profile, bukan di User: satu akun keluarga dapat
+    # memantau beberapa orang tua, dan tiap orang tua memakai gelangnya
+    # sendiri.  Selama kolom ini masih menempel di User, data dari gelang
+    # mana pun akan jatuh ke profil yang kebetulan sedang dibuka, sehingga
+    # bacaan dua orang tercampur menjadi satu.
+    device_key: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -113,7 +122,7 @@ class CalibrationRecord(Base):
     gender: Mapped[str] = mapped_column(String, nullable=False)        # "L" / "P"
     kondisi: Mapped[str | None] = mapped_column(String, nullable=True) # "puasa" / "2j_makan"
 
-    # Sinyal mentah — disimpan sebagai string nilai dipisah ";" (kompatibel train_ppg_vitals.py)
+    # Sinyal mentah - disimpan sebagai string nilai dipisah ";" (kompatibel train_ppg_vitals.py)
     fs_hz: Mapped[float] = mapped_column(Float, nullable=False)
     green_raw: Mapped[str | None] = mapped_column(Text, nullable=True)
     red_raw: Mapped[str | None] = mapped_column(Text, nullable=True)

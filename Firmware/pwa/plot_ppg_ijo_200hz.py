@@ -177,7 +177,7 @@ def main():
     ax2.axvline(f_ppg, color="green", ls="--", lw=1, alpha=0.6,
                 label=f"PPG {f_ppg:.2f} Hz")
     ax2.axvline(50, color="red", ls="--", lw=1, alpha=0.4, label="50 Hz")
-    ax2.set_title("2. FFT — spektrum adc_raw")
+    ax2.set_title("2. FFT - spektrum adc_raw")
     ax2.set_xlabel("frekuensi (Hz)"); ax2.set_ylabel("magnitudo")
     ax2.legend(fontsize=8); ax2.grid(alpha=0.3)
 
@@ -185,14 +185,14 @@ def main():
     ax3 = fig.add_subplot(5, 1, 3)
     ax3.plot(t[m], vpg[m], color="#2980b9", lw=1.0)
     ax3.axhline(0, color="gray", lw=0.5)
-    ax3.set_title("3. VPG — Velocity PPG (turunan pertama)")
+    ax3.set_title("3. VPG - Velocity PPG (turunan pertama)")
     ax3.grid(alpha=0.3); ax3.set_ylabel("d PPG/dt")
 
     # (4) APG
     ax4 = fig.add_subplot(5, 1, 4)
     ax4.plot(t[m], apg[m], color="#16a085", lw=1.0)
     ax4.axhline(0, color="gray", lw=0.5)
-    ax4.set_title("4. APG — Acceleration PPG (turunan kedua / SDPPG)")
+    ax4.set_title("4. APG - Acceleration PPG (turunan kedua / SDPPG)")
     ax4.grid(alpha=0.3); ax4.set_ylabel("d2 PPG/dt2")
 
     # (5) Satu siklus VPG + APG dengan label
@@ -250,7 +250,7 @@ def main():
     if not labeled:
         ax5.text(0.5, 0.5, "Siklus tidak cukup jelas untuk pelabelan",
                  ha="center", transform=ax5.transAxes)
-    ax5.set_title("5. Satu siklus — VPG (w,y,z) + APG (a,b,c,d,e), dinormalisasi")
+    ax5.set_title("5. Satu siklus - VPG (w,y,z) + APG (a,b,c,d,e), dinormalisasi")
     ax5.set_xlabel("waktu dalam siklus (ms)")
     ax5.set_ylabel("ternormalisasi"); ax5.grid(alpha=0.3)
     ax5.legend(fontsize=8, loc="upper right")

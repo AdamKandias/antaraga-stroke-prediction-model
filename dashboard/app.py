@@ -32,8 +32,8 @@ Base.metadata.create_all(bind=engine)
 
 METRICS_PATH = Path(__file__).resolve().parent.parent / "model" / "artifacts" / "metrics.json"
 
-st.set_page_config(page_title="ANTARAGA — Model Dashboard", layout="wide")
-st.title("ANTARAGA — Dashboard Model & API")
+st.set_page_config(page_title="ANTARAGA - Model Dashboard", layout="wide")
+st.title("ANTARAGA - Dashboard Model & API")
 
 tab_predict, tab_metrics, tab_logs = st.tabs(["Coba Prediksi", "Metrics Model", "Log Riwayat"])
 

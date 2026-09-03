@@ -11,7 +11,7 @@ Expected input: a few seconds (recommend >= 8s) of one or more PPG channels
 (green from SON1303, red/infrared from MAX30102) sampled at a constant rate.
 
 BPM estimation uses Welch spectral method (same approach as the firmware
-reference scripts) rather than peak-counting — it is more robust on short
+reference scripts) rather than peak-counting - it is more robust on short
 or noisy windows and has no hard BPM ceiling from the min-distance constraint.
 """
 
@@ -55,7 +55,7 @@ def bandpass_filter(signal: np.ndarray, fs: float, low_hz: float = 0.5, high_hz:
 
 
 def bpm_from_spectrum(filtered: np.ndarray, fs: float) -> float | None:
-    """Welch-based heart rate — mirrors firmware reference scripts (plot_ppg_*.py).
+    """Welch-based heart rate - mirrors firmware reference scripts (plot_ppg_*.py).
 
     Uses power spectral density instead of peak-counting so it is robust to
     noise and short windows.  Returns None when the signal is too short or the
@@ -84,7 +84,7 @@ def bpm_from_spectrum(filtered: np.ndarray, fs: float) -> float | None:
             k = j
 
     # --- Parabolic interpolation ------------------------------------------
-    # Bin width is fs/nperseg — at 400 Hz over 8 s that is 0.125 Hz = 7.5 BPM.
+    # Bin width is fs/nperseg - at 400 Hz over 8 s that is 0.125 Hz = 7.5 BPM.
     # Fitting a parabola across the peak and its neighbours recovers sub-bin
     # resolution, so the reported rate is not quantised to 7.5 BPM steps.
     if 0 < k < len(bp) - 1:
@@ -106,7 +106,7 @@ def detect_pulses(filtered: np.ndarray, fs: float, invert: bool = False) -> list
     """Finds systolic peaks, then the pulse onset (the preceding local minimum)
     for each one, and computes basic per-pulse morphology features.
 
-    invert=True flips the signal before peak detection — required for reflective
+    invert=True flips the signal before peak detection - required for reflective
     PPG channels (RED / IR from MAX30102) where systole causes a dip, not a peak.
     Prominence threshold (0.4 × std) matches the firmware reference scripts."""
     sig = -filtered if invert else filtered
@@ -207,8 +207,8 @@ def extract_pwa_features(
     dip (not a peak), so invert=True is passed for those channels."""
     features: dict = {}
 
-    # SON1303 green: transmissive — peaks are real peaks, no inversion needed.
-    # MAX30102 red/IR: reflective — systole = dip → must invert before peak detection.
+    # SON1303 green: transmissive - peaks are real peaks, no inversion needed.
+    # MAX30102 red/IR: reflective - systole = dip → must invert before peak detection.
     channel_config = [
         ("green", green, False),
         ("red", red, True),

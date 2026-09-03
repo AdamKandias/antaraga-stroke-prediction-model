@@ -11,7 +11,7 @@
 2. [Peralatan yang Dibutuhkan](#2-peralatan-yang-dibutuhkan)
 3. [Persiapan Sebelum Sesi](#3-persiapan-sebelum-sesi)
 4. [Prosedur Langkah demi Langkah](#4-prosedur-langkah-demi-langkah)
-   - [4.1 ATURAN SELAMA AKUISISI — bacakan ke subjek](#41-aturan-selama-akuisisi--bacakan-ke-subjek)
+   - [4.1 ATURAN SELAMA AKUISISI - bacakan ke subjek](#41-aturan-selama-akuisisi--bacakan-ke-subjek)
    - [4.2 Verifikasi Sebelum Menekan Simpan](#42-verifikasi-sebelum-menekan-simpan)
 5. [Teknis Pengambilan Setiap Parameter](#5-teknis-pengambilan-setiap-parameter)
 6. [Kondisi Pengukuran (Kondisi)](#6-kondisi-pengukuran-kondisi)
@@ -43,12 +43,12 @@ atau dalam selisih waktu ≤ 2 menit (kondisi fisiologis subjek belum berubah si
 
 | Peralatan | Fungsi | Akurasi minimum |
 |---|---|---|
-| Jam ANTARAGA (dipakai di pergelangan tangan) | Sensor PPG 3 kanal | — |
+| Jam ANTARAGA (dipakai di pergelangan tangan) | Sensor PPG 3 kanal | - |
 | Glucometer + strip uji | Gula darah kapiler | ±15 mg/dL atau ±15% |
 | Tensimeter digital (sfigmomanometer) | Sistolik + Diastolik | ±3 mmHg |
 | Lancet + kapas alkohol | Tusukan jari untuk glukosa | steril, sekali pakai |
-| Laptop/HP dengan dashboard ANTARAGA | Rekam + simpan data | — |
-| Formulir atau buku catatan | Backup pencatatan | — |
+| Laptop/HP dengan dashboard ANTARAGA | Rekam + simpan data | - |
+| Formulir atau buku catatan | Backup pencatatan | - |
 
 Opsional (untuk proposal PKM):
 - Alat kolesterol (Cholesterol Analyzer, mis. Accutrend Plus)
@@ -76,14 +76,14 @@ Opsional (untuk proposal PKM):
 ### 3.3 Posisi Pemasangan
 
 - Pasang ANTARAGA di **pergelangan tangan** seperti jam tangan, sensor menghadap ke bawah (sisi kulit).
-- Posisi terbaik: sisi bagian dalam pergelangan (sisi arteri radial / nadi) — sinyal PPG lebih kuat di sini.
+- Posisi terbaik: sisi bagian dalam pergelangan (sisi arteri radial / nadi) - sinyal PPG lebih kuat di sini.
 - **Kencangkan tali** hingga pas: sensor harus menempel rapat tanpa menekan pembuluh darah.
   - Terlalu longgar → sinyal noise karena sensor bergerak.
   - Terlalu ketat → aliran darah terhambat, sinyal melemah.
-- Pastikan **tidak ada celah** antara sensor dan kulit; rambut di bawah sensor dapat menurunkan kualitas sinyal — bersihkan area jika perlu.
+- Pastikan **tidak ada celah** antara sensor dan kulit; rambut di bawah sensor dapat menurunkan kualitas sinyal - bersihkan area jika perlu.
 - Minta subjek agar **lengan diletakkan di atas meja, posisi rileks**, tidak bergerak selama akuisisi.
 
-### 3.4 Ketinggian Tangan — Jangan Diabaikan
+### 3.4 Ketinggian Tangan - Jangan Diabaikan
 
 Ini sumber kesalahan yang paling sering terlewat dan paling merusak data.
 
@@ -104,7 +104,7 @@ catat sebagai *ground truth* bisa meleset belasan mmHg. Model akan belajar dari
 angka yang salah, dan kesalahan itu tidak bisa diperbaiki belakangan.
 
 **Cara memastikan:** titik tengah manset sejajar dengan puting/ujung tulang dada.
-Sangga lengan dengan bantal atau tumpukan buku bila meja terlalu rendah — jangan
+Sangga lengan dengan bantal atau tumpukan buku bila meja terlalu rendah - jangan
 biarkan subjek menahan sendiri lengannya (otot menegang → tekanan darah naik).
 
 **Untuk pergelangan yang memakai ANTARAGA:**
@@ -114,7 +114,7 @@ terkumpul, perfusi naik). Tapi yang jauh lebih penting adalah **konsisten**:
 posisi yang sama untuk semua subjek, di semua sesi.
 
 Kalau tinggi tangan berubah-ubah antar subjek, perfusi ikut berubah karena posisi
-— bukan karena kondisi fisiologis. Model akan mengira variasi itu bermakna, padahal
+- bukan karena kondisi fisiologis. Model akan mengira variasi itu bermakna, padahal
 hanya artefak cara memegang.
 
 > **Aturan praktis:** kedua lengan di atas meja, telapak menghadap ke atas,
@@ -129,7 +129,7 @@ LANGKAH 1  Pasang ANTARAGA di pergelangan tangan seperti jam tangan (sensor ke d
 LANGKAH 2  Buka dashboard → pilih device dari dropdown → pastikan sinyal real-time terlihat
 LANGKAH 3  Tunggu sinyal stabil (biasanya 15–30 detik); minta subjek diam, lengan di atas meja
 LANGKAH 4  Ukur tekanan darah di lengan BERLAWANAN dari yang memakai ANTARAGA
-LANGKAH 5  Ukur gula darah (dan kolesterol / asam urat jika tersedia) — jari tangan mana saja
+LANGKAH 5  Ukur gula darah (dan kolesterol / asam urat jika tersedia) - jari tangan mana saja
 LANGKAH 6  Di dashboard → tab "Kalibrasi" → isi form identitas + nilai alat
 LANGKAH 7  Klik "Simpan Sesi Kalibrasi" → server otomatis ambil buffer PPG 10 detik terakhir
 LANGKAH 8  Verifikasi baris baru muncul di tabel dataset
@@ -138,20 +138,20 @@ LANGKAH 9  Bersihkan area tusukan, istirahatkan subjek, lanjut ke subjek berikut
 
 ---
 
-### 4.1 ATURAN SELAMA AKUISISI — bacakan ke subjek
+### 4.1 ATURAN SELAMA AKUISISI - bacakan ke subjek
 
 Sampaikan **sebelum** perekaman dimulai, bukan di tengah jalan. Menegur subjek saat
 sinyal sedang direkam justru membuat mereka bergerak dan bicara.
 
 > **"Selama sekitar satu menit ke depan, mohon:"**
 >
-> 1. **Duduk tenang** — punggung bersandar, kaki menapak lantai, jangan disilangkan
-> 2. **Jangan bicara** — termasuk menjawab pertanyaan; cukup anggukan bila perlu
-> 3. **Jangan menggerakkan tangan** — jari, pergelangan, maupun lengan
-> 4. **Jangan menggenggam atau mengepal** — telapak dibiarkan terbuka dan rileks
-> 5. **Bernapas biasa** — jangan menahan napas, jangan menarik napas dalam-dalam
+> 1. **Duduk tenang** - punggung bersandar, kaki menapak lantai, jangan disilangkan
+> 2. **Jangan bicara** - termasuk menjawab pertanyaan; cukup anggukan bila perlu
+> 3. **Jangan menggerakkan tangan** - jari, pergelangan, maupun lengan
+> 4. **Jangan menggenggam atau mengepal** - telapak dibiarkan terbuka dan rileks
+> 5. **Bernapas biasa** - jangan menahan napas, jangan menarik napas dalam-dalam
 > 6. **Jangan melihat layar HP** atau menoleh ke sana-sini
-> 7. **Jangan batuk, tertawa, atau bersin** bila bisa ditahan — kalau terpaksa,
+> 7. **Jangan batuk, tertawa, atau bersin** bila bisa ditahan - kalau terpaksa,
 >    beri tahu petugas agar perekaman diulang
 
 **Mengapa tiap aturan itu ada:**
@@ -172,7 +172,7 @@ keduanya.
 **Tugas petugas selama akuisisi:**
 
 - Berdiri di samping, **jangan mengajak bicara**
-- Pantau grafik PPG di dashboard — bentuk gelombang harus berulang teratur
+- Pantau grafik PPG di dashboard - bentuk gelombang harus berulang teratur
 - Perhatikan **SQI** di dashboard: tunggu sampai ≥ 70/100 dan tanpa flag merah
 - Bila muncul flag `MOTION` atau `FLAT`, tunggu hingga hilang sebelum menyimpan
 
@@ -186,7 +186,7 @@ Jangan langsung menekan Simpan begitu sinyal muncul. Empat hal wajib dicek:
 
 Server menyaring lonjakan BPM dengan membandingkan terhadap pembacaan sebelumnya.
 Bila Simpan ditekan seketika, penyaring belum punya acuan dan nilai pertama
-diterima apa adanya — termasuk bila nilai itu salah.
+diterima apa adanya - termasuk bila nilai itu salah.
 
 **2. Periksa BPM masuk akal**
 
@@ -195,7 +195,7 @@ Bandingkan kartu **"BPM · Tersaring"** dengan nadi yang Anda hitung manual
 ulangi perekaman.
 
 Waspadai khusus angka yang **tepat setengah atau tepat dua kali lipat** dari nadi
-manual — misal terbaca 42 padahal nadi 84. Itu *octave error*: detektor melewatkan
+manual - misal terbaca 42 padahal nadi 84. Itu *octave error*: detektor melewatkan
 satu dari dua denyut. Jangan disimpan.
 
 **3. Periksa perfusi wajar**
@@ -214,9 +214,9 @@ yang tampil adalah nilai lama. Tunggu sampai kembali hijau.
 
 ### 5.1 Gula Darah (Glucometer)
 
-1. Gunakan jari tangan mana saja — ANTARAGA ada di pergelangan tangan, tidak ada konflik dengan tusukan jari.
+1. Gunakan jari tangan mana saja - ANTARAGA ada di pergelangan tangan, tidak ada konflik dengan tusukan jari.
 2. Bersihkan ujung jari dengan kapas alkohol, biarkan **benar-benar kering** (alkohol basah mengencerkan darah → hasil melenceng).
-3. Tusuk sisi ujung jari (bukan tepat di tengah — lebih sedikit saraf).
+3. Tusuk sisi ujung jari (bukan tepat di tengah - lebih sedikit saraf).
 4. Usap tetes pertama (darah pertama mengandung cairan jaringan → buang).
 5. Tempelkan strip pada tetes darah kedua.
 6. Baca hasil setelah ±5 detik.
@@ -227,11 +227,11 @@ yang tampil adalah nilai lama. Tunggu sampai kembali hijau.
 ### 5.2 Tekanan Darah Sistolik / Diastolik (Tensimeter Digital)
 
 1. Pasang manset di lengan yang **tidak memakai ANTARAGA** (lengan berlawanan), setinggi jantung.
-   - Alasan: manset tensimeter menghentikan aliran darah sementara — jika dipasang di lengan yang sama dengan ANTARAGA, sinyal PPG akan hilang selama pengukuran.
-   - **Ketinggian manset wajib sejajar jantung** — lihat [3.4](#34-ketinggian-tangan--jangan-diabaikan). Lengan 20 cm terlalu rendah menaikkan sistolik ±15 mmHg.
+   - Alasan: manset tensimeter menghentikan aliran darah sementara - jika dipasang di lengan yang sama dengan ANTARAGA, sinyal PPG akan hilang selama pengukuran.
+   - **Ketinggian manset wajib sejajar jantung** - lihat [3.4](#34-ketinggian-tangan--jangan-diabaikan). Lengan 20 cm terlalu rendah menaikkan sistolik ±15 mmHg.
    - Manset menempel langsung di kulit, bukan di atas lengan baju yang digulung (gulungan menekan lengan).
 2. Subjek rileks, tidak bicara, tidak menggerakkan kedua lengan.
-3. Tekan start — tunggu otomatis mengembang dan membaca.
+3. Tekan start - tunggu otomatis mengembang dan membaca.
 4. Catat **sistolik (angka atas)** dan **diastolik (angka bawah)** dalam mmHg.
 5. Jika pembacaan pertama terasa tidak wajar, tunggu 2 menit dan ulang sekali.
 6. Masukkan kedua nilai ke field "Sistolik" dan "Diastolik" di dashboard.
@@ -249,7 +249,7 @@ Pasang ANTARAGA (pergelangan kiri) → Tensimeter (lengan kanan) → Glucometer 
 - Gunakan Accutrend Plus atau Nesco MultiCheck sesuai protokol alat.
 - Dapat menggunakan tetes darah yang sama dari tusukan glucometer (konsultasi panduan alat).
 - Masukkan nilai ke field "Kolesterol" dan "Asam Urat" di dashboard.
-- Jika tidak tersedia alat, biarkan field kosong — sistem akan melatih model hanya untuk target yang memiliki data.
+- Jika tidak tersedia alat, biarkan field kosong - sistem akan melatih model hanya untuk target yang memiliki data.
 
 ---
 
@@ -274,12 +274,12 @@ mendapatkan cakupan rentang gula darah yang lebih luas. Minimal: 1 sesi puasa + 
 
 | Target | N minimum (rekomendasi) | Catatan |
 |---|---|---|
-| Sekadar bisa dilatih | 5 subjek | Metrik **tidak valid** — jangan dilaporkan |
+| Sekadar bisa dilatih | 5 subjek | Metrik **tidak valid** - jangan dilaporkan |
 | Proof-of-concept | 20 subjek | Model bisa dilatih, LOO CV |
 | Laporan PKM | 30–50 subjek | Beralih ke 5-fold CV, metrik mulai bermakna |
 | Publikasi ilmiah | ≥ 50 subjek | ~10 sampel per fitur (7 fitur) |
 
-### Mengapa 5 Subjek Belum Cukup — Hasil Uji Nyata
+### Mengapa 5 Subjek Belum Cukup - Hasil Uji Nyata
 
 Diuji pada 5 subjek pertama ANTARAGA, dibandingkan dengan tolok ukur paling
 sederhana: **menebak nilai rata-rata, tanpa memakai sensor sama sekali**.
@@ -315,7 +315,7 @@ Tiga jebakan komposisi yang ditemukan pada 5 subjek pertama:
 
 Jebakan kedua paling berbahaya. Bila semua yang tua kebetulan sakit dan semua yang
 muda kebetulan sehat, model cukup menebak dari **umur** saja dan tetap terlihat
-akurat — sensornya tidak berperan sama sekali. Yang memutus ini: cari **lansia
+akurat - sensornya tidak berperan sama sekali. Yang memutus ini: cari **lansia
 dengan tekanan darah normal** dan **orang muda dengan tekanan darah tinggi**.
 
 Setiap subjek dapat diukur beberapa kali (kondisi berbeda), sehingga jumlah **baris** lebih banyak
@@ -324,9 +324,9 @@ dari jumlah **subjek unik**.
 ### Satu Sesi per Subjek ≈ 10 Menit
 
 ```
-5  menit  — persiapan & istirahat
-2  menit  — akuisisi PPG + pengukuran alat
-3  menit  — pencatatan + pembersihan
+5  menit  - persiapan & istirahat
+2  menit  - akuisisi PPG + pengukuran alat
+3  menit  - pencatatan + pembersihan
 ```
 
 ### ID Subjek
@@ -355,21 +355,21 @@ Setelah setiap sesi pengumpulan, ekspor CSV dan simpan ke:
 
 ### 8.3 Melatih Model
 
-**Cara termudah — lewat dashboard** (tidak perlu terminal):
+**Cara termudah - lewat dashboard** (tidak perlu terminal):
 
 Tab **Kalibrasi** → card "Pelatihan MLP":
 
 | Tombol | Fungsi |
 |---|---|
 | 🏥 **Latih dari Data Asli** | Melatih dari rekaman subjek sungguhan saja |
-| ⚡ **Latih dari Demo Data** | Melatih dari data sintetis — untuk menguji alur, **bukan** untuk klaim akurasi |
+| ⚡ **Latih dari Demo Data** | Melatih dari data sintetis - untuk menguji alur, **bukan** untuk klaim akurasi |
 | ⬇ **Unduh Laporan HTML** | Laporan lengkap: scatter plot, R², MAE, jumlah data |
 
 Setiap target menampilkan status **keterandalan**:
 
-- `TIDAK VALID` — di bawah 10 subjek; angkanya hasil undian sampel, jangan dilaporkan
-- `LEMAH` — 10–29 subjek; masih sangat goyah
-- `MEMADAI` — ≥ 30 subjek; boleh dilaporkan
+- `TIDAK VALID` - di bawah 10 subjek; angkanya hasil undian sampel, jangan dilaporkan
+- `LEMAH` - 10–29 subjek; masih sangat goyah
+- `MEMADAI` - ≥ 30 subjek; boleh dilaporkan
 
 **Alternatif lewat terminal:**
 
@@ -378,9 +378,9 @@ python model/train_mlp_calibration.py
 ```
 
 Output tersimpan di:
-- `model/artifacts/mlp_calibration.joblib` — model terlatih
-- `model/artifacts/mlp_calibration_metrics.json` — metrik (R², MAE, Akurasi)
-- `reports/kalibrasi/scatter_*.png` — scatter plot prediksi vs referensi
+- `model/artifacts/mlp_calibration.joblib` - model terlatih
+- `model/artifacts/mlp_calibration_metrics.json` - metrik (R², MAE, Akurasi)
+- `reports/kalibrasi/scatter_*.png` - scatter plot prediksi vs referensi
 
 ### 8.4 Memeriksa Ulang BPM yang Terlanjur Tersimpan
 
@@ -389,7 +389,7 @@ yang seharusnya), nilai itu bisa dihitung ulang dari sinyal mentah yang tetap
 tersimpan:
 
 ```bash
-# 1. Lihat dulu — tidak menulis apa pun
+# 1. Lihat dulu - tidak menulis apa pun
 curl -X POST "https://antaraga.web.id/v1/calibrate/recompute-bpm"
 
 # 2. Bila setuju, baru terapkan
@@ -397,8 +397,8 @@ curl -X POST "https://antaraga.web.id/v1/calibrate/recompute-bpm?apply=true"
 ```
 
 **Yang tidak tersentuh:** nilai alat ukur medis (gula darah, kolesterol, asam urat,
-sistolik, diastolik) dan sinyal mentah. Hanya kolom `bpm` — yang memang hasil
-hitung server, bukan hasil ukur alat — yang diperbarui, dan hanya bila selisihnya
+sistolik, diastolik) dan sinyal mentah. Hanya kolom `bpm` - yang memang hasil
+hitung server, bukan hasil ukur alat - yang diperbarui, dan hanya bila selisihnya
 memang berpola kesalahan oktaf. Perubahan tercatat di `logs/api.log`.
 
 ---
@@ -411,12 +411,12 @@ memang berpola kesalahan oktaf. Perubahan tercatat di `logs/api.log`.
 | "Hubungkan perangkat dulu" saat klik Simpan | Device ID belum dipilih | Pilih device di dropdown bagian atas |
 | Sinyal terlalu noise, tidak stabil | Jam terlalu longgar / subjek bergerak | Kencangkan tali ANTARAGA, minta subjek diam, lengan di atas meja |
 | Nilai gula darah jauh dari normal | Tusukan gagal / strip kotor / alkohol belum kering | Ulangi dengan strip baru setelah alkohol kering |
-| `sesi_ts` (waktu sesi) di tabel berbeda jauh | Server dan perangkat timezone berbeda | Server menggunakan UTC — tampilan dikonversi otomatis |
-| BPM terbaca **tepat setengah** dari nadi manual (mis. 42 vs 84) | *Octave error* — detektor melewatkan satu dari dua denyut | Jangan disimpan; tunggu sinyal membaik. Bila terlanjur, lihat [8.4](#84-memeriksa-ulang-bpm-yang-terlanjur-tersimpan) |
+| `sesi_ts` (waktu sesi) di tabel berbeda jauh | Server dan perangkat timezone berbeda | Server menggunakan UTC - tampilan dikonversi otomatis |
+| BPM terbaca **tepat setengah** dari nadi manual (mis. 42 vs 84) | *Octave error* - detektor melewatkan satu dari dua denyut | Jangan disimpan; tunggu sinyal membaik. Bila terlanjur, lihat [8.4](#84-memeriksa-ulang-bpm-yang-terlanjur-tersimpan) |
 | BPM mentok di angka ~60 dan tidak berubah | Kanal hijau terkunci pada artefak sambungan batch | Gunakan kartu **BPM · Tersaring** (bersumber dari IR), bukan angka kanal hijau |
-| Kartu BPM kuning terus bertuliskan "ditahan" | Sinyal buruk berkepanjangan — sensor longgar / subjek bergerak | Perbaiki pemasangan; setelah 15 detik nilai dilepas jadi "—" |
+| Kartu BPM kuning terus bertuliskan "ditahan" | Sinyal buruk berkepanjangan - sensor longgar / subjek bergerak | Perbaiki pemasangan; setelah 15 detik nilai dilepas jadi "-" |
 | Perfusi IR di luar 0,5–3,0‰ | Sensor kurang menempel atau terlalu ketat | Sesuaikan kekencangan tali |
-| Sistolik semua subjek terasa tinggi | Lengan tensimeter di bawah level jantung | Lihat [3.4](#34-ketinggian-tangan--jangan-diabaikan) — tiap 10 cm menambah ±7,7 mmHg |
+| Sistolik semua subjek terasa tinggi | Lengan tensimeter di bawah level jantung | Lihat [3.4](#34-ketinggian-tangan--jangan-diabaikan) - tiap 10 cm menambah ±7,7 mmHg |
 
 ---
 
@@ -426,7 +426,7 @@ memang berpola kesalahan oktaf. Perubahan tercatat di `logs/api.log`.
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│  ANTARAGA — PENGINGAT SESI KALIBRASI                       │
+│  ANTARAGA - PENGINGAT SESI KALIBRASI                       │
 ├────────────────────────────────────────────────────────────┤
 │  SEBELUM                                                   │
 │   □ Subjek duduk tenang 5–10 menit                         │
@@ -440,14 +440,14 @@ memang berpola kesalahan oktaf. Perubahan tercatat di `logs/api.log`.
 │      1. Duduk tenang                                       │
 │      2. Jangan bicara                                      │
 │      3. Jangan menggerakkan tangan                         │
-│      4. Jangan mengepal — telapak terbuka rileks           │
+│      4. Jangan mengepal - telapak terbuka rileks           │
 │      5. Bernapas biasa, jangan menahan napas               │
 │      6. Jangan melihat HP / menoleh                        │
 │      7. Bila ingin batuk atau bersin, beri tahu dulu"      │
 │                                                            │
 │  URUTAN                                                    │
 │   1. Pasang ANTARAGA (pergelangan kiri)                    │
-│   2. Tunggu sinyal stabil — SQI ≥ 70, tanpa flag merah     │
+│   2. Tunggu sinyal stabil - SQI ≥ 70, tanpa flag merah     │
 │   3. Tensimeter (lengan kanan, setinggi jantung)           │
 │   4. Glucometer (+ kolesterol / asam urat)                 │
 │   5. Isi form → cek 4 hal di bawah → Simpan                │
@@ -468,4 +468,4 @@ memang berpola kesalahan oktaf. Perubahan tercatat di `logs/api.log`.
 
 ---
 
-*Dokumen ini adalah bagian dari proposal PKM-KC ANTARAGA — Non-Invasive Early Stroke Detection Smartband.*
+*Dokumen ini adalah bagian dari proposal PKM-KC ANTARAGA - Non-Invasive Early Stroke Detection Smartband.*

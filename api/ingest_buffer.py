@@ -2,7 +2,7 @@
 
 Array PPG/RED/IR terlalu besar untuk disimpan di SQLite setiap 500ms.
 Modul ini menyimpan WINDOW terakhir per device (default ~10 detik),
-hanya dipakai oleh dashboard — bukan histori permanen."""
+hanya dipakai oleh dashboard - bukan histori permanen."""
 
 from collections import deque
 from datetime import datetime, timezone

@@ -1,10 +1,10 @@
-# PETA SOURCE CODE — DOKUMEN HKI ANTARAGA
+# PETA SOURCE CODE - DOKUMEN HKI ANTARAGA
 
 **Judul Ciptaan:** ANTARAGA: Smartband Berbasis Multi-Wavelength PPG dengan Artificial
 Intelligence Terintegrasi Aplikasi Mobile untuk Deteksi Dini Risiko Stroke Iskemik pada Lansia
 (Program Komputer)
 
-**Program:** Program Kreativitas Mahasiswa — Karsa Cipta (PKM-KC) 2026
+**Program:** Program Kreativitas Mahasiswa - Karsa Cipta (PKM-KC) 2026
 **Institusi:** Politeknik Elektronika Negeri Surabaya (PENS)
 
 **Pencipta:** Agrippina Waya Rahmaning Gusti, S.T., M.T. · Kadek Savita Dyutianaya ·
@@ -18,7 +18,7 @@ Dokumen ini adalah **peta source code** untuk lampiran HKI. Setiap baris tabel m
 satu fitur atau halaman, lengkap dengan nama berkas, rentang baris, dan penjelasan fungsinya.
 
 Nomor baris mengacu pada kondisi repositori saat dokumen ini disusun. Bila kode berubah,
-rentangnya ikut bergeser — cara memperbaruinya ada di [Lampiran B](#lampiran-b--memperbarui-nomor-baris).
+rentangnya ikut bergeser - cara memperbaruinya ada di [Lampiran B](#lampiran-b--memperbarui-nomor-baris).
 
 **Ruang lingkup:** dokumen ini mencakup **dua repositori**:
 
@@ -74,7 +74,7 @@ Smartband (XIAO ESP32-S3)                 Backend (FastAPI)                 Apli
 
 ```
 stroke-prediction-model/
-├── api/                          BACKEND — server FastAPI
+├── api/                          BACKEND - server FastAPI
 │   ├── main.py             2.548 Seluruh endpoint HTTP & WebSocket
 │   ├── calib_report.py       736 Laporan hasil pemeriksaan siap cetak (PDF)
 │   ├── bpm_engine.py         291 Perhitungan denyut jantung (deteksi puncak)
@@ -99,7 +99,7 @@ stroke-prediction-model/
 │   ├── database.py            20 Koneksi basis data
 │   ├── security.py             9 Hashing kata sandi
 │   └── static/
-│       ├── dashboard.html  2.503 WEB APP — dashboard riset
+│       ├── dashboard.html  2.503 WEB APP - dashboard riset
 │       └── index.html      1.220 Halaman publik (landing page)
 │
 ├── model/                        MODEL AI
@@ -156,7 +156,7 @@ antaraga/
 
 ---
 
-# BAGIAN A — BACKEND / SERVER API
+# BAGIAN A - BACKEND / SERVER API
 
 Berkas: `api/`. Kerangka kerja FastAPI, basis data SQLAlchemy (SQLite/PostgreSQL).
 
@@ -165,7 +165,7 @@ Berkas: `api/`. Kerangka kerja FastAPI, basis data SQLAlchemy (SQLite/PostgreSQL
 | Berkas | Baris | Fitur | Penjelasan |
 |---|---|---|---|
 | `api/main.py` | 1–50 | Impor & pendaftaran modul | Menyatukan seluruh modul: autentikasi, basis data, model AI, notifikasi, OTA. |
-| `api/main.py` | 41–50 | Siklus hidup aplikasi | `lifespan()` — menyalakan simulator perangkat keras saat mode pengembangan dan mematikannya saat server berhenti. |
+| `api/main.py` | 41–50 | Siklus hidup aplikasi | `lifespan()` - menyalakan simulator perangkat keras saat mode pengembangan dan mematikannya saat server berhenti. |
 | `api/main.py` | 52–66 | Inisialisasi & CORS | Pembuatan objek aplikasi dan izin lintas-asal agar aplikasi mobile dapat memanggil API. |
 | `api/main.py` | 93–147 | Pencatatan akses | Middleware yang mencatat setiap permintaan: IP, metode, jalur, kode status, dan lama proses. |
 | `api/config.py` | 1–60 | Konfigurasi terpusat | Seluruh pengaturan dibaca sekali dari berkas `.env`: koneksi basis data, kunci token, kunci perangkat keras, akun dashboard. |
@@ -176,13 +176,13 @@ Berkas: `api/`. Kerangka kerja FastAPI, basis data SQLAlchemy (SQLite/PostgreSQL
 
 | Berkas | Baris | Fitur | Penjelasan |
 |---|---|---|---|
-| `api/security.py` | 1–9 | Pengamanan kata sandi | Hashing bcrypt — kata sandi tidak pernah disimpan dalam bentuk asli. |
-| `api/auth.py` | 25–33 | Penerbitan token akses | `create_access_token()` — membuat JWT bertanda tangan berisi identitas pengguna dan masa berlaku. |
-| `api/auth.py` | 35–66 | Verifikasi token | `get_current_user_id()` — memeriksa keaslian dan masa berlaku token pada setiap permintaan aplikasi mobile. |
-| `api/auth.py` | 68–88 | Autentikasi perangkat keras | `get_ingest_user_id()` — menerima kunci statis firmware yang tidak dapat memperbarui JWT sendiri. |
-| `api/main.py` | 173–195 | **Halaman Daftar Akun Keluarga** | `POST /auth/register` — pendaftaran dengan email **atau** nomor HP, memeriksa duplikasi, langsung menerbitkan token. |
-| `api/main.py` | 198–212 | **Halaman Masuk (Login)** | `POST /auth/login` — verifikasi kredensial dan penerbitan token akses. |
-| `api/main.py` | 215–222 | Identitas pengguna aktif | `GET /auth/me` — mengembalikan data akun pemilik token. |
+| `api/security.py` | 1–9 | Pengamanan kata sandi | Hashing bcrypt - kata sandi tidak pernah disimpan dalam bentuk asli. |
+| `api/auth.py` | 25–33 | Penerbitan token akses | `create_access_token()` - membuat JWT bertanda tangan berisi identitas pengguna dan masa berlaku. |
+| `api/auth.py` | 35–66 | Verifikasi token | `get_current_user_id()` - memeriksa keaslian dan masa berlaku token pada setiap permintaan aplikasi mobile. |
+| `api/auth.py` | 68–88 | Autentikasi perangkat keras | `get_ingest_user_id()` - menerima kunci statis firmware yang tidak dapat memperbarui JWT sendiri. |
+| `api/main.py` | 173–195 | **Halaman Daftar Akun Keluarga** | `POST /auth/register` - pendaftaran dengan email **atau** nomor HP, memeriksa duplikasi, langsung menerbitkan token. |
+| `api/main.py` | 198–212 | **Halaman Masuk (Login)** | `POST /auth/login` - verifikasi kredensial dan penerbitan token akses. |
+| `api/main.py` | 215–222 | Identitas pengguna aktif | `GET /auth/me` - mengembalikan data akun pemilik token. |
 
 ## A.3 Skema Basis Data
 
@@ -201,34 +201,34 @@ Setiap baris di bawah ini melayani satu halaman pada aplikasi mobile.
 
 | Berkas | Baris | Halaman Mobile | Penjelasan |
 |---|---|---|---|
-| `api/main.py` | 238–271 | **Halaman Profil Orang Tua/Lansia** | `POST /profiles` — menyimpan data lansia dan menghitung usia otomatis dari tanggal lahir. Profil pertama menjadi profil aktif. |
-| `api/main.py` | 225–235 | Daftar lansia dipantau | `GET /profiles` — seluruh profil milik satu akun keluarga. |
-| `api/main.py` | 274–296 | Pemilihan profil aktif | `GET /profiles/active` dan `GET /profiles/{id}` — menentukan lansia yang sedang ditampilkan. |
-| `api/main.py` | 299–324 | Penyuntingan profil | `PUT /profiles/{id}` — pembaruan sebagian data tanpa menghapus kolom lain. |
-| `api/main.py` | 327–343 | Pergantian profil | `POST /profiles/{id}/select` — berpindah lansia yang dipantau. |
-| `api/main.py` | 661–688 | **Halaman Hubungkan Perangkat** | `POST /device/pair` — memasangkan Device ID smartband (mis. `antaraga-001`) ke akun keluarga. |
-| `api/main.py` | 691–700 | Status perangkat | `GET /device/status` — menampilkan perangkat yang sedang terhubung. |
-| `api/main.py` | 1031–1050 | Validasi Device ID | `GET /v1/devices/{id}/check` — memastikan perangkat benar-benar ada sebelum dipasangkan. |
-| `api/main.py` | 382–427 | **Halaman Dashboard Utama** | `GET /vitals/latest` — kartu tekanan darah, denyut jantung, dan gula darah terbaru beserta indikator status warna. |
-| `api/main.py` | 430–463 | **Halaman Statistik Harian** & **Detak Jantung (BPM)** | `GET /vitals/history` — riwayat pembacaan untuk grafik tren dan linimasa per jam. |
-| `api/main.py` | 346–379 | **Prediksi Risiko (AI)** | `POST /predict/stroke-risk` — menggabungkan profil dan data vital, menjalankan model Gradient Boosting, mengembalikan tingkat risiko beserta penanda faktor risiko. |
-| `api/main.py` | 466–497 | **Halaman Assessment ABCD2** | `POST /assessment/abcd2` — skoring lima kategori (usia, tekanan darah, fitur klinis, durasi gejala, diabetes), menghasilkan stratifikasi rendah/sedang/tinggi beserta rekomendasi tindakan. |
-| `api/main.py` | 500–545 | Estimasi vital dari PPG | `POST /estimate/vitals-from-ppg` — mengubah sinyal PPG mentah menjadi estimasi vital melalui model MLP. |
-| `api/main.py` | 160–170 | Pendaftaran notifikasi | `POST /device/register-token` — menyimpan token FCM perangkat agar dapat menerima peringatan dini. |
+| `api/main.py` | 238–271 | **Halaman Profil Orang Tua/Lansia** | `POST /profiles` - menyimpan data lansia dan menghitung usia otomatis dari tanggal lahir. Profil pertama menjadi profil aktif. |
+| `api/main.py` | 225–235 | Daftar lansia dipantau | `GET /profiles` - seluruh profil milik satu akun keluarga. |
+| `api/main.py` | 274–296 | Pemilihan profil aktif | `GET /profiles/active` dan `GET /profiles/{id}` - menentukan lansia yang sedang ditampilkan. |
+| `api/main.py` | 299–324 | Penyuntingan profil | `PUT /profiles/{id}` - pembaruan sebagian data tanpa menghapus kolom lain. |
+| `api/main.py` | 327–343 | Pergantian profil | `POST /profiles/{id}/select` - berpindah lansia yang dipantau. |
+| `api/main.py` | 661–688 | **Halaman Hubungkan Perangkat** | `POST /device/pair` - memasangkan Device ID smartband (mis. `antaraga-001`) ke akun keluarga. |
+| `api/main.py` | 691–700 | Status perangkat | `GET /device/status` - menampilkan perangkat yang sedang terhubung. |
+| `api/main.py` | 1031–1050 | Validasi Device ID | `GET /v1/devices/{id}/check` - memastikan perangkat benar-benar ada sebelum dipasangkan. |
+| `api/main.py` | 382–427 | **Halaman Dashboard Utama** | `GET /vitals/latest` - kartu tekanan darah, denyut jantung, dan gula darah terbaru beserta indikator status warna. |
+| `api/main.py` | 430–463 | **Halaman Statistik Harian** & **Detak Jantung (BPM)** | `GET /vitals/history` - riwayat pembacaan untuk grafik tren dan linimasa per jam. |
+| `api/main.py` | 346–379 | **Prediksi Risiko (AI)** | `POST /predict/stroke-risk` - menggabungkan profil dan data vital, menjalankan model Gradient Boosting, mengembalikan tingkat risiko beserta penanda faktor risiko. |
+| `api/main.py` | 466–497 | **Halaman Assessment ABCD2** | `POST /assessment/abcd2` - skoring lima kategori (usia, tekanan darah, fitur klinis, durasi gejala, diabetes), menghasilkan stratifikasi rendah/sedang/tinggi beserta rekomendasi tindakan. |
+| `api/main.py` | 500–545 | Estimasi vital dari PPG | `POST /estimate/vitals-from-ppg` - mengubah sinyal PPG mentah menjadi estimasi vital melalui model MLP. |
+| `api/main.py` | 160–170 | Pendaftaran notifikasi | `POST /device/register-token` - menyimpan token FCM perangkat agar dapat menerima peringatan dini. |
 | `api/profile_utils.py` | 15–115 | Logika pendukung profil | Perhitungan usia dari tanggal lahir (15–21), penurunan status hipertensi (22–27), pemilihan profil aktif (28–48), penyimpanan pembacaan vital (49–73), penyusunan fitur untuk model AI (74–90), dan penentuan penanda risiko (91–115). |
 
-## A.5 Penerimaan Data Smartband — Alur Inti Peringatan Dini
+## A.5 Penerimaan Data Smartband - Alur Inti Peringatan Dini
 
 Blok ini merupakan **mekanisme inti ANTARAGA**: dari sinyal mentah smartband hingga
 push notification ke aplikasi keluarga, seluruhnya berjalan dalam satu permintaan.
 
 | Berkas | Baris | Tahap | Penjelasan |
 |---|---|---|---|
-| `api/main.py` | 703–730 | Penerimaan batch | `POST /v1/ingest` — menerima kiriman sinyal dari firmware, mencari akun pemilik perangkat, menyimpan ke penyangga memori. |
-| `api/main.py` | 731–808 | Tahap 1 — Estimasi vital | Pulse Wave Analysis atas sinyal PPG, lalu inferensi MLP menghasilkan tekanan darah dan gula darah tidak puasa. |
-| `api/main.py` | 809–816 | Tahap 2 — Prediksi risiko | Estimasi vital digabung dengan profil lansia, dijalankan melalui model Gradient Boosting. |
-| `api/main.py` | 817–851 | Tahap 3 — Penyimpanan | Hasil disimpan sebagai `VitalReading` sehingga muncul di Dashboard Utama dan Statistik Harian aplikasi. |
-| `api/main.py` | 852–869 | Tahap 4 — Peringatan dini | Bila risiko **HIGH**, push notification dikirim ke aplikasi keluarga. Dilengkapi jeda antar-notifikasi agar tidak mengirim berulang-ulang. |
+| `api/main.py` | 703–730 | Penerimaan batch | `POST /v1/ingest` - menerima kiriman sinyal dari firmware, mencari akun pemilik perangkat, menyimpan ke penyangga memori. |
+| `api/main.py` | 731–808 | Tahap 1 - Estimasi vital | Pulse Wave Analysis atas sinyal PPG, lalu inferensi MLP menghasilkan tekanan darah dan gula darah tidak puasa. |
+| `api/main.py` | 809–816 | Tahap 2 - Prediksi risiko | Estimasi vital digabung dengan profil lansia, dijalankan melalui model Gradient Boosting. |
+| `api/main.py` | 817–851 | Tahap 3 - Penyimpanan | Hasil disimpan sebagai `VitalReading` sehingga muncul di Dashboard Utama dan Statistik Harian aplikasi. |
+| `api/main.py` | 852–869 | Tahap 4 - Peringatan dini | Bila risiko **HIGH**, push notification dikirim ke aplikasi keluarga. Dilengkapi jeda antar-notifikasi agar tidak mengirim berulang-ulang. |
 | `api/main.py` | 872–932 | Penyaring mutu sinyal | Batch bermutu buruk (jari bergerak, perfusi lemah, sensor lepas) dibuang sebelum dianalisis, agar estimasi tidak tercemar data sampah. |
 | `api/ingest_buffer.py` | 1–64 | Penyangga sinyal | Menyimpan sinyal beberapa detik terakhir di memori untuk analisis real-time tanpa membebani basis data. |
 | `api/fcm.py` | 23–96 | Pengiriman notifikasi | Integrasi Firebase Cloud Messaging; sistem tetap berjalan normal walau notifikasi tidak dikonfigurasi. |
@@ -237,30 +237,30 @@ push notification ke aplikasi keluarga, seluruhnya berjalan dalam satu permintaa
 
 | Berkas | Baris | Fitur | Penjelasan |
 |---|---|---|---|
-| `api/ppg_analysis.py` | 18–37 | Rerata bergerak | `movavg()` — penghalusan sinyal dengan jendela terpangkas di tepi, mencegah kerusakan sinyal di ujung rekaman. |
-| `api/ppg_analysis.py` | 39–41 | Penghilangan tren | `detrend()` — memisahkan komponen denyut dari pergeseran garis dasar. |
-| `api/ppg_analysis.py` | 43–71 | Penapis pita | `ac_signal()` — Butterworth 0,5–5 Hz zero-phase: membuang drift termal dan modulasi napas di bawahnya, derau di atasnya, tanpa menggeser posisi puncak. |
-| `api/ppg_analysis.py` | 74–130 | Denyut via autokorelasi | `bpm_autocorr()` — perhitungan denyut jantung melalui autokorelasi berbasis FFT beserta ukuran keyakinannya. |
-| `api/ppg_analysis.py` | 150–191 | Statistik kanal | `channel_stats()` — komponen DC, amplitudo AC, dan indeks perfusi tiap kanal warna. |
-| `api/ppg_analysis.py` | 193–219 | Estimasi regresi linier | `compute_linreg_vitals()` — estimasi awal gula darah, kolesterol, dan asam urat sebelum model terkalibrasi tersedia. |
-| `api/bpm_engine.py` | 68–291 | Mesin denyut jantung | `compute_bpm()` — deteksi puncak dan median interval antar-denyut; port algoritma yang sama dengan firmware agar hasil server dan perangkat konsisten. |
+| `api/ppg_analysis.py` | 18–37 | Rerata bergerak | `movavg()` - penghalusan sinyal dengan jendela terpangkas di tepi, mencegah kerusakan sinyal di ujung rekaman. |
+| `api/ppg_analysis.py` | 39–41 | Penghilangan tren | `detrend()` - memisahkan komponen denyut dari pergeseran garis dasar. |
+| `api/ppg_analysis.py` | 43–71 | Penapis pita | `ac_signal()` - Butterworth 0,5–5 Hz zero-phase: membuang drift termal dan modulasi napas di bawahnya, derau di atasnya, tanpa menggeser posisi puncak. |
+| `api/ppg_analysis.py` | 74–130 | Denyut via autokorelasi | `bpm_autocorr()` - perhitungan denyut jantung melalui autokorelasi berbasis FFT beserta ukuran keyakinannya. |
+| `api/ppg_analysis.py` | 150–191 | Statistik kanal | `channel_stats()` - komponen DC, amplitudo AC, dan indeks perfusi tiap kanal warna. |
+| `api/ppg_analysis.py` | 193–219 | Estimasi regresi linier | `compute_linreg_vitals()` - estimasi awal gula darah, kolesterol, dan asam urat sebelum model terkalibrasi tersedia. |
+| `api/bpm_engine.py` | 68–291 | Mesin denyut jantung | `compute_bpm()` - deteksi puncak dan median interval antar-denyut; port algoritma yang sama dengan firmware agar hasil server dan perangkat konsisten. |
 | `api/bpm_filter.py` | 45–177 | Penyaring lonjakan denyut | Menolak lompatan nilai tidak wajar (*octave error*) dan menahan nilai terakhir yang sahih, sehingga angka denyut tidak berkedip-kedip. |
-| `api/main.py` | 1140–1207 | Pulse Wave Analysis | `_compute_pwa()` — ekstraksi fitur morfologi gelombang denyut untuk masukan model MLP. |
-| `api/main.py` | 1209–1258 | Analisis multi-kanal | `_compute_ppg_analysis()` — menjalankan analisis atas ketiga kanal warna sekaligus. |
+| `api/main.py` | 1140–1207 | Pulse Wave Analysis | `_compute_pwa()` - ekstraksi fitur morfologi gelombang denyut untuk masukan model MLP. |
+| `api/main.py` | 1209–1258 | Analisis multi-kanal | `_compute_ppg_analysis()` - menjalankan analisis atas ketiga kanal warna sekaligus. |
 
 ## A.7 Inferensi Model AI
 
 | Berkas | Baris | Fitur | Penjelasan |
 |---|---|---|---|
-| `api/ml.py` | 22–28 | Pemuatan model | `load_artifact()` — memuat model Gradient Boosting terlatih beserta pra-pemrosesnya. |
-| `api/ml.py` | 30–55 | Penentuan tingkat risiko | `_risk_level()` — mengubah probabilitas menjadi kategori rendah/sedang/tinggi berdasarkan ambang hasil pelatihan. |
-| `api/ml.py` | 57–74 | Penyusunan fitur | `_build_row()` — menyusun fitur profil dan vital sesuai urutan yang dipakai saat pelatihan. |
-| `api/ml.py` | 76–90 | Prediksi risiko stroke | `predict_stroke_risk()` — antarmuka utama model Gradient Boosting. |
+| `api/ml.py` | 22–28 | Pemuatan model | `load_artifact()` - memuat model Gradient Boosting terlatih beserta pra-pemrosesnya. |
+| `api/ml.py` | 30–55 | Penentuan tingkat risiko | `_risk_level()` - mengubah probabilitas menjadi kategori rendah/sedang/tinggi berdasarkan ambang hasil pelatihan. |
+| `api/ml.py` | 57–74 | Penyusunan fitur | `_build_row()` - menyusun fitur profil dan vital sesuai urutan yang dipakai saat pelatihan. |
+| `api/ml.py` | 76–90 | Prediksi risiko stroke | `predict_stroke_risk()` - antarmuka utama model Gradient Boosting. |
 | `api/ml_calibration.py` | 30–43 | Ketersediaan model | Memeriksa apakah model MLP hasil kalibrasi sudah dilatih. |
-| `api/ml_calibration.py` | 45–80 | Prediksi vital | `predict_vitals()` — estimasi gula darah, kolesterol, asam urat, sistolik, dan diastolik dari fitur sinyal PPG. |
-| `api/ml_calibration.py` | 82–110 | Penanda risiko dari vital | `compute_risk_flags_from_vitals()` — menandai nilai yang melewati ambang klinis. |
-| `api/main.py` | 1275–1329 | Orkestrasi MLP | `_compute_mlp()` — menjalankan model kalibrasi atas sinyal terkini untuk ditampilkan di dashboard. |
-| `api/main.py` | 1331–1374 | Orkestrasi Gradient Boosting | `_compute_xgboost()` — mengambil prediksi risiko terakhir dan menggabungkannya dengan penanda risiko profil. |
+| `api/ml_calibration.py` | 45–80 | Prediksi vital | `predict_vitals()` - estimasi gula darah, kolesterol, asam urat, sistolik, dan diastolik dari fitur sinyal PPG. |
+| `api/ml_calibration.py` | 82–110 | Penanda risiko dari vital | `compute_risk_flags_from_vitals()` - menandai nilai yang melewati ambang klinis. |
+| `api/main.py` | 1275–1329 | Orkestrasi MLP | `_compute_mlp()` - menjalankan model kalibrasi atas sinyal terkini untuk ditampilkan di dashboard. |
+| `api/main.py` | 1331–1374 | Orkestrasi Gradient Boosting | `_compute_xgboost()` - mengambil prediksi risiko terakhir dan menggabungkannya dengan penanda risiko profil. |
 
 ## A.8 Pembaruan Firmware Jarak Jauh (OTA)
 
@@ -270,7 +270,7 @@ push notification ke aplikasi keluarga, seluruhnya berjalan dalam satu permintaa
 | `api/ota.py` | 73–126 | Pustaka firmware | Daftar dan unggah berkas firmware baru dari dashboard. |
 | `api/ota.py` | 128–165 | Pengelolaan versi | Penyuntingan keterangan dan penghapusan versi lama. |
 | `api/ota.py` | 167–214 | Penyebaran & status | Menetapkan versi yang harus dipasang perangkat, serta memantau perangkat yang sudah menerimanya. |
-| `api/ota.py` | 216–276 | Endpoint perangkat | `/v1/ota/check`, `/v1/ota/firmware`, `/v1/ota/ack` — dipanggil smartband untuk memeriksa, mengunduh, dan mengonfirmasi pembaruan. |
+| `api/ota.py` | 216–276 | Endpoint perangkat | `/v1/ota/check`, `/v1/ota/firmware`, `/v1/ota/ack` - dipanggil smartband untuk memeriksa, mengunduh, dan mengonfirmasi pembaruan. |
 | `api/firmware.py` | 35–169 | Kompilasi dari web | Pembacaan dan penulisan `config.h` (35–76), daftar program (102–150), serta kompilasi dan flashing dengan keluaran langsung ke layar (151–169). |
 
 ## A.9 Simulator & Perkakas Pengembangan
@@ -279,14 +279,14 @@ push notification ke aplikasi keluarga, seluruhnya berjalan dalam satu permintaa
 |---|---|---|---|
 | `api/hw_simulator.py` | 50–119 | Sinyal PPG sintetis | Pembangkitan gelombang denyut tiruan beserta derau realistis, untuk menguji seluruh alur tanpa perangkat keras. |
 | `api/simulator.py` | 35–127 | Simulator data vital | Pengiriman data vital berkala ke akun yang sedang aktif selama mode pengembangan. |
-| `api/main.py` | 547–571 | Kendali simulator | `/v1/sim/start`, `/v1/sim/stop`, `/v1/sim/status` — menyalakan dan mematikan simulator dari dashboard. |
-| `api/main.py` | 2484–2548 | Monitor serial | `GET /serial/ports` dan WebSocket `/serial/ws` — membaca keluaran serial smartband langsung dari peramban. |
+| `api/main.py` | 547–571 | Kendali simulator | `/v1/sim/start`, `/v1/sim/stop`, `/v1/sim/status` - menyalakan dan mematikan simulator dari dashboard. |
+| `api/main.py` | 2484–2548 | Monitor serial | `GET /serial/ports` dan WebSocket `/serial/ws` - membaca keluaran serial smartband langsung dari peramban. |
 
 ---
 
-# BAGIAN B — WEB APP (DASHBOARD RISET)
+# BAGIAN B - WEB APP (DASHBOARD RISET)
 
-Berkas utama: `api/static/dashboard.html` (2.503 baris) — satu berkas mandiri berisi struktur,
+Berkas utama: `api/static/dashboard.html` (2.503 baris) - satu berkas mandiri berisi struktur,
 gaya, dan logika. Dashboard ini **alat internal tim riset**, terpisah dari aplikasi mobile keluarga.
 
 ## B.1 Halaman Login & Pengamanan Akses
@@ -294,7 +294,7 @@ gaya, dan logika. Dashboard ini **alat internal tim riset**, terpisah dari aplik
 | Berkas | Baris | Halaman/Fitur | Penjelasan |
 |---|---|---|---|
 | `api/login_page.py` | 1–76 | **Halaman Login Dashboard** | Formulir masuk berlogo ANTARAGA, mengikuti tema terang/gelap perangkat. Logo ditanam langsung ke halaman sehingga tidak bergantung berkas luar. |
-| `api/dashboard_auth.py` | 36–70 | Token sesi | Pembuatan dan verifikasi cookie sesi bertanda tangan HMAC-SHA256 — cookie tidak dapat dipalsukan pengunjung. |
+| `api/dashboard_auth.py` | 36–70 | Token sesi | Pembuatan dan verifikasi cookie sesi bertanda tangan HMAC-SHA256 - cookie tidak dapat dipalsukan pengunjung. |
 | `api/dashboard_auth.py` | 72–77 | Pemeriksaan kredensial | Perbandingan waktu-tetap agar kata sandi tidak bocor melalui perbedaan waktu proses. |
 | `api/dashboard_auth.py` | 79–106 | Pembatas percobaan login | Maksimum 8 kegagalan per alamat IP dalam 5 menit, menahan penebakan kata sandi otomatis. |
 | `api/dashboard_auth.py` | 108–140 | Cakupan halaman terlindungi | Daftar jalur yang wajib login. Jalur perangkat keras sengaja dikecualikan karena firmware tidak dapat menyimpan cookie. |
@@ -319,36 +319,36 @@ gaya, dan logika. Dashboard ini **alat internal tim riset**, terpisah dari aplik
 
 ## B.3 Halaman-Halaman Dashboard
 
-### Tab 1 — Data Asli (Sinyal Mentah)
+### Tab 1 - Data Asli (Sinyal Mentah)
 
 | Berkas | Baris | Penjelasan |
 |---|---|---|
 | `api/static/dashboard.html` | 289–329 | Struktur halaman: tiga grafik sinyal mentah (hijau, merah, inframerah) beserta panel mutu sinyal. |
-| `api/static/dashboard.html` | 1213–1286 | `renderRaw()` — penggambaran sinyal mentah apa adanya dari sensor, tanpa pengolahan. |
-| `api/static/dashboard.html` | 1142–1212 | `renderStats()` dan `renderSqi()` — statistik kanal dan penerjemahan kode mutu sinyal menjadi keterangan yang dapat dibaca. |
+| `api/static/dashboard.html` | 1213–1286 | `renderRaw()` - penggambaran sinyal mentah apa adanya dari sensor, tanpa pengolahan. |
+| `api/static/dashboard.html` | 1142–1212 | `renderStats()` dan `renderSqi()` - statistik kanal dan penerjemahan kode mutu sinyal menjadi keterangan yang dapat dibaca. |
 
-### Tab 2 — Setelah PWA (Pulse Wave Analysis)
+### Tab 2 - Setelah PWA (Pulse Wave Analysis)
 
 | Berkas | Baris | Penjelasan |
 |---|---|---|
 | `api/static/dashboard.html` | 330–355 | Struktur halaman: sinyal setelah penapisan beserta fitur morfologi hasil ekstraksi. |
-| `api/static/dashboard.html` | 1287–1386 | `renderPwa()` — penggambaran sinyal terfilter, penandaan puncak denyut, dan penampilan fitur gelombang. |
+| `api/static/dashboard.html` | 1287–1386 | `renderPwa()` - penggambaran sinyal terfilter, penandaan puncak denyut, dan penampilan fitur gelombang. |
 
-### Tab 3 — Setelah MLP (Estimasi Vital)
+### Tab 3 - Setelah MLP (Estimasi Vital)
 
 | Berkas | Baris | Penjelasan |
 |---|---|---|
 | `api/static/dashboard.html` | 356–418 | Struktur halaman: kartu estimasi gula darah, kolesterol, asam urat, tekanan darah, beserta penanda risiko. |
-| `api/static/dashboard.html` | 1859–1917 | `renderMlp()` dan `tile()` — penampilan hasil estimasi model kalibrasi beserta status warnanya. |
+| `api/static/dashboard.html` | 1859–1917 | `renderMlp()` dan `tile()` - penampilan hasil estimasi model kalibrasi beserta status warnanya. |
 
-### Tab 4 — Setelah XGBoost (Prediksi Risiko Stroke)
+### Tab 4 - Setelah XGBoost (Prediksi Risiko Stroke)
 
 | Berkas | Baris | Penjelasan |
 |---|---|---|
 | `api/static/dashboard.html` | 419–426 | Struktur halaman prediksi risiko akhir. |
-| `api/static/dashboard.html` | 1918–1963 | `renderXgb()` — penampilan tingkat risiko, probabilitas, dan daftar faktor risiko yang terdeteksi. |
+| `api/static/dashboard.html` | 1918–1963 | `renderXgb()` - penampilan tingkat risiko, probabilitas, dan daftar faktor risiko yang terdeteksi. |
 
-### Tab 5 — Firmware Manager
+### Tab 5 - Firmware Manager
 
 | Berkas | Baris | Penjelasan |
 |---|---|---|
@@ -359,14 +359,14 @@ gaya, dan logika. Dashboard ini **alat internal tim riset**, terpisah dari aplik
 | `api/static/dashboard.html` | 2192–2245 | Penyuntingan `config.h` langsung dari peramban. |
 | `api/static/dashboard.html` | 2246–2270 | Kompilasi dan flashing dengan keluaran langsung ke terminal di halaman. |
 
-### Tab 6 — PWA Settings
+### Tab 6 - PWA Settings
 
 | Berkas | Baris | Penjelasan |
 |---|---|---|
 | `api/static/dashboard.html` | 545–560 | Struktur halaman penyetelan parameter analisis sinyal. |
 | `api/static/dashboard.html` | 2271–2331 | Pemuatan, penyimpanan, dan pengembalian parameter ke nilai bawaan. |
 
-### Tab 7 — Kalibrasi Sensor
+### Tab 7 - Kalibrasi Sensor
 
 Tab terpenting untuk validasi ilmiah: merekam sinyal sensor berdampingan dengan
 nilai alat medis rujukan, lalu melatih model dari data tersebut.
@@ -384,17 +384,17 @@ nilai alat medis rujukan, lalu melatih model dari data tersebut.
 | `api/static/dashboard.html` | 1451–1512 | Simpan, hapus, cetak, ekspor | `calibSave()`, `calibDelete()`, `calibPrint()`, `calibExport()`. |
 | `api/static/dashboard.html` | 1513–1590 | Penyuntingan rekaman | `calibEdit()` dan `calibSaveEdit()`. |
 | `api/static/dashboard.html` | 1591–1682 | Laporan & data demo | Pemuatan laporan pelatihan serta pembuatan dan penghapusan data demo. |
-| `api/static/dashboard.html` | 1683–1751 | Pelatihan model | `calibRunTrain()` dan `_renderTrainingReport()` — menjalankan pelatihan dan menampilkan metrik akurasi tiap target. |
+| `api/static/dashboard.html` | 1683–1751 | Pelatihan model | `calibRunTrain()` dan `_renderTrainingReport()` - menjalankan pelatihan dan menampilkan metrik akurasi tiap target. |
 | `api/static/dashboard.html` | 1752–1858 | Pengujian model | `calibRunTest()`, `_renderTestResults()`, `calibExportTest()`. |
 
-### Tab 8 — Log Akses
+### Tab 8 - Log Akses
 
 | Berkas | Baris | Penjelasan |
 |---|---|---|
 | `api/static/dashboard.html` | 814–874 | Struktur halaman: penyaring per perangkat, per kode status, dan kotak keluaran langsung. |
 | `api/static/dashboard.html` | 2349–2500 | Aliran log langsung melalui Server-Sent Events, beserta penguraian, penyaringan, dan penggambaran ulang baris log. |
-| `api/main.py` | 574–630 | `GET /v1/access-log` dan `/v1/access-log/stream` — sumber data log di sisi server. |
-| `api/main.py` | 633–659 | `GET /logs` — pembacaan berkas log historis. |
+| `api/main.py` | 574–630 | `GET /v1/access-log` dan `/v1/access-log/stream` - sumber data log di sisi server. |
+| `api/main.py` | 633–659 | `GET /logs` - pembacaan berkas log historis. |
 
 ## B.4 Laporan Hasil Pemeriksaan Siap Cetak (PDF)
 
@@ -414,22 +414,22 @@ melalui dialog cetak peramban.
 | `api/calib_report.py` | 283–311 | Komponen laporan | Lencana status, baris parameter, pasangan label-nilai, dan kartu ringkas. |
 | `api/calib_report.py` | 313–484 | Tata letak cetak A4 | Gaya kop surat, tabel hasil, dan pengaturan pemenggalan halaman agar tidak ada elemen terpotong. |
 | `api/calib_report.py` | 488–736 | Penyusun laporan | Perakitan laporan lengkap: kop surat berlogo, nomor laporan, kode verifikasi, data subjek, kartu tanda vital, tabel hasil beserta nilai rujukan, strip gelombang, parameter teknis sensor, interpretasi, faktor risiko stroke, dan blok tanda tangan. |
-| `api/main.py` | 1508–1527 | Endpoint laporan | `GET /v1/calibrate/{id}/laporan.html` — penyajian laporan per rekaman. |
+| `api/main.py` | 1508–1527 | Endpoint laporan | `GET /v1/calibrate/{id}/laporan.html` - penyajian laporan per rekaman. |
 
 ## B.5 Endpoint Pendukung Dashboard
 
 | Berkas | Baris | Fitur | Penjelasan |
 |---|---|---|---|
-| `api/main.py` | 1053–1138 | Analisis real-time | `GET /v1/ingest/latest` — pipeline empat tahap (mentah → PWA → MLP → prediksi risiko) yang mengisi seluruh grafik dashboard dalam satu panggilan. |
-| `api/main.py` | 1379–1449 | Perekaman kalibrasi | `POST /v1/calibrate` — menyimpan sinyal PPG sepuluh detik terakhir bersama nilai alat invasif. |
+| `api/main.py` | 1053–1138 | Analisis real-time | `GET /v1/ingest/latest` - pipeline empat tahap (mentah → PWA → MLP → prediksi risiko) yang mengisi seluruh grafik dashboard dalam satu panggilan. |
+| `api/main.py` | 1379–1449 | Perekaman kalibrasi | `POST /v1/calibrate` - menyimpan sinyal PPG sepuluh detik terakhir bersama nilai alat invasif. |
 | `api/main.py` | 1452–1505 | Pengelolaan dataset | Pembacaan, penyuntingan, dan penghapusan rekaman kalibrasi. |
-| `api/main.py` | 1542–1608 | Ekspor dataset | `GET /v1/calibrate/export.csv` — pengunduhan dataset untuk analisis lanjutan. |
+| `api/main.py` | 1542–1608 | Ekspor dataset | `GET /v1/calibrate/export.csv` - pengunduhan dataset untuk analisis lanjutan. |
 | `api/main.py` | 1611–1713 | Perhitungan ulang denyut | Pembaruan nilai denyut seluruh rekaman ketika algoritma diperbaiki. |
 | `api/main.py` | 1716–1770 | Ringkasan statistik | Rerata, minimum, dan maksimum tiap parameter dalam dataset. |
 | `api/main.py` | 1772–1892 | Data demo | Pembangkitan dan penghapusan data sintetis berkorelasi fisiologis. |
-| `api/main.py` | 1894–2100 | Pelatihan model | `POST /v1/calibrate/train` — pelatihan MLP langsung dari server beserta validasi silang dan penilaian keandalan menurut jumlah subjek. |
-| `api/main.py` | 2102–2387 | Laporan pelatihan | `GET /v1/calibrate/report.html` — laporan lengkap berisi diagram sebar prediksi terhadap rujukan, metrik akurasi, dan interpretasinya. |
-| `api/main.py` | 2389–2482 | Uji prediksi | `POST /v1/calibrate/predict-test` — pengujian model atas sampel acak beserta persentase galat tiap target. |
+| `api/main.py` | 1894–2100 | Pelatihan model | `POST /v1/calibrate/train` - pelatihan MLP langsung dari server beserta validasi silang dan penilaian keandalan menurut jumlah subjek. |
+| `api/main.py` | 2102–2387 | Laporan pelatihan | `GET /v1/calibrate/report.html` - laporan lengkap berisi diagram sebar prediksi terhadap rujukan, metrik akurasi, dan interpretasinya. |
+| `api/main.py` | 2389–2482 | Uji prediksi | `POST /v1/calibrate/predict-test` - pengujian model atas sampel acak beserta persentase galat tiap target. |
 
 ## B.6 Halaman Publik (Landing Page)
 
@@ -446,9 +446,9 @@ melalui dialog cetak peramban.
 
 ---
 
-# BAGIAN C — MODEL AI
+# BAGIAN C - MODEL AI
 
-## C.1 Model Multi-Layer Perceptron (MLP) — Estimasi Tekanan Darah & Gula Darah
+## C.1 Model Multi-Layer Perceptron (MLP) - Estimasi Tekanan Darah & Gula Darah
 
 Mengolah fitur hasil Pulse Wave Analysis dari sinyal PPG untuk mengestimasi indikator
 tekanan darah tanpa manset dan gula darah tidak puasa.
@@ -459,12 +459,12 @@ tekanan darah tanpa manset dan gula darah tidak puasa.
 | `model/train_mlp_calibration.py` | 56–90 | Pemuatan dari basis data | Pengambilan data kalibrasi hasil rekaman sensor nyata. |
 | `model/train_mlp_calibration.py` | 91–104 | Pemuatan dari berkas | Alternatif membaca dataset dari berkas CSV. |
 | `model/train_mlp_calibration.py` | 105–116 | Penyiapan data | Pembersihan baris tidak lengkap dan penyandian jenis kelamin. |
-| `model/train_mlp_calibration.py` | 117–161 | **Pelatihan model** | `train_one()` — arsitektur MLP dua lapisan tersembunyi (64 → 32 neuron, aktivasi ReLU), normalisasi StandardScaler, regularisasi L2. Solver dipilih menurut ukuran data: L-BFGS untuk data kecil, Adam dengan early stopping untuk data besar. Satu model terpisah per parameter vital. |
+| `model/train_mlp_calibration.py` | 117–161 | **Pelatihan model** | `train_one()` - arsitektur MLP dua lapisan tersembunyi (64 → 32 neuron, aktivasi ReLU), normalisasi StandardScaler, regularisasi L2. Solver dipilih menurut ukuran data: L-BFGS untuk data kecil, Adam dengan early stopping untuk data besar. Satu model terpisah per parameter vital. |
 | `model/train_mlp_calibration.py` | 162–194 | Diagram validasi | Pembuatan diagram sebar prediksi terhadap nilai rujukan beserta metrik akurasi. |
 | `model/train_mlp_calibration.py` | 195–295 | Alur pelatihan | Validasi silang, perhitungan MAE, RMSE, R², dan penyimpanan model terlatih. |
 | `model/train_ppg_vitals.py` | 41–142 | Pelatihan awal | Versi terdahulu yang melatih estimasi vital langsung dari sinyal mentah. |
 
-## C.2 Model Gradient Boosting — Klasifikasi Risiko Stroke
+## C.2 Model Gradient Boosting - Klasifikasi Risiko Stroke
 
 Mengolah data profil pengguna dan hasil pemantauan untuk menghasilkan klasifikasi
 tingkat risiko stroke.
@@ -473,11 +473,11 @@ tingkat risiko stroke.
 |---|---|---|---|
 | `model/train.py` | 56–70 | Definisi fitur | Fitur numerik (usia, kadar glukosa rerata, indeks massa tubuh) dan kategorikal (jenis kelamin, tipe tempat tinggal, status merokok). |
 | `model/train.py` | 71–89 | Pemuatan dataset | Pembacaan dataset stroke beserta pembersihan nilai kosong. |
-| `model/train.py` | 90–121 | **Penentuan ambang** | `best_f1_threshold()` dan `recall_target_threshold()` — pemilihan ambang klasifikasi yang mengutamakan sensitivitas, karena pada kasus stroke kegagalan mendeteksi jauh lebih berbahaya daripada peringatan berlebih. |
+| `model/train.py` | 90–121 | **Penentuan ambang** | `best_f1_threshold()` dan `recall_target_threshold()` - pemilihan ambang klasifikasi yang mengutamakan sensitivitas, karena pada kasus stroke kegagalan mendeteksi jauh lebih berbahaya daripada peringatan berlebih. |
 | `model/train.py` | 122–147 | Penyetelan HistGradientBoosting | Pencarian hiperparameter dengan validasi silang. |
 | `model/train.py` | 148–191 | Penyetelan XGBoost | Penyandian ordinal fitur kategorikal dan pencarian hiperparameter. |
 | `model/train.py` | 192–286 | Alur pelatihan | Pembandingan kedua algoritma, pemilihan model terbaik, dan penyimpanan artefak beserta ambangnya. |
-| `model/xgboost_stroke_training.ipynb` | — | Buku kerja analisis | Eksplorasi data dan pembandingan model dalam bentuk notebook. |
+| `model/xgboost_stroke_training.ipynb` | - | Buku kerja analisis | Eksplorasi data dan pembandingan model dalam bentuk notebook. |
 
 ## C.3 Skoring ABCD2
 
@@ -485,22 +485,22 @@ tingkat risiko stroke.
 |---|---|---|---|
 | `model/abcd2.py` | 23–28 | Tingkat urgensi | Kategori rendah, sedang, dan tinggi. |
 | `model/abcd2.py` | 29–61 | Struktur hasil | Skor total, tingkat urgensi, perkiraan risiko, dan rekomendasi tindakan. |
-| `model/abcd2.py` | 62–98 | **Perhitungan skor** | `calculate_abcd2()` — penjumlahan lima komponen: **A**ge (usia ≥60), **B**lood pressure (≥140/90), **C**linical features (kelemahan satu sisi atau gangguan bicara), **D**uration (durasi gejala), dan **D**iabetes. Skor 0–7 diterjemahkan menjadi perkiraan risiko stroke dalam 2–90 hari setelah gejala TIA. |
+| `model/abcd2.py` | 62–98 | **Perhitungan skor** | `calculate_abcd2()` - penjumlahan lima komponen: **A**ge (usia ≥60), **B**lood pressure (≥140/90), **C**linical features (kelemahan satu sisi atau gangguan bicara), **D**uration (durasi gejala), dan **D**iabetes. Skor 0–7 diterjemahkan menjadi perkiraan risiko stroke dalam 2–90 hari setelah gejala TIA. |
 
 ## C.4 Ekstraksi Fitur Pulse Wave Analysis
 
 | Berkas | Baris | Fitur | Penjelasan |
 |---|---|---|---|
-| `model/ppg_features.py` | 40–47 | Struktur denyut | `PulseEvent` — representasi satu siklus denyut beserta titik-titik pentingnya. |
+| `model/ppg_features.py` | 40–47 | Struktur denyut | `PulseEvent` - representasi satu siklus denyut beserta titik-titik pentingnya. |
 | `model/ppg_features.py` | 48–56 | Penapis pita | Butterworth 0,5–12 Hz untuk mengisolasi komponen denyut. |
 | `model/ppg_features.py` | 57–104 | Denyut via spektrum | Perhitungan denyut jantung melalui analisis spektral. |
-| `model/ppg_features.py` | 105–162 | **Deteksi denyut** | `detect_pulses()` — penentuan titik awal, puncak sistolik, dan notch dikrotik tiap siklus. |
+| `model/ppg_features.py` | 105–162 | **Deteksi denyut** | `detect_pulses()` - penentuan titik awal, puncak sistolik, dan notch dikrotik tiap siklus. |
 | `model/ppg_features.py` | 163–195 | Fitur per kanal | Amplitudo, lebar setengah amplitudo, waktu naik, dan luas area gelombang. |
-| `model/ppg_features.py` | 196–230 | **Penyusunan fitur** | `extract_pwa_features()` — menghasilkan 23+ fitur morfologi gelombang yang menjadi masukan model MLP. |
+| `model/ppg_features.py` | 196–230 | **Penyusunan fitur** | `extract_pwa_features()` - menghasilkan 23+ fitur morfologi gelombang yang menjadi masukan model MLP. |
 
 ---
 
-# BAGIAN D — FIRMWARE SMARTBAND
+# BAGIAN D - FIRMWARE SMARTBAND
 
 Perangkat: Seeed Studio XIAO ESP32-S3. Sensor: MAX30102 (merah + inframerah) dan
 SON1303 (hijau).
@@ -509,27 +509,27 @@ SON1303 (hijau).
 |---|---|---|---|
 | `Firmware/include/antaraga.h` | 26–35 | Pemetaan pin | Penetapan pin sensor, I²C, LED indikator, dan pembagi tegangan baterai. |
 | `Firmware/include/antaraga.h` | 36–58 | Parameter pencuplikan | Laju cuplik dan panjang batch, dilengkapi pemeriksaan saat kompilasi agar keduanya selalu konsisten. |
-| `Firmware/include/antaraga.h` | 59–120 | Struktur data | Definisi `Batch` dan `Sqi` — format data yang dikirim ke server. |
+| `Firmware/include/antaraga.h` | 59–120 | Struktur data | Definisi `Batch` dan `Sqi` - format data yang dikirim ke server. |
 | `Firmware/include/config.h` | 12–45 | Konfigurasi jaringan | Kredensial Wi-Fi, alamat server, kunci perangkat, dan sinkronisasi waktu. |
 | `Firmware/include/config.h` | 47–120 | Konfigurasi sensor | Laju cuplik PPG, oversampling ADC, dan arus LED merah serta inframerah. |
 | `Firmware/src/main.cpp` | 56–74 | Mesin status | Pengelolaan status perangkat: menyalakan, menyambung, merekam, mengirim. |
 | `Firmware/src/main.cpp` | 106–158 | Indikator LED | Pola nyala LED yang menandakan status perangkat kepada pengguna. |
-| `Firmware/src/main.cpp` | 202–270 | Alur utama | `setup()` dan `loop()` — inisialisasi sensor dan siklus rekam-kirim berkelanjutan. |
+| `Firmware/src/main.cpp` | 202–270 | Alur utama | `setup()` dan `loop()` - inisialisasi sensor dan siklus rekam-kirim berkelanjutan. |
 | `Firmware/src/sensors.cpp` | 94–106 | Pembacaan ADC | Oversampling untuk menekan derau pembacaan sensor analog. |
 | `Firmware/src/sensors.cpp` | 107–185 | Register MAX30102 | Definisi register dan fungsi baca-tulis I²C. |
 | `Firmware/src/sensors.cpp` | 186–464 | Driver sensor | Inisialisasi, konfigurasi arus LED, pembacaan FIFO, dan pencuplikan berkala tiga kanal warna. |
 | `Firmware/src/sqi.cpp` | 64–123 | Statistik kanal | Perhitungan rerata, simpangan, dan pendeteksian pencuplikan yang jenuh. |
 | `Firmware/src/sqi.cpp` | 124–161 | Ukuran mutu | Tortuositas sinyal dan penilaian berbasis rentang. |
-| `Firmware/src/sqi.cpp` | 162–267 | **Penilaian mutu sinyal** | `sqiEvaluate()` — penilaian mutu tiap batch sebelum dikirim, menandai jari bergerak, perfusi lemah, atau sensor lepas. Server memakai penanda ini untuk membuang data sampah. |
+| `Firmware/src/sqi.cpp` | 162–267 | **Penilaian mutu sinyal** | `sqiEvaluate()` - penilaian mutu tiap batch sebelum dikirim, menandai jari bergerak, perfusi lemah, atau sensor lepas. Server memakai penanda ini untuk membuang data sampah. |
 | `Firmware/src/cloud.cpp` | 61–114 | Penyusunan JSON | Perakitan payload sinyal beserta metadata mutu. |
 | `Firmware/src/cloud.cpp` | 115–196 | Wi-Fi, waktu, & TLS | Penyambungan jaringan, sinkronisasi waktu NTP, dan penyiapan koneksi terenkripsi. |
 | `Firmware/src/cloud.cpp` | 197–231 | Pembacaan tanggapan | Penguraian tanggapan server tanpa pustaka JSON, menghemat memori perangkat. |
 | `Firmware/src/cloud.cpp` | 232–433 | **Pembaruan jarak jauh** | Pemeriksaan versi baru, pengunduhan, pemasangan, serta mekanisme pengembalian otomatis bila firmware baru gagal berjalan. |
-| `Firmware/src/cloud.cpp` | 434–594 | Pengiriman data | `cloudPost()` — pengiriman batch ke server beserta penanganan kegagalan jaringan. |
+| `Firmware/src/cloud.cpp` | 434–594 | Pengiriman data | `cloudPost()` - pengiriman batch ke server beserta penanganan kegagalan jaringan. |
 
 ---
 
-# BAGIAN E — APLIKASI MOBILE (FLUTTER)
+# BAGIAN E - APLIKASI MOBILE (FLUTTER)
 
 > **Catatan penting:** source code aplikasi mobile **tidak berada di repositori ini**.
 > Repositori ini memuat backend, web dashboard, model AI, dan firmware. Aplikasi mobile
@@ -542,27 +542,27 @@ Seluruh rentang baris di bawah mengacu pada repositori aplikasi mobile.
 
 | Halaman Aplikasi | Berkas Flutter | Baris | Penjelasan | Endpoint Backend Terkait |
 |---|---|---|---|---|
-| Halaman Pembuka | `lib/screens/splash_screen.dart` | 1–107 | Layar pembuka beranimasi sekaligus jeda pemeriksaan sesi masuk. | — |
-| Halaman Daftar Akun Keluarga | `lib/screens/login_screen.dart` | 24, 47–68, 144–187 | Formulir email/No. HP, kata sandi, dan konfirmasi kata sandi. Satu layar melayani dua moda lewat penanda `_isRegisterMode`. | `POST /auth/register` — `api/main.py` 173–195 |
-| Halaman Masuk (Login) | `lib/screens/login_screen.dart` | 36–68, 69–223 | Formulir masuk bagi akun terdaftar, dengan tombol alih ke moda pendaftaran. | `POST /auth/login` — `api/main.py` 198–212 |
-| Halaman Profil Orang Tua/Lansia | `lib/screens/profile_form_screen.dart` | 115–343 | Pengisian data demografis dan riwayat kesehatan lansia. | `POST /profiles` — `api/main.py` 238–271 |
-| — pilihan berbentuk kancing | `lib/screens/profile_form_screen.dart` | 344–455 | Kancing pilihan untuk jenis kelamin, penyakit jantung, diabetes, riwayat keluarga, status bekerja, tempat tinggal, dan kebiasaan merokok. | — |
-| Halaman Hubungkan Perangkat | `lib/screens/dashboard_screen.dart` | 176–254 | Pemasangan Device ID smartband ke akun, didahului pemeriksaan keberadaan perangkat. | `POST /device/pair` — `api/main.py` 661–688 |
-| Halaman Dashboard Utama | `lib/screens/dashboard_screen.dart` | 268–475 | Kerangka utama: sapaan, kartu vital, kartu risiko, dan ringkasan asesmen. | `GET /vitals/latest` — `api/main.py` 382–427 |
-| — kartu vital | `lib/screens/dashboard_screen.dart` | 596–621, 966–1158 | Kartu tiga parameter vital dengan denyut animasi saat data baru masuk. | — |
-| — keterangan nilai rujukan | `lib/screens/dashboard_screen.dart` | 622–756 | Jendela penjelasan rentang normal tiap parameter bagi keluarga yang awam. | — |
-| — kartu prediksi risiko | `lib/screens/dashboard_screen.dart` | 757–899 | Penampilan hasil prediksi risiko beserta warna tingkat dan faktor penyumbangnya. | `POST /predict/stroke-risk` — `api/main.py` 330–379 |
-| Halaman Detak Jantung (BPM) | `lib/screens/vital_detail_screen.dart` | 10, 73–314 | Grafik denyut harian beserta nilai rerata, minimum, dan maksimum. Satu layar melayani tiga parameter lewat `enum VitalType`. | `GET /vitals/history` — `api/main.py` 430–463 |
-| — ringkasan statistik | `lib/screens/vital_detail_screen.dart` | 315–338 | Baris ringkasan nilai terendah, tertinggi, dan rerata. | — |
-| Halaman Statistik Harian | `lib/screens/daily_stats_screen.dart` | 233–507 | Tren tiga parameter vital dan linimasa 24 jam. | `GET /vitals/history` — `api/main.py` 430–463 |
-| — grafik ringkas | `lib/screens/daily_stats_screen.dart` | 508–636 | Grafik mini per parameter dan kancing linimasa per jam. | — |
-| — rincian per jam | `lib/screens/daily_stats_screen.dart` | 86–232, 637–642 | Pengelompokan pembacaan ke dalam ember per jam beserta rinciannya. | — |
-| Halaman Assessment ABCD2 | `lib/screens/assessment_form_screen.dart` | 46–113 | Pengisian lima kategori asesmen dan penampilan hasil stratifikasi. | `POST /assessment/abcd2` — `api/main.py` 466–497 |
-| — pilihan gejala klinis | `lib/screens/assessment_form_screen.dart` | 141–229 | Pilihan gejala klinis dan lama gejala sesuai komponen baku ABCD². | — |
-| — ringkasan hasil | `lib/screens/dashboard_screen.dart` | 900–965 | Ringkasan skor dan kategori kegawatan pada dashboard setelah asesmen diisi. | — |
-| Penerimaan Peringatan Dini | `lib/services/fcm_service.dart` | 39–84 | Perizinan notifikasi, saluran notifikasi Android, dan pendaftaran token perangkat. | `POST /device/register-token` — `api/main.py` 160–170 |
-| — notifikasi saat aplikasi tertutup | `lib/services/fcm_service.dart` | 9–24 | Penangan pesan latar belakang, berjalan di isolate terpisah. | — |
-| — notifikasi saat aplikasi terbuka | `lib/services/fcm_service.dart` | 91–125 | Penampilan notifikasi lokal dan pengarahan ke halaman asesmen saat diketuk. | — |
+| Halaman Pembuka | `lib/screens/splash_screen.dart` | 1–107 | Layar pembuka beranimasi sekaligus jeda pemeriksaan sesi masuk. | - |
+| Halaman Daftar Akun Keluarga | `lib/screens/login_screen.dart` | 24, 47–68, 144–187 | Formulir email/No. HP, kata sandi, dan konfirmasi kata sandi. Satu layar melayani dua moda lewat penanda `_isRegisterMode`. | `POST /auth/register` - `api/main.py` 173–195 |
+| Halaman Masuk (Login) | `lib/screens/login_screen.dart` | 36–68, 69–223 | Formulir masuk bagi akun terdaftar, dengan tombol alih ke moda pendaftaran. | `POST /auth/login` - `api/main.py` 198–212 |
+| Halaman Profil Orang Tua/Lansia | `lib/screens/profile_form_screen.dart` | 115–343 | Pengisian data demografis dan riwayat kesehatan lansia. | `POST /profiles` - `api/main.py` 238–271 |
+| - pilihan berbentuk kancing | `lib/screens/profile_form_screen.dart` | 344–455 | Kancing pilihan untuk jenis kelamin, penyakit jantung, diabetes, riwayat keluarga, status bekerja, tempat tinggal, dan kebiasaan merokok. | - |
+| Halaman Hubungkan Perangkat | `lib/screens/dashboard_screen.dart` | 176–254 | Pemasangan Device ID smartband ke akun, didahului pemeriksaan keberadaan perangkat. | `POST /device/pair` - `api/main.py` 661–688 |
+| Halaman Dashboard Utama | `lib/screens/dashboard_screen.dart` | 268–475 | Kerangka utama: sapaan, kartu vital, kartu risiko, dan ringkasan asesmen. | `GET /vitals/latest` - `api/main.py` 382–427 |
+| - kartu vital | `lib/screens/dashboard_screen.dart` | 596–621, 966–1158 | Kartu tiga parameter vital dengan denyut animasi saat data baru masuk. | - |
+| - keterangan nilai rujukan | `lib/screens/dashboard_screen.dart` | 622–756 | Jendela penjelasan rentang normal tiap parameter bagi keluarga yang awam. | - |
+| - kartu prediksi risiko | `lib/screens/dashboard_screen.dart` | 757–899 | Penampilan hasil prediksi risiko beserta warna tingkat dan faktor penyumbangnya. | `POST /predict/stroke-risk` - `api/main.py` 330–379 |
+| Halaman Detak Jantung (BPM) | `lib/screens/vital_detail_screen.dart` | 10, 73–314 | Grafik denyut harian beserta nilai rerata, minimum, dan maksimum. Satu layar melayani tiga parameter lewat `enum VitalType`. | `GET /vitals/history` - `api/main.py` 430–463 |
+| - ringkasan statistik | `lib/screens/vital_detail_screen.dart` | 315–338 | Baris ringkasan nilai terendah, tertinggi, dan rerata. | - |
+| Halaman Statistik Harian | `lib/screens/daily_stats_screen.dart` | 233–507 | Tren tiga parameter vital dan linimasa 24 jam. | `GET /vitals/history` - `api/main.py` 430–463 |
+| - grafik ringkas | `lib/screens/daily_stats_screen.dart` | 508–636 | Grafik mini per parameter dan kancing linimasa per jam. | - |
+| - rincian per jam | `lib/screens/daily_stats_screen.dart` | 86–232, 637–642 | Pengelompokan pembacaan ke dalam ember per jam beserta rinciannya. | - |
+| Halaman Assessment ABCD2 | `lib/screens/assessment_form_screen.dart` | 46–113 | Pengisian lima kategori asesmen dan penampilan hasil stratifikasi. | `POST /assessment/abcd2` - `api/main.py` 466–497 |
+| - pilihan gejala klinis | `lib/screens/assessment_form_screen.dart` | 141–229 | Pilihan gejala klinis dan lama gejala sesuai komponen baku ABCD². | - |
+| - ringkasan hasil | `lib/screens/dashboard_screen.dart` | 900–965 | Ringkasan skor dan kategori kegawatan pada dashboard setelah asesmen diisi. | - |
+| Penerimaan Peringatan Dini | `lib/services/fcm_service.dart` | 39–84 | Perizinan notifikasi, saluran notifikasi Android, dan pendaftaran token perangkat. | `POST /device/register-token` - `api/main.py` 160–170 |
+| - notifikasi saat aplikasi tertutup | `lib/services/fcm_service.dart` | 9–24 | Penangan pesan latar belakang, berjalan di isolate terpisah. | - |
+| - notifikasi saat aplikasi terbuka | `lib/services/fcm_service.dart` | 91–125 | Penampilan notifikasi lokal dan pengarahan ke halaman asesmen saat diketuk. | - |
 
 ## E.2 Lapisan Layanan dan Data
 
@@ -576,7 +576,7 @@ Seluruh rentang baris di bawah mengacu pada repositori aplikasi mobile.
 | `lib/services/api_service.dart` | 169–226 | Perangkat dan asesmen | Pemeriksaan keberadaan perangkat, pemasangan, dan pengiriman asesmen ABCD². |
 | `lib/services/auth_service.dart` | 39–77 | Penyimpanan sesi | Penyimpanan token dan identitas pengguna secara lokal serta pemulihannya saat aplikasi dibuka kembali. |
 | `lib/services/auth_service.dart` | 78–109 | Pendaftaran dan masuk | Pendaftaran akun keluarga, masuk, dan keluar. |
-| `lib/services/risk_service.dart` | 21–79 | **Penilaian risiko sisi aplikasi** | Penilaian cadangan berbasis aturan dari vital, profil, dan skor ABCD² — dipakai saat sambungan ke server terputus. |
+| `lib/services/risk_service.dart` | 21–79 | **Penilaian risiko sisi aplikasi** | Penilaian cadangan berbasis aturan dari vital, profil, dan skor ABCD² - dipakai saat sambungan ke server terputus. |
 | `lib/services/profile_service.dart` | 12–44 | Simpanan profil lokal | Penyimpanan profil dan penanda selesai pengenalan awal. |
 | `lib/services/demo_service.dart` | 12–183 | Moda peragaan | Pembangkitan data vital tiruan untuk peragaan tanpa perangkat keras maupun sambungan server. |
 | `lib/models/user_profile.dart` | 2–137 | Model profil | Struktur data lansia beserta penyandian ke dan dari JSON. |
@@ -593,12 +593,12 @@ terdokumentasi di `README.md` bagian **"Untuk Mobile App (Flutter)"** (mulai bar
 
 > **Perhatian saat menyiapkan lampiran:** berkas `serviceAccountKey.json` pada akar
 > proyek Flutter memuat kunci layanan Firebase, dan `lib/firebase_options.dart` memuat
-> kunci API tiap peron. Keduanya **jangan dilampirkan apa adanya** — samarkan nilainya
+> kunci API tiap peron. Keduanya **jangan dilampirkan apa adanya** - samarkan nilainya
 > atau kecualikan dari berkas lampiran.
 
 ---
 
-# LAMPIRAN A — RINGKASAN FITUR UNGGULAN
+# LAMPIRAN A - RINGKASAN FITUR UNGGULAN
 
 Delapan bagian kode yang paling layak ditonjolkan sebagai inti kebaruan ciptaan:
 
@@ -607,15 +607,15 @@ Delapan bagian kode yang paling layak ditonjolkan sebagai inti kebaruan ciptaan:
 | 1 | **Alur peringatan dini otomatis** | `api/main.py` 703–869 | Rantai lengkap dalam satu permintaan: sinyal mentah → estimasi vital → prediksi risiko → penyimpanan → push notification ke keluarga. |
 | 2 | **Estimasi vital tanpa manset & tanpa tusuk jarum** | `model/train_mlp_calibration.py` 117–161 | Model MLP per parameter yang mengubah fitur optik PPG menjadi estimasi tekanan darah dan gula darah. |
 | 3 | **Ekstraksi fitur Pulse Wave Analysis** | `model/ppg_features.py` 105–230 | Deteksi titik penting gelombang denyut dan penyusunan 23+ fitur morfologi sebagai masukan model. |
-| 4 | **Klasifikasi risiko berorientasi sensitivitas** | `model/train.py` 90–121 | Ambang klasifikasi dipilih mengutamakan sensitivitas — pada stroke, luput mendeteksi jauh lebih berbahaya daripada peringatan berlebih. |
+| 4 | **Klasifikasi risiko berorientasi sensitivitas** | `model/train.py` 90–121 | Ambang klasifikasi dipilih mengutamakan sensitivitas - pada stroke, luput mendeteksi jauh lebih berbahaya daripada peringatan berlebih. |
 | 5 | **Stratifikasi ABCD2 terintegrasi** | `model/abcd2.py` 62–98 | Asesmen klinis baku yang dijalankan otomatis ketika sistem mendeteksi kondisi menyimpang. |
 | 6 | **Penilaian mutu sinyal berlapis** | `Firmware/src/sqi.cpp` 162–267 + `api/main.py` 872–932 | Penyaringan dua tingkat di perangkat dan di server, mencegah data bermutu buruk mencemari estimasi. |
-| 7 | **Alur kalibrasi sensor terhadap alat medis** | `api/static/dashboard.html` 561–743 + `api/main.py` 1379–2100 | Perekaman, pengelolaan, pelatihan, dan pengujian model dalam satu antarmuka — dasar validasi ilmiah alat. |
+| 7 | **Alur kalibrasi sensor terhadap alat medis** | `api/static/dashboard.html` 561–743 + `api/main.py` 1379–2100 | Perekaman, pengelolaan, pelatihan, dan pengujian model dalam satu antarmuka - dasar validasi ilmiah alat. |
 | 8 | **Laporan hasil pemeriksaan siap cetak** | `api/calib_report.py` 1–736 | Laporan medis A4 berlogo lengkap dengan nilai rujukan klinis, strip gelombang denyut, dan kode verifikasi dokumen. |
 
 ---
 
-# LAMPIRAN B — MEMPERBARUI NOMOR BARIS
+# LAMPIRAN B - MEMPERBARUI NOMOR BARIS
 
 Nomor baris bergeser setiap kali kode disunting. Untuk memverifikasi atau memperbarui
 rentang pada dokumen ini:
@@ -647,7 +647,7 @@ sed -n '703,869p' api/main.py > lampiran_alur_peringatan_dini.txt
 
 ---
 
-# LAMPIRAN C — CATATAN PENYUSUNAN LAMPIRAN HKI
+# LAMPIRAN C - CATATAN PENYUSUNAN LAMPIRAN HKI
 
 Beberapa hal yang perlu diperhatikan saat menyiapkan berkas lampiran:
 
@@ -656,7 +656,7 @@ Beberapa hal yang perlu diperhatikan saat menyiapkan berkas lampiran:
    memuat kunci penanda tangan token serta kata sandi dashboard. Ganti nilainya dengan
    `***` pada salinan yang dilampirkan.
 
-2. **Berkas `.env` tidak perlu dilampirkan** — isinya konfigurasi lingkungan, bukan ciptaan.
+2. **Berkas `.env` tidak perlu dilampirkan** - isinya konfigurasi lingkungan, bukan ciptaan.
    Cukup lampirkan `.env.example` yang sudah tidak memuat nilai asli.
 
 3. **Dataset pihak ketiga sebaiknya tidak dilampirkan.** Berkas
@@ -667,5 +667,5 @@ Beberapa hal yang perlu diperhatikan saat menyiapkan berkas lampiran:
    dilampirkan cukup kode pelatihannya, bukan berkas modelnya.
 
 5. **Urutan lampiran yang disarankan** mengikuti urutan dokumen ini: backend, web app,
-   model AI, firmware, lalu aplikasi mobile — sesuai alur data dari sensor hingga
+   model AI, firmware, lalu aplikasi mobile - sesuai alur data dari sensor hingga
    sampai ke tangan keluarga.

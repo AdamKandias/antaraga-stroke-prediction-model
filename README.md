@@ -29,7 +29,7 @@ Semua endpoint butuh header `Authorization: Bearer <token>` kecuali endpoint aut
 
 ## Untuk Firmware (XIAO ESP32-S3)
 
-Firmware mengirim data sensor tanpa login — identitasnya berdasarkan `DEVICE_ID` unik yang sudah di-pair ke akun pengguna lewat mobile app.
+Firmware mengirim data sensor tanpa login - identitasnya berdasarkan `DEVICE_ID` unik yang sudah di-pair ke akun pengguna lewat mobile app.
 
 ### Konfigurasi `config.h`
 
@@ -47,7 +47,7 @@ Firmware mengirim data sensor tanpa login — identitasnya berdasarkan `DEVICE_I
 POST /v1/ingest
 ```
 
-Dikirim setiap batch (default 500ms). **Tidak perlu Authorization header** — autentikasi via `id` + `key` di body.
+Dikirim setiap batch (default 500ms). **Tidak perlu Authorization header** - autentikasi via `id` + `key` di body.
 
 **Request body:**
 ```json
@@ -68,7 +68,7 @@ Dikirim setiap batch (default 500ms). **Tidak perlu Authorization header** — a
 
 | Field | Tipe | Keterangan |
 |---|---|---|
-| `id` | string | `DEVICE_ID` dari config.h — harus sudah di-pair ke akun |
+| `id` | string | `DEVICE_ID` dari config.h - harus sudah di-pair ke akun |
 | `key` | string | `DEVICE_INGEST_KEY` dari .env server |
 | `seq` | int | Nomor urut batch (untuk deteksi packet loss) |
 | `ts` | int | Unix timestamp milliseconds |
@@ -345,9 +345,9 @@ Authorization: Bearer <token>
 
 | URL | Keterangan |
 |---|---|
-| `/` | Landing page produk — cara kerja, fitur, metrik model AI, 3D device visualization |
-| `/dashboard` | Monitoring real-time — sinyal PPG mentah & setelah filter, BPM, vital, gauge risiko stroke. Update setiap detik dari ingest firmware terakhir |
-| `/docs` | Swagger UI — dokumentasi interaktif, bisa langsung coba semua endpoint dari browser |
+| `/` | Landing page produk - cara kerja, fitur, metrik model AI, 3D device visualization |
+| `/dashboard` | Monitoring real-time - sinyal PPG mentah & setelah filter, BPM, vital, gauge risiko stroke. Update setiap detik dari ingest firmware terakhir |
+| `/docs` | Swagger UI - dokumentasi interaktif, bisa langsung coba semua endpoint dari browser |
 | `/health` | Health check server |
 
 ### Dashboard (`/dashboard`)

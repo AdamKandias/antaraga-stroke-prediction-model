@@ -1,4 +1,4 @@
-# ANTARAGA — Alur Sistem Lengkap
+# ANTARAGA - Alur Sistem Lengkap
 
 > Dokumen ini menjelaskan alur teknis sistem ANTARAGA dari penerimaan data
 > di backend sampai notifikasi ke pengguna, termasuk parameter dan hasil
@@ -46,15 +46,15 @@ Smartband / Sensor
 ### Tabel Database
 
 ```
-users            — akun keluarga (email/telepon + password_hash + fcm_token)
-profiles         — data profil lansia (usia, gender, BMI, riwayat, dll.)
-vital_readings   — satu baris per pembacaan sensor (systolic, diastolic, HR, SpO2, gula)
-prediction_logs  — log lengkap setiap panggilan endpoint ML
+users            - akun keluarga (email/telepon + password_hash + fcm_token)
+profiles         - data profil lansia (usia, gender, BMI, riwayat, dll.)
+vital_readings   - satu baris per pembacaan sensor (systolic, diastolic, HR, SpO2, gula)
+prediction_logs  - log lengkap setiap panggilan endpoint ML
 ```
 
 ---
 
-## 2. Model I — MLP untuk Estimasi Vital dari PPG
+## 2. Model I - MLP untuk Estimasi Vital dari PPG
 
 ### Tujuan
 Mengubah sinyal **PPG mentah** dari sensor (MAX30102 + SEN0203/SON1303) menjadi
@@ -145,7 +145,7 @@ Metrik: **MAE (Mean Absolute Error)** per target, cross-validated.
 
 ---
 
-## 3. Model II — XGBoost untuk Deteksi Risiko Stroke
+## 3. Model II - XGBoost untuk Deteksi Risiko Stroke
 
 ### Tujuan
 Mengklasifikasikan apakah kombinasi data vital + profil pasien mengindikasikan
@@ -159,7 +159,7 @@ Mengklasifikasikan apakah kombinasi data vital + profil pasien mengindikasikan
 | Jumlah baris | 5.110 pasien |
 | Data latih | 3.577 (70%) |
 | Data uji | 1.533 (30%) |
-| Rasio kelas | 4,87% positif stroke — **sangat imbalanced** |
+| Rasio kelas | 4,87% positif stroke - **sangat imbalanced** |
 
 ### Fitur Input
 
@@ -175,7 +175,7 @@ Mengklasifikasikan apakah kombinasi data vital + profil pasien mengindikasikan
 | `smoking_status` | Kategori | Dari profil (never smoked/formerly smoked/smokes/Unknown) |
 
 > Fitur `ever_married` dan `work_type` (5 kategori) **sengaja dihapus** karena
-> app tidak mengumpulkan data setara — memasukkan proxy yang ditebak lebih
+> app tidak mengumpulkan data setara - memasukkan proxy yang ditebak lebih
 > buruk daripada tidak memakai fitur sama sekali.
 
 ### Proses Pemilihan Model
@@ -245,7 +245,7 @@ Aktual  Negatif   1.315      143    ← 143 false alarm (FP)
 
 > **Catatan interpretasi:** Recall 49% berarti hampir separuh kasus stroke
 > nyata berhasil dideteksi. Untuk kasus medis berisiko tinggi, **Recall
-> diprioritaskan di atas Precision** — false alarm lebih bisa diterima
+> diprioritaskan di atas Precision** - false alarm lebih bisa diterima
 > daripada melewatkan kasus stroke nyata. Threshold 0.705 secara sengaja
 > digeser ke sisi konservatif untuk menjaga Recall tetap tinggi.
 
@@ -263,15 +263,15 @@ atau ketika risiko XGBoost tinggi. Menghitung probabilitas stroke dalam
 
 | Komponen | Kondisi | Poin |
 |---|---|---|
-| **A** — Age | Usia ≥ 60 tahun | 1 |
-| **B** — Blood Pressure | Sistol ≥ 140 mmHg atau Diastol ≥ 90 mmHg | 1 |
-| **C** — Clinical Feature | Kelemahan unilateral | 2 |
+| **A** - Age | Usia ≥ 60 tahun | 1 |
+| **B** - Blood Pressure | Sistol ≥ 140 mmHg atau Diastol ≥ 90 mmHg | 1 |
+| **C** - Clinical Feature | Kelemahan unilateral | 2 |
 | | Gangguan bicara tanpa kelemahan | 1 |
 | | Gejala lain | 0 |
-| **D** — Duration of TIA | ≥ 60 menit | 2 |
+| **D** - Duration of TIA | ≥ 60 menit | 2 |
 | | 10–59 menit | 1 |
 | | < 10 menit | 0 |
-| **D₂** — Diabetes | Ada riwayat diabetes | 1 |
+| **D₂** - Diabetes | Ada riwayat diabetes | 1 |
 | **Total** | | **0 – 7** |
 
 ### Interpretasi Skor & Risiko
@@ -352,11 +352,11 @@ atau ketika risiko XGBoost tinggi. Menghitung probabilitas stroke dalam
 
 ## 6. Ringkasan Parameter & Hasil
 
-### Model I — MLP (PPG → Vital)
+### Model I - MLP (PPG → Vital)
 
 | Parameter | Nilai |
 |---|---|
-| Arsitektur | `(16, 8)` — 2 hidden layer |
+| Arsitektur | `(16, 8)` - 2 hidden layer |
 | Aktivasi | `tanh` |
 | Regularisasi | L2 `alpha=0.01` |
 | Iterasi maks | 5000 |
@@ -365,7 +365,7 @@ atau ketika risiko XGBoost tinggi. Menghitung probabilitas stroke dalam
 | Metrik | MAE per target (sistol, diastol, gula) |
 | Status | **Menunggu data kalibrasi hardware** |
 
-### Model II — XGBoost (Risiko Stroke)
+### Model II - XGBoost (Risiko Stroke)
 
 | Parameter | Nilai |
 |---|---|
@@ -396,6 +396,6 @@ atau ketika risiko XGBoost tinggi. Menghitung probabilitas stroke dalam
 
 ---
 
-*Dihasilkan dari kode sumber ANTARAGA — `api/ml.py`, `model/train.py`,
+*Dihasilkan dari kode sumber ANTARAGA - `api/ml.py`, `model/train.py`,
 `model/train_ppg_vitals.py`, `model/ppg_features.py`, `model/abcd2.py`,
 `api/fcm.py`, `api/simulator.py`*

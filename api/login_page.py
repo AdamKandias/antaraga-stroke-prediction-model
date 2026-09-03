@@ -1,4 +1,4 @@
-"""Halaman login dashboard — dirakit di Python supaya logo bisa ditanam
+"""Halaman login dashboard - dirakit di Python supaya logo bisa ditanam
 sebagai data URI (server ini tidak memasang StaticFiles untuk folder assets).
 """
 from __future__ import annotations
@@ -52,7 +52,7 @@ def render_login(error: str = "", next_path: str = "/dashboard") -> str:
     :root{{--ink:#e7efee;--mut:#8fa3a0;--line:#2a3937;--bg:#0f1817;--card:#16211f;
       --err:#ff9c96;--err-bg:#3a1f1e}}
     input{{background:#0f1817}} input:focus{{background:#0f1817}}
-    /* Wordmark-nya teal pekat — nyaris hilang di atas kartu gelap. */
+    /* Wordmark-nya teal pekat - nyaris hilang di atas kartu gelap. */
     img{{filter:brightness(1.6) saturate(.95)}}
     .wordmark{{color:#19b3a3}}
     button{{background:#00998a}} button:hover{{background:#00b3a1}}

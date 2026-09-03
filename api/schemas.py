@@ -86,6 +86,10 @@ class ProfilePayload(BaseModel):
 
 class ProfileResponse(ProfilePayload):
     id: str
+    # Gelang yang tersambung ke orang tua ini, bila ada. Dibawa serta supaya
+    # daftar orang tua di aplikasi bisa menandai mana yang sudah punya gelang
+    # tanpa memanggil endpoint lain satu per satu.
+    device_key: str | None = None
 
 
 class VitalPayload(BaseModel):
@@ -150,7 +154,7 @@ class LatestVitalResponse(BaseModel):
 
 
 class Abcd2Request(BaseModel):
-    """Mirrors AssessmentResult.toJson() in the Flutter app — the app already
+    """Mirrors AssessmentResult.toJson() in the Flutter app - the app already
     resolves each component to its point value before sending it."""
 
     abcd2_age: bool
@@ -209,7 +213,7 @@ class IngestBatch(BaseModel):
     batt_mv: int = 0
     batt_pct: int = 0
     ovf: int = 0
-    # SQI metadata — dikirim firmware sejak v0.x; opsional agar payload lama tetap valid
+    # SQI metadata - dikirim firmware sejak v0.x; opsional agar payload lama tetap valid
     sqi: int = 0           # skor 0–100 (MINIMUM sub-skor; 0 jika ada flag aktif)
     sqi_flags: int = 0     # bitmask: 0x01=NO_FINGER 0x02=SAT 0x04=FLAT 0x08=MOTION 0x10=PPG_BAD 0x20=SHORT
     ir_dc: int = 0
@@ -236,8 +240,18 @@ class IngestResponse(BaseModel):
 
 class PairDeviceRequest(BaseModel):
     device_key: str
+    # Orang tua yang memakai gelang ini. Boleh dikosongkan: bila tidak diisi,
+    # gelang disambungkan ke profil yang sedang aktif. Aplikasi versi baru
+    # selalu mengisinya, karena tiap orang tua punya gelangnya sendiri.
+    profile_id: str | None = None
+    # Izin memindahkan gelang yang sedang dipakai orang tua lain di akun yang
+    # sama. Bawaannya False supaya pemindahan tidak pernah terjadi diam-diam;
+    # aplikasi menyalakannya hanya setelah pengguna menyetujui.
+    pindahkan: bool = False
 
 
 class DeviceStatusResponse(BaseModel):
     paired: bool
     device_key: str | None = None
+    profile_id: str | None = None
+    profile_name: str | None = None

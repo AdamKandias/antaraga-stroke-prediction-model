@@ -5,7 +5,7 @@ Bearer JWT, sedangkan dashboard dibuka lewat browser sehingga butuh cookie
 yang ikut terkirim otomatis pada navigasi biasa, unduhan CSV, tab laporan
 PDF, dan koneksi EventSource.
 
-Kredensialnya satu akun operator dari environment (bukan tabel users) —
+Kredensialnya satu akun operator dari environment (bukan tabel users) -
 dashboard ini alat internal tim riset, bukan akun keluarga yang dipakai
 aplikasi mobile.
 """
@@ -29,7 +29,7 @@ LOGIN_PATH = "/login"
 
 
 # ── Token sesi: "<payload-b64>.<hmac-b64>" ────────────────────────────────
-# Ditandatangani, bukan dienkripsi — isinya memang cuma email dan waktu
+# Ditandatangani, bukan dienkripsi - isinya memang cuma email dan waktu
 # kedaluwarsa. Yang dijaga adalah keasliannya, supaya cookie tidak bisa
 # dikarang sendiri oleh pengunjung.
 
@@ -123,6 +123,7 @@ _DILINDUNGI: tuple[str, ...] = (
     "/v1/sim",
     "/v1/calibrate",
     "/v1/ingest/latest",
+    "/v1/notify",
     "/v1/ota/bins",
     "/v1/ota/deploy",
     "/v1/ota/device-status",

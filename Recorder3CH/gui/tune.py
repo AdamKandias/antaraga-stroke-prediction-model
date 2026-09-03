@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ANTARAGA — Penyetel otomatis MAX30102 (cari pembacaan mentah paling optimal)
+ANTARAGA - Penyetel otomatis MAX30102 (cari pembacaan mentah paling optimal)
 =====================================================================
 Menyapu RENTANG ADC dan ARUS LED, mengukur SNR nyata di tiap titik, lalu
 merekomendasikan setelan terbaik beserta baris yang tinggal ditempel ke
@@ -19,7 +19,7 @@ yang lebih kecil = lebih peka: arus foto yang sama menghasilkan lebih banyak
 cacahan, TANPA menambah arus LED sedikit pun. Karena derau di sini didominasi
 elektronik ADC (pada DC 81.552 LSB, derau tembakan foton hanya ~1 LSB
 sementara derau terukur ~5,1 LSB), memperkecil rentang menaikkan SNR hampir
-sebanding — dan malah memungkinkan arus LED DITURUNKAN untuk cacahan yang
+sebanding - dan malah memungkinkan arus LED DITURUNKAN untuk cacahan yang
 sama, sehingga baterai ikut hemat.
 
 Menaikkan arus LED saja akan sampai ke DC yang sama dengan ongkos daya jauh
@@ -99,12 +99,12 @@ class Dev:
                 self.ser.write(("=%s%X\n" % (letter, kw[key])).encode())
                 if self.wait_cfg() is None:
                     raise RuntimeError(
-                        "firmware tidak menjawab '#cfg' — flash ulang "
+                        "firmware tidak menjawab '#cfg' - flash ulang "
                         "Recorder3CH (versi lama belum punya perintah ini)")
 
     def capture(self, seconds):
         # Beri LED & rantai ADC waktu menetap, lalu BUANG apa pun yang
-        # sempat mengalir — kalau tidak, sampel pertama tiap titik sapuan
+        # sempat mengalir - kalau tidak, sampel pertama tiap titik sapuan
         # masih membawa setelan sebelumnya dan menyeret rerata DC-nya.
         time.sleep(0.25)
         self.ser.reset_input_buffer()
@@ -170,7 +170,7 @@ def sweep_range(dev, rge, log):
     log("    uji 0x%02X: merah %.0f (%.0f LSB/step) | inframerah %.0f (%.0f LSB/step)"
         % (PROBE_CUR, m["red"]["dc"], k_r, m["ir"]["dc"], k_i))
     if k_r <= 0 or k_i <= 0:
-        log("    LED tidak merespons — dilewati"); return None
+        log("    LED tidak merespons - dilewati"); return None
 
     cur_r = int(round((TARGET_DC - dark_r) / k_r))
     cur_i = int(round((TARGET_DC - dark_i) / k_i))
@@ -192,7 +192,7 @@ def sweep_range(dev, rge, log):
         log("    %-10s DC %7.0f  derau %5.2f  AC %6.1f  SNR %6.1f  perfusi %5.2f permil"
             "  BPM %s (%.2f)%s"
             % (ch, c["dc"], c["sigma"], c["ac"], c["snr"], c["pi"],
-               ("%.1f" % c["bpm"]) if c["bpm"] else "—", c["conf"],
+               ("%.1f" % c["bpm"]) if c["bpm"] else "-", c["conf"],
                "  MENTOK REL" if c["clip"] else ""))
     return m
 
@@ -209,7 +209,7 @@ def main():
         lines.append(s)
 
     log("=" * 66)
-    log("ANTARAGA — penyetel otomatis MAX30102")
+    log("ANTARAGA - penyetel otomatis MAX30102")
     log("=" * 66)
     log("Tempelkan sensor SEKARANG, tekanan sekadar menyentuh, lalu DIAM")
     log("total sampai selesai (~45 detik). Bergerak di tengah sapuan membuat")
@@ -238,12 +238,12 @@ def main():
         log("\n" + "=" * 66)
         log("RINGKASAN (target DC %.0fk)" % (TARGET_DC / 1000))
         log("=" * 66)
-        # KRITERIA — sengaja TIDAK memakai SNR.
+        # KRITERIA - sengaja TIDAK memakai SNR.
         #
         # Pada DC target yang sama, AC dalam LSB juga sama: perfusi itu sifat
         # jaringan, bukan sifat setelan. Jadi yang benar-benar membedakan antar
         # kandidat hanya DERAU. Memakai SNR berarti menggantungkan keputusan
-        # pada ada-tidaknya denyut yang bagus saat sapuan berjalan — padahal
+        # pada ada-tidaknya denyut yang bagus saat sapuan berjalan - padahal
         # sapuan justru sering dilakukan ketika penempatannya belum baik.
         #
         # Derau dinyatakan relatif terhadap DC (per-mil) supaya sebanding
@@ -280,8 +280,8 @@ def main():
         conf_max = max(max(m["red"]["conf"], m["ir"]["conf"]) for m in results)
         if conf_max < 0.30:
             log("\n  CATATAN: tidak ada denyut sahih selama sapuan (periodisitas")
-            log("  tertinggi %.2f). Kolom DC dan derau TETAP SAH — keduanya tidak" % conf_max)
-            log("  butuh denyut — jadi pilihan di bawah tetap berlaku. Yang belum")
+            log("  tertinggi %.2f). Kolom DC dan derau TETAP SAH - keduanya tidak" % conf_max)
+            log("  butuh denyut - jadi pilihan di bawah tetap berlaku. Yang belum")
             log("  terbukti hanyalah perfusi/BPM di setelan itu; ulangi sambil")
             log("  memakai sensor dengan benar untuk memastikannya.")
 
@@ -316,11 +316,11 @@ def main():
         log("  #define LED_IR_DEFAULT   0x%02X" % best["cur_ir"])
 
         g = best["green"]
-        log("\nKanal HIJAU (SON1303) tidak bisa disetel dari firmware — hanya")
+        log("\nKanal HIJAU (SON1303) tidak bisa disetel dari firmware - hanya")
         log("penempatan yang mengubahnya. Saat ini: DC %.0f, AC %.1f, perfusi"
             " %.1f permil, BPM %s (%.2f)."
             % (g["dc"], g["ac"], g["pi"],
-               ("%.1f" % g["bpm"]) if g["bpm"] else "—", g["conf"]))
+               ("%.1f" % g["bpm"]) if g["bpm"] else "-", g["conf"]))
 
         # kembalikan perangkat ke pilihan terbaik
         dev.set(rge=best["rge"], red=best["cur_red"], ir=best["cur_ir"])

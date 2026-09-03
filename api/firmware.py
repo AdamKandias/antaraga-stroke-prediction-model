@@ -117,7 +117,7 @@ def list_programs() -> dict:
                 "name": f.name,
                 "path": str(f.relative_to(FIRMWARE_PATH)),
                 "type": "ino",
-                "note": "Standalone sketch — buka di Arduino IDE untuk compile & flash",
+                "note": "Standalone sketch - buka di Arduino IDE untuk compile & flash",
             })
     return {"programs": programs, "firmware_path": str(FIRMWARE_PATH)}
 
@@ -141,7 +141,7 @@ async def _stream_cmd(cmd: list[str], cwd: Path) -> AsyncIterator[str]:
         yield f"data: \ndata: [ANTARAGA] {status}\n\n"
         yield f"event: done\ndata: {code}\n\n"
     except FileNotFoundError:
-        yield "data: [ERROR] 'pio' tidak ditemukan — install: pip install platformio\n\n"
+        yield "data: [ERROR] 'pio' tidak ditemukan - install: pip install platformio\n\n"
         yield "event: done\ndata: 1\n\n"
     except Exception as exc:
         yield f"data: [ERROR] {exc}\n\n"

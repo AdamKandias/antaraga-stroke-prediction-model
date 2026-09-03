@@ -1,11 +1,11 @@
 # LOGBOOK KEGIATAN HARIAN
-## PKM-KC: ANTARAGA — Smartband Deteksi Risiko Stroke Berbasis PPG dan Kecerdasan Buatan
+## PKM-KC: ANTARAGA - Smartband Deteksi Risiko Stroke Berbasis PPG dan Kecerdasan Buatan
 
 | | |
 |---|---|
 | **Nama** | Kadek Savita Dyutianaya |
 | **Peran dalam Tim** | Ketua Tim · Koordinator Program · Administrasi & Perizinan |
-| **Periode** | 23 Mei 2026 — 25 September 2026 |
+| **Periode** | 23 Mei 2026 - 25 September 2026 |
 
 ---
 
@@ -14,7 +14,7 @@
 
 ---
 
-## 21 Juni 2026 — Monitoring Inisialisasi Aplikasi Mobile dan Manajemen Proyek
+## 21 Juni 2026 - Monitoring Inisialisasi Aplikasi Mobile dan Manajemen Proyek
 
 **Kegiatan:**
 Melakukan monitoring terhadap progres inisialisasi aplikasi mobile Flutter dan perbaikan manajemen proyek, memastikan pembagian tugas berjalan sesuai timeline yang disusun di awal.
@@ -27,13 +27,13 @@ Melakukan monitoring terhadap progres inisialisasi aplikasi mobile Flutter dan p
 - Pencatatan kebutuhan komponen yang perlu segera dibeli agar tidak menghambat pekerjaan pekan berikutnya
 
 📸 **Bukti yang perlu dilampirkan:**
-- `KADEK_monitoring progres tim.png` — dokumen pemantauan progres
-- `KADEK_timeline diperbarui.png` — timeline setelah penyesuaian
-- `KADEK_daftar kebutuhan komponen.png` — daftar pembelian yang diprioritaskan
+- `KADEK_monitoring progres tim.png` - dokumen pemantauan progres
+- `KADEK_timeline diperbarui.png` - timeline setelah penyesuaian
+- `KADEK_daftar kebutuhan komponen.png` - daftar pembelian yang diprioritaskan
 
 ---
 
-## 27 Juni 2026 — Review Desain Skematik dan Analisis Manajemen Daya
+## 27 Juni 2026 - Review Desain Skematik dan Analisis Manajemen Daya
 
 **Kegiatan:**
 Melakukan review terhadap desain skematik awal dan hasil analisis manajemen daya yang disusun tim hardware, sekaligus meninjau kesesuaiannya dengan anggaran yang tersedia.
@@ -46,13 +46,13 @@ Melakukan review terhadap desain skematik awal dan hasil analisis manajemen daya
 - Pencatatan risiko keterlambatan bila komponen tertentu harus dipesan dari luar kota
 
 📸 **Bukti yang perlu dilampirkan:**
-- `KADEK_review desain skematik.png` — catatan hasil peninjauan
-- `KADEK_penyesuaian rab komponen.png` — dokumen RAB yang diperbarui
-- `KADEK_prioritas pembelian komponen.png` — daftar prioritas
+- `KADEK_review desain skematik.png` - catatan hasil peninjauan
+- `KADEK_penyesuaian rab komponen.png` - dokumen RAB yang diperbarui
+- `KADEK_prioritas pembelian komponen.png` - daftar prioritas
 
 ---
 
-## 7 Juli 2026 — Koordinasi Studi Dataset dan Penyusunan Laporan Kemajuan
+## 7 Juli 2026 - Koordinasi Studi Dataset dan Penyusunan Laporan Kemajuan
 
 **Kegiatan:**
 Mengoordinasikan pekerjaan tim pada pekan pengembangan model kecerdasan buatan, sekaligus menyiapkan kerangka draf laporan kemajuan.
@@ -65,13 +65,13 @@ Mengoordinasikan pekerjaan tim pada pekan pengembangan model kecerdasan buatan, 
 - Pemantauan kesiapan berkas pengajuan ethical clearance yang tenggatnya berdekatan
 
 📸 **Bukti yang perlu dilampirkan:**
-- `KADEK_kerangka laporan kemajuan.png` — kerangka beserta pembagian tugas
-- `KADEK_tenggat internal tim.png` — jadwal tenggat tiap bagian
-- `KADEK_pemantauan progres pekanan.png` — catatan monitoring
+- `KADEK_kerangka laporan kemajuan.png` - kerangka beserta pembagian tugas
+- `KADEK_tenggat internal tim.png` - jadwal tenggat tiap bagian
+- `KADEK_pemantauan progres pekanan.png` - catatan monitoring
 
 ---
 
-## 30 Juli 2026 — Koordinasi Kalibrasi Model dan Persiapan Pengujian
+## 30 Juli 2026 - Koordinasi Kalibrasi Model dan Persiapan Pengujian
 
 **Kegiatan:**
 Mengoordinasikan persiapan pengujian smartband terhadap relawan, mencakup kesiapan perangkat, kelengkapan dokumen perizinan, dan penjadwalan sesi pengambilan data.
@@ -84,9 +84,9 @@ Mengoordinasikan persiapan pengujian smartband terhadap relawan, mencakup kesiap
 - Penyiapan daftar periksa sesi agar tiap perekaman mengikuti prosedur yang sama
 
 📸 **Bukti yang perlu dilampirkan:**
-- `KADEK_daftar periksa kesiapan pengujian.png` — daftar periksa sebelum sesi
-- `KADEK_jadwal sesi pengambilan data.png` — jadwal beserta pembagian peran
-- `KADEK_koordinasi persiapan pengujian.png` — foto rapat koordinasi
+- `KADEK_daftar periksa kesiapan pengujian.png` - daftar periksa sebelum sesi
+- `KADEK_jadwal sesi pengambilan data.png` - jadwal beserta pembagian peran
+- `KADEK_koordinasi persiapan pengujian.png` - foto rapat koordinasi
 
 ---
 
@@ -94,7 +94,7 @@ Mengoordinasikan persiapan pengujian smartband terhadap relawan, mencakup kesiap
 
 ---
 
-## 2 Agustus 2026 — Weekly Meeting Progres dan Evaluasi (180 menit)
+## 2 Agustus 2026 - Weekly Meeting Progres dan Evaluasi (180 menit)
 
 **Kegiatan:**
 Memimpin rapat mingguan untuk meninjau progres tiap anggota dan mengevaluasi capaian terhadap target.
@@ -110,7 +110,7 @@ Memimpin rapat mingguan untuk meninjau progres tiap anggota dan mengevaluasi cap
 
 ---
 
-## 5 Agustus 2026 — Koordinasi Persiapan Pengujian dan Dokumen Perizinan (180 menit)
+## 5 Agustus 2026 - Koordinasi Persiapan Pengujian dan Dokumen Perizinan (180 menit)
 
 **Kegiatan:**
 Mengoordinasikan persiapan pengujian terhadap relawan, mencakup kesiapan perangkat, kelengkapan dokumen, dan penjadwalan sesi.
@@ -126,7 +126,7 @@ Mengoordinasikan persiapan pengujian terhadap relawan, mencakup kesiapan perangk
 
 ---
 
-## 6 Agustus 2026 — Koordinasi Pengujian 2 Smartband (360 menit)
+## 6 Agustus 2026 - Koordinasi Pengujian 2 Smartband (360 menit)
 
 **Kegiatan:**
 Mengoordinasikan jalannya pengujian smartband kedua terhadap relawan.
@@ -142,7 +142,7 @@ Mengoordinasikan jalannya pengujian smartband kedua terhadap relawan.
 
 ---
 
-## 14 Agustus 2026 — Koordinasi Penyerahan Berkas HKI (180 menit)
+## 14 Agustus 2026 - Koordinasi Penyerahan Berkas HKI (180 menit)
 
 **Kegiatan:**
 Mengoordinasikan penyerahan berkas HKI ke sentra HKI kampus, memastikan seluruh lampiran lengkap sebelum diserahkan.
@@ -183,7 +183,7 @@ Meninjau kelengkapan data yang terkumpul dari empat sesi pengujian, lalu mengoor
 
 ---
 
-## 20 Agustus 2026 — Workshop Internal Teknis Pengajuan Hak Cipta (450 menit)
+## 20 Agustus 2026 - Workshop Internal Teknis Pengajuan Hak Cipta (450 menit)
 
 **Kegiatan:**
 Mengikuti Workshop Internal Teknis Pengajuan Hak Cipta dan mengoordinasikan tindak lanjutnya.
@@ -198,7 +198,7 @@ Mengikuti Workshop Internal Teknis Pengajuan Hak Cipta dan mengoordinasikan tind
 
 ---
 
-## 23 Agustus 2026 — Koordinasi Penyusunan Laporan Kemajuan (360 menit)
+## 23 Agustus 2026 - Koordinasi Penyusunan Laporan Kemajuan (360 menit)
 
 **Kegiatan:**
 Mengoordinasikan penyusunan laporan kemajuan, memastikan tiap bagian tergarap dan seragam gaya penulisannya.
@@ -214,7 +214,7 @@ Mengoordinasikan penyusunan laporan kemajuan, memastikan tiap bagian tergarap da
 
 ---
 
-## 26 Agustus 2026 — Workshop Teknik Presentasi PKP2 (180 menit)
+## 26 Agustus 2026 - Workshop Teknik Presentasi PKP2 (180 menit)
 
 **Kegiatan:**
 Mengikuti Workshop Teknik Presentasi PKP2 dan menyusun rencana pembagian peran saat penilaian.
@@ -228,7 +228,7 @@ Mengikuti Workshop Teknik Presentasi PKP2 dan menyusun rencana pembagian peran s
 
 ---
 
-## 28 Agustus 2026 — Asistensi Laporan Kemajuan ke Dosen Pendamping (360 menit)
+## 28 Agustus 2026 - Asistensi Laporan Kemajuan ke Dosen Pendamping (360 menit)
 
 **Kegiatan:**
 Memimpin asistensi laporan kemajuan ke dosen pendamping bersama seluruh anggota.
@@ -244,7 +244,7 @@ Memimpin asistensi laporan kemajuan ke dosen pendamping bersama seluruh anggota.
 
 ---
 
-## 29 Agustus 2026 — Koordinasi Finalisasi Konten Media Sosial Ketiga (300 menit)
+## 29 Agustus 2026 - Koordinasi Finalisasi Konten Media Sosial Ketiga (300 menit)
 
 **Kegiatan:**
 Mengoordinasikan finalisasi dan pengunggahan konten media sosial ketiga.
@@ -259,7 +259,7 @@ Mengoordinasikan finalisasi dan pengunggahan konten media sosial ketiga.
 
 ---
 
-## 30 Agustus 2026 — Koordinasi Pengujian 5 Smartband (300 menit)
+## 30 Agustus 2026 - Koordinasi Pengujian 5 Smartband (300 menit)
 
 **Kegiatan:**
 Mengoordinasikan pengujian smartband kelima.

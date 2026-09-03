@@ -6,10 +6,10 @@ Jalankan setelah mengumpulkan minimal 20 sesi kalibrasi:
   python model/train_mlp_calibration.py
 
 Output:
-  model/artifacts/mlp_calibration.joblib   — model terlatih
+  model/artifacts/mlp_calibration.joblib   - model terlatih
   model/artifacts/mlp_calibration_metrics.json
-  reports/kalibrasi/scatter_*.png          — scatter plot untuk proposal
-  reports/kalibrasi/training_report.txt    — ringkasan teks
+  reports/kalibrasi/scatter_*.png          - scatter plot untuk proposal
+  reports/kalibrasi/training_report.txt    - ringkasan teks
 
 Setiap parameter vital dilatih sebagai model MLPRegressor terpisah.
 Fitur input: [ir_dc_mean, ir_ac_p2p, red_dc_mean, red_ac_p2p, bpm, age_years, gender_code]
@@ -165,7 +165,7 @@ def make_scatter(y_true, y_pred, label: str, out: Path, metrics: dict):
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
-        print(f"  [skip] matplotlib tidak tersedia — scatter {label} tidak dibuat")
+        print(f"  [skip] matplotlib tidak tersedia - scatter {label} tidak dibuat")
         return
 
     fig, ax = plt.subplots(figsize=(5, 5))
@@ -175,8 +175,8 @@ def make_scatter(y_true, y_pred, label: str, out: Path, metrics: dict):
     hi = max(y_true.max(), y_pred.max()) * 1.05
     ax.plot([lo, hi], [lo, hi], "k--", linewidth=1, alpha=0.5, label="Ideal")
 
-    ax.set_xlabel(f"Referensi Invasif — {label}", fontsize=10)
-    ax.set_ylabel(f"Prediksi Sensor — {label}", fontsize=10)
+    ax.set_xlabel(f"Referensi Invasif - {label}", fontsize=10)
+    ax.set_ylabel(f"Prediksi Sensor - {label}", fontsize=10)
     ax.set_title(
         f"{label}\n"
         f"R²={metrics['r2']}  MAE={metrics['mae']}  Akurasi={metrics['accuracy_pct']}%",
@@ -194,7 +194,7 @@ def make_scatter(y_true, y_pred, label: str, out: Path, metrics: dict):
 
 def main():
     print("=" * 60)
-    print("ANTARAGA — Pelatihan MLP Kalibrasi Vital Sign")
+    print("ANTARAGA - Pelatihan MLP Kalibrasi Vital Sign")
     print("=" * 60)
 
     # Coba dari DB dulu, fallback ke CSV
@@ -202,7 +202,7 @@ def main():
     if df.empty:
         csv_path = ROOT / "data" / "calibration" / "calibration_data.csv"
         if csv_path.exists():
-            print(f"DB kosong — baca dari {csv_path}")
+            print(f"DB kosong - baca dari {csv_path}")
             df = load_from_csv(csv_path)
         else:
             print("\n❌  Belum ada data kalibrasi.")
@@ -228,7 +228,7 @@ def main():
     # Pelatihan per target
     all_metrics: dict = {}
     all_models: dict  = {}
-    report_lines = ["ANTARAGA — Hasil Pelatihan MLP Kalibrasi\n" + "=" * 50]
+    report_lines = ["ANTARAGA - Hasil Pelatihan MLP Kalibrasi\n" + "=" * 50]
 
     for target_col, target_label in TARGETS.items():
         sub = df[df[target_col].notna()].copy()
@@ -239,7 +239,7 @@ def main():
         print(f"Target: {target_label}  ({len(sub)} baris tersedia)")
 
         if len(sub) < MIN_ROWS:
-            print(f"  ⚠  Lewati — data tidak cukup ({len(sub)}/{MIN_ROWS})")
+            print(f"  ⚠  Lewati - data tidak cukup ({len(sub)}/{MIN_ROWS})")
             report_lines.append(f"\n{target_label}: TIDAK CUKUP DATA ({len(sub)} baris)")
             continue
 
