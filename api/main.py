@@ -213,6 +213,24 @@ def health_fcm() -> dict:
     return status()
 
 
+@app.delete("/device/register-token", status_code=204)
+def hapus_device_token(
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+) -> None:
+    """Lepaskan token notifikasi dari akun ini, dipanggil saat keluar akun.
+
+    Tanpa ini, ponsel yang sudah berpindah tangan tetap menerima peringatan
+    milik pemilik akun sebelumnya. Satu ponsel dapat dipakai bergantian di
+    keluarga yang sama, dan data kesehatan lansia bukan sesuatu yang boleh
+    nyasar ke orang lain.
+    """
+    user = db.query(models_db.User).filter(models_db.User.id == user_id).first()
+    if user:
+        user.fcm_token = None
+        db.commit()
+
+
 @app.post("/device/register-token", status_code=204)
 def register_device_token(
     body: schemas.RegisterDeviceTokenRequest,
@@ -1061,9 +1079,20 @@ def ingest_firmware_batch(
             last_notified = user.last_notified_at
             last_utc = last_notified.replace(tzinfo=timezone.utc) if last_notified else None
             if last_utc is None or (now_utc - last_utc) > cooldown:
+                send_high_risk_notification.token_mati = False
                 sent = send_high_risk_notification(user.fcm_token, profile.name)
                 if sent:
                     user.last_notified_at = datetime.utcnow()
+                    db.commit()
+                elif getattr(send_high_risk_notification, "token_mati", False):
+                    # Token tidak akan pernah berhasil lagi. Dibiarkan tersimpan,
+                    # server akan mencoba mengirim ke alamat mati itu setiap kali
+                    # risiko terdeteksi tinggi, dan dashboard tetap melaporkan
+                    # akunnya "siap" padahal tidak.
+                    logger.warning(
+                        "[fcm] Token akun %s dibuang karena sudah tidak berlaku", user_id,
+                    )
+                    user.fcm_token = None
                     db.commit()
 
     return schemas.IngestResponse(ok=True, seq=batch.seq, risk_level=result["risk_level"])
@@ -1204,12 +1233,17 @@ def notify_test(
         if profil is not None:
             nama_profil = profil.name
 
-    berhasil, keterangan = kirim_notifikasi_uji(
+    berhasil, keterangan, token_mati = kirim_notifikasi_uji(
         user.fcm_token or "", nama_profil, judul=judul, isi=isi,
     )
+    if token_mati and user.fcm_token:
+        user.fcm_token = None
+        db.commit()
+
     return {
         "ok": berhasil,
         "keterangan": keterangan,
+        "token_dibuang": bool(token_mati),
         "tujuan": user.email or user.phone or user.id[:8],
         "profil": nama_profil,
     }

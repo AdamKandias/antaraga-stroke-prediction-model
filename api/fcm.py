@@ -95,6 +95,28 @@ def _get_app():
     return _firebase_app
 
 
+def _klasifikasi_galat(exc: Exception) -> tuple[str, bool]:
+    """Terjemahkan galat Firebase menjadi (keterangan, token_mati).
+
+    `token_mati` berarti token yang tersimpan sudah tidak mungkin dipakai lagi,
+    berapa kali pun dicoba. Pemanggil wajib membuang token itu dari basis data,
+    kalau tidak server akan terus mengirim ke alamat yang sudah tidak ada
+    sampai pengguna kebetulan membuka aplikasinya lagi.
+    """
+    nama = type(exc).__name__
+    if "Unregistered" in nama or "NotFound" in nama:
+        return ("Token notifikasi sudah tidak berlaku. Biasanya karena aplikasi "
+                "dihapus atau datanya dibersihkan.", True)
+    if "InvalidArgument" in nama and "registration token" in str(exc):
+        return ("Token notifikasi yang tersimpan tidak berbentuk token FCM yang sah.", True)
+    if "SenderId" in nama or "ThirdPartyAuth" in nama:
+        return ("Token ini milik proyek Firebase yang berbeda. Pastikan "
+                "google-services.json aplikasi sama dengan kunci layanan di server.", True)
+    # Sisanya dianggap gangguan sementara: jaringan, kuota, layanan sedang
+    # bermasalah. Token tidak boleh dibuang karena besok mungkin berhasil.
+    return (f"{nama}: {exc}", False)
+
+
 def send_high_risk_notification(fcm_token: str, profile_name: str) -> bool:
     """Kirim push notification ke device user saat risiko stroke HIGH.
 
@@ -135,8 +157,14 @@ def send_high_risk_notification(fcm_token: str, profile_name: str) -> bool:
         messaging.send(message)
         logger.info("[fcm] Notifikasi HIGH-risk dikirim ke profil '%s'", profile_name)
         return True
-    except Exception:
-        logger.exception("[fcm] Gagal kirim notifikasi FCM ke profil '%s'", profile_name)
+    except Exception as exc:  # noqa: BLE001
+        keterangan, token_mati = _klasifikasi_galat(exc)
+        logger.warning(
+            "[fcm] Gagal kirim notifikasi ke profil '%s': %s", profile_name, keterangan,
+        )
+        # Ditandai lewat atribut fungsi supaya tanda tangan lamanya tetap utuh
+        # bagi pemanggil yang hanya peduli berhasil atau tidak.
+        send_high_risk_notification.token_mati = token_mati
         return False
 
 
@@ -145,7 +173,7 @@ def kirim_notifikasi_uji(
     profile_name: str,
     judul: str | None = None,
     isi: str | None = None,
-) -> tuple[bool, str]:
+) -> tuple[bool, str, bool]:
     """Kirim notifikasi percobaan dari dashboard.
 
     Berbeda dari [send_high_risk_notification] yang hanya mengembalikan
@@ -154,16 +182,18 @@ def kirim_notifikasi_uji(
     kedaluwarsa, kunci layanan yang belum terpasang, dan aplikasi yang belum
     pernah dibuka semuanya terlihat sama.
 
-    Mengembalikan pasangan (berhasil, keterangan).
+    Mengembalikan (berhasil, keterangan, token_mati). `token_mati` menandai
+    token yang tidak akan pernah bisa dipakai lagi, sehingga pemanggil dapat
+    membuangnya dari basis data.
     """
     if not fcm_token:
         return False, ("Akun ini belum punya token notifikasi. Buka aplikasi "
-                       "ANTARAGA dan masuk ke akun tersebut lebih dulu.")
+                       "ANTARAGA dan masuk ke akun tersebut lebih dulu."), False
 
     app = _get_app()
     if app is None:
         return False, ("Firebase belum dikonfigurasi di server. Berkas "
-                       "serviceAccountKey.json tidak ditemukan atau tidak sah.")
+                       "serviceAccountKey.json tidak ditemukan atau tidak sah."), False
 
     try:
         from firebase_admin import messaging
@@ -192,22 +222,13 @@ def kirim_notifikasi_uji(
         )
         message_id = messaging.send(message)
         logger.info("[fcm] Notifikasi percobaan dikirim untuk profil '%s'", profile_name)
-        return True, f"Terkirim ke Firebase (id {message_id.rsplit('/', 1)[-1]})"
+        return True, f"Terkirim ke Firebase (id {message_id.rsplit('/', 1)[-1]})", False
     except Exception as exc:  # noqa: BLE001
-        logger.exception("[fcm] Gagal kirim notifikasi percobaan '%s'", profile_name)
-        nama = type(exc).__name__
-        if "Unregistered" in nama or "NotFound" in nama:
-            return False, ("Token notifikasi sudah tidak berlaku. Biasanya "
-                           "karena aplikasi dihapus atau datanya dibersihkan. "
-                           "Buka ulang aplikasi supaya token baru terdaftar.")
-        if "InvalidArgument" in nama and "registration token" in str(exc):
-            return False, ("Token notifikasi yang tersimpan tidak berbentuk token FCM "
-                           "yang sah. Buka ulang aplikasi supaya token baru terdaftar.")
-        if "SenderId" in nama or "ThirdPartyAuth" in nama:
-            return False, ("Token ini milik proyek Firebase yang berbeda. "
-                           "Pastikan google-services.json aplikasi sama dengan "
-                           "kunci layanan di server.")
-        return False, f"{nama}: {exc}"
+        logger.warning("[fcm] Gagal kirim notifikasi percobaan '%s'", profile_name)
+        keterangan, token_mati = _klasifikasi_galat(exc)
+        if token_mati:
+            keterangan += " Token akan dibuang dari server; buka ulang aplikasi supaya token baru terdaftar."
+        return False, keterangan, token_mati
 
 
 def status() -> dict:
