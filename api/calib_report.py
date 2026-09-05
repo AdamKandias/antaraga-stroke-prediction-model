@@ -615,7 +615,7 @@ _MLP_TARGETS: dict[str, tuple[str, str]] = {
 # _kategori_klinis_manual(). "Riwayat Stroke Pribadi" sengaja tidak ikut
 # dihitung di sini karena dipakai sebagai pemicu langsung kategori Tinggi.
 _FAKTOR_HITUNG_LABELS = {
-    "Hipertensi", "Hiperglikemia", "Dislipidemia", "Hiperurisemia",
+    "Hipertensi", "Hiperglikemia", "Kolesterol Total Tinggi", "Hiperurisemia",
     "Aritmia / laju tidak normal", "Riwayat Stroke Keluarga",
 }
 
@@ -863,7 +863,8 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
          (sis is not None and sis >= 140) or (dia is not None and dia >= 90)),
         ("Hiperglikemia", "Melampaui ambang normal sesuai kondisi pengambilan",
          st_gula[1] in ("watch", "crit")),
-        ("Dislipidemia", "Kolesterol total ≥ 200 mg/dL",
+        ("Kolesterol Total Tinggi", "Di atas ambang batas normal (≥ 200 mg/dL, NCEP ATP III) -- "
+         "kolesterol total saja belum cukup memastikan dislipidemia, perlu profil lipid lengkap (LDL/HDL/trigliserida)",
          kol is not None and kol >= 200),
         ("Hiperurisemia", f"Di atas rujukan {'pria' if gender == 'L' else 'wanita'}",
          st_au[1] == "high"),

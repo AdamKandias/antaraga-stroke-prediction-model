@@ -9,7 +9,10 @@ from urllib.parse import quote
 import os
 
 import numpy as np
-from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile,
+    WebSocket, WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import (
     FileResponse,
@@ -2139,6 +2142,116 @@ def calibrate_export(
     )
 
 
+@app.post("/v1/calibrate/import.csv")
+async def calibrate_import(
+    apply: bool = Query(False, description="False = pratinjau saja (default), True = tulis ke DB"),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Pulihkan rekaman kalibrasi dari CSV hasil /v1/calibrate/export.csv.
+
+    Alat darurat untuk kasus dataset kalibrasi hilang dari tampilan dashboard
+    tapi masih ada cadangan CSV-nya (mis. yang diunduh manual sebelumnya).
+
+    Dirancang supaya TIDAK BISA merusak data yang masih ada di database:
+      - Baris dicocokkan lewat (device_id, subject_id, session_ts). Kalau
+        kombinasi itu SUDAH ada di database, baris dilewati -- tidak pernah
+        ditimpa/diupdate, cuma baris yang benar-benar belum ada yang ditambah.
+      - apply=False (default) cuma pratinjau: laporkan apa yang AKAN masuk
+        tanpa menulis apa pun. Harus eksplisit apply=True untuk menyimpan.
+    """
+    import csv, io
+
+    raw = (await file.read()).decode("utf-8-sig")
+    try:
+        reader = list(csv.DictReader(io.StringIO(raw)))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"CSV tidak bisa dibaca: {exc}")
+    if not reader:
+        raise HTTPException(status_code=400, detail="CSV kosong atau tidak punya baris data")
+
+    existing_keys = {
+        (r.device_id, r.subject_id, r.created_at.replace(microsecond=0))
+        for r in db.query(models_db.CalibrationRecord).all()
+    }
+
+    def _f(row: dict, name: str) -> float | None:
+        v = (row.get(name) or "").strip()
+        return float(v) if v != "" else None
+
+    kandidat: list[models_db.CalibrationRecord] = []
+    dilewati: list[dict] = []
+    gagal: list[dict] = []
+
+    for i, row in enumerate(reader, start=2):   # baris 2 = baris data pertama setelah header
+        device_id = (row.get("device_id") or "").strip()
+        subject_id = (row.get("subject_id") or "").strip()
+        session_ts_raw = (row.get("session_ts") or "").strip()
+        if not device_id or not subject_id or not session_ts_raw:
+            gagal.append({"baris": i, "alasan": "device_id/subject_id/session_ts kosong"})
+            continue
+        try:
+            session_ts = datetime.fromisoformat(session_ts_raw.replace("Z", "+00:00")).replace(tzinfo=None)
+        except Exception as exc:
+            gagal.append({"baris": i, "subject_id": subject_id, "alasan": f"session_ts tidak valid: {exc}"})
+            continue
+
+        key = (device_id, subject_id, session_ts.replace(microsecond=0))
+        if key in existing_keys:
+            dilewati.append({"baris": i, "subject_id": subject_id, "alasan": "sudah ada di database"})
+            continue
+
+        age_years = _f(row, "age_years")
+        if age_years is None:
+            gagal.append({"baris": i, "subject_id": subject_id, "alasan": "age_years kosong"})
+            continue
+
+        rec = models_db.CalibrationRecord(
+            device_id=device_id,
+            subject_id=subject_id,
+            age_years=age_years,
+            gender=(row.get("gender") or "L").strip().upper(),
+            kondisi=(row.get("kondisi") or "").strip() or None,
+            fs_hz=_f(row, "fs_hz") or 100.0,
+            green_raw=(row.get("green_raw") or "").strip() or None,
+            red_raw=(row.get("red_raw") or "").strip() or None,
+            infrared_raw=(row.get("infrared_raw") or "").strip() or None,
+            ir_dc_mean=_f(row, "ir_dc_mean"),
+            ir_ac_p2p=_f(row, "ir_ac_p2p"),
+            red_dc_mean=_f(row, "red_dc_mean"),
+            red_ac_p2p=_f(row, "red_ac_p2p"),
+            bpm=_f(row, "bpm"),
+            gula_darah_mg_dl=_f(row, "gula_darah_mg_dl"),
+            kolesterol_mg_dl=_f(row, "kolesterol_mg_dl"),
+            asam_urat_mg_dl=_f(row, "asam_urat_mg_dl"),
+            sistolik_mmhg=_f(row, "sistolik_mmhg"),
+            diastolik_mmhg=_f(row, "diastolik_mmhg"),
+            created_at=session_ts,
+        )
+        kandidat.append(rec)
+        existing_keys.add(key)   # cegah baris duplikat di dalam file yang sama
+
+    if apply:
+        for rec in kandidat:
+            db.add(rec)
+        db.commit()
+
+    return {
+        "diterapkan": apply,
+        "baris_di_csv": len(reader),
+        "akan_masuk" if not apply else "dimasukkan": len(kandidat),
+        "dilewati_sudah_ada": len(dilewati),
+        "gagal": len(gagal),
+        "detail_dilewati": dilewati[:20],
+        "detail_gagal": gagal[:20],
+        "detail_kandidat": [
+            {"subject_id": r.subject_id, "device_id": r.device_id,
+             "session_ts": _utc_iso(r.created_at)}
+            for r in kandidat
+        ][:30],
+    }
+
+
 @app.post("/v1/calibrate/recompute-bpm")
 def calibrate_recompute_bpm(
     apply: bool = Query(False, description="False = pratinjau saja (default), True = tulis ke DB"),
@@ -2351,12 +2464,23 @@ def calibrate_generate_demo(
         dia_b =  60.0 + age * 0.15 + gc * 3.0 + risk * 14.0 + float(rng.normal(0, 5))
         bpm_b =  80.0 - age * 0.18                          + float(rng.normal(0, 5))
 
+        # Hipertensi sistolik terisolasi (isolated systolic hypertension / wide
+        # pulse pressure): pada lansia, kekakuan arteri bisa menaikkan sistolik
+        # SEKALIGUS menurunkan diastolik -- pola nyata yang sebelumnya tidak
+        # tercakup di sini (data selalu menaikkan/menurunkan keduanya bersamaan).
+        # Ditetapkan di level subjek (bukan per baris) karena ini kondisi
+        # pembuluh darah yang menetap sepanjang sesi, bukan fluktuasi sesaat.
+        pulsa_lebar = age >= 65 and rng.random() < 0.35
+        if pulsa_lebar:
+            sis_b += float(rng.uniform(15, 35))
+            dia_b -= float(rng.uniform(10, 25))
+
         for _ in range(rows_each):
             kondisi = str(rng.choice(KONDISI))
 
-            sis = float(np.clip(rng.normal(sis_b, 10), 90, 180))
-            dia = float(np.clip(rng.normal(dia_b,  7), 55, 110))
-            if sis <= dia + 20:
+            sis = float(np.clip(rng.normal(sis_b, 10), 90, 200))
+            dia = float(np.clip(rng.normal(dia_b,  7), 45, 110))
+            if not pulsa_lebar and sis <= dia + 20:
                 sis = dia + 20.0 + float(rng.uniform(5, 15))
             bpm = float(np.clip(rng.normal(bpm_b,  8), 48, 102))
 
@@ -2882,10 +3006,15 @@ semakin akurat model. Garis diagonal = prediksi sempurna.</p>
     dari sekadar menerka rata-rata, &lt;0 = model lebih buruk dari rata-rata.</div>
   </div>
   <div class="legend-row">
-    <div style="min-width:90px;font-weight:700">LOO / 5-fold</div>
-    <div><i>Leave-One-Out</i> (untuk data kecil &lt;30) atau <i>5-fold Cross-Validation</i> (data ≥30):
-    tiap rekaman diuji oleh model yang tidak melihat rekaman tersebut saat training - hasilnya lebih jujur
-    dari sekadar memeriksa data training.</div>
+    <div style="min-width:90px;font-weight:700">Validasi</div>
+    <div>Skema cross-validation dipilih otomatis sesuai bentuk data, semuanya menjamin rekaman
+    subjek yang sama tidak pernah ada di sisi latih DAN sisi uji sekaligus (mencegah kebocoran data):
+    <b>LOO</b> - tiap subjek (satu rekaman/subjek) diuji bergiliran oleh model yang tidak melihatnya
+    (setara Leave-One-Subject-Out untuk data seperti ini). <b>LOGO/subjek</b> - subjek dengan banyak
+    rekaman diuji bergiliran per subjek utuh, dipakai saat subjek terlalu sedikit untuk dibagi 5 kelompok.
+    <b>GroupKFold/subjek</b> - subjek dikelompokkan ke 5 lipatan, tiap lipatan diuji oleh model yang
+    tidak melihat satu pun rekaman dari subjek-subjek di lipatan itu. <b>5-fold</b> - dipakai hanya bila
+    satu subjek memang cuma pernah punya satu rekaman dan datanya sudah besar (≥30).</div>
   </div>
 </div>
 

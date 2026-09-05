@@ -1497,6 +1497,9 @@
           <div style="display:flex;gap:8px;align-items:center">
             <button class="btn-sec btn-sm" onclick="calibLoad()">↺ Refresh</button>
             <button class="btn btn-sm" onclick="calibExport()">⬇ Export CSV</button>
+            <input type="file" id="calibImportFile" accept=".csv" style="display:none" onchange="calibImportFile()">
+            <button class="btn-sec btn-sm" onclick="document.getElementById('calibImportFile').click()"
+              title="Pulihkan rekaman dari CSV cadangan (mis. hasil Export CSV sebelumnya). Aman: baris yang sudah ada di database tidak akan ditimpa/diduplikasi.">⬆ Impor CSV</button>
           </div>
         </div>
         <div style="overflow-x:auto">
@@ -1540,8 +1543,8 @@
             style="font-size:11px;font-weight:600;color:var(--muted);background:var(--surface2);padding:2px 10px;border-radius:20px">Memuat…</span>
         </div>
         <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">
-          Generate ratusan rekaman sinyal PPG sintetis dengan korelasi fisiologis realistis (multi-subjek, usia 45–80,
-          L/P, kondisi berbeda)
+          Generate ratusan rekaman sinyal PPG sintetis dengan korelasi fisiologis realistis (multi-subjek, usia 20–82,
+          L/P, kondisi berbeda, termasuk pola hipertensi sistolik terisolasi/wide pulse pressure pada lansia)
           untuk menguji pipeline pelatihan MLP tanpa perlu data kalibrasi nyata.
         </p>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -2468,6 +2471,50 @@
       window.location.href = `/v1/calibrate/export.csv${devFilter}${sep}_t=${Date.now()}`;
     }
 
+    // ── Impor CSV (pemulihan darurat) ────────────────────────────────────────────
+    // Dua langkah: pratinjau (apply=false) dulu untuk menunjukkan apa yang AKAN
+    // masuk, baru minta konfirmasi sebelum benar-benar menyimpan (apply=true).
+    // Baris yang device_id+subject_id+session_ts-nya sudah ada di database selalu
+    // dilewati oleh server -- tombol ini tidak bisa dipakai untuk menimpa data.
+    async function calibImportFile() {
+      const inp = document.getElementById('calibImportFile');
+      const file = inp.files[0];
+      if (!file) return;
+      try {
+        const fd1 = new FormData();
+        fd1.append('file', file);
+        const rPrev = await fetch('/v1/calibrate/import.csv?apply=false', { method: 'POST', body: fd1 });
+        const prev = await rPrev.json().catch(() => ({}));
+        if (!rPrev.ok) { alert(`Gagal membaca CSV: ${prev.detail || rPrev.status}`); return; }
+
+        const ringkas = `Baris di CSV: ${prev.baris_di_csv}\n`
+          + `Akan ditambahkan: ${prev.akan_masuk}\n`
+          + `Dilewati (sudah ada di database): ${prev.dilewati_sudah_ada}\n`
+          + `Gagal dibaca: ${prev.gagal}`;
+
+        if (!prev.akan_masuk) {
+          alert(`Tidak ada baris baru untuk diimpor -- semua baris di CSV ini sudah ada di database.\n\n${ringkas}`);
+          return;
+        }
+        const daftarSubjek = prev.detail_kandidat.map(k => k.subject_id).join(', ');
+        if (!confirm(`${ringkas}\n\nSubjek yang akan ditambahkan: ${daftarSubjek}\n\nLanjutkan menyimpan ke database?`)) {
+          return;
+        }
+
+        const fd2 = new FormData();
+        fd2.append('file', file);
+        const rApply = await fetch('/v1/calibrate/import.csv?apply=true', { method: 'POST', body: fd2 });
+        const applied = await rApply.json().catch(() => ({}));
+        if (!rApply.ok) { alert(`Gagal menyimpan: ${applied.detail || rApply.status}`); return; }
+        alert(`✓ ${applied.dimasukkan} rekaman berhasil dipulihkan ke database.`);
+        calibLoad();
+      } catch (e) {
+        alert(`Error: ${e.message}`);
+      } finally {
+        inp.value = '';
+      }
+    }
+
     // ── Edit rekaman kalibrasi ──────────────────────────────────────────────────
     let _calibEditId = null;
 
@@ -2654,7 +2701,7 @@
       const modeLabel = mode === 'demo' ? 'Demo Data' : 'Data Asli';
       if (btnReal) btnReal.disabled = true;
       if (btnDemo) btnDemo.disabled = true;
-      show(`Melatih dari ${modeLabel} (LOO / 5-fold CV)… mungkin perlu beberapa detik.`, 'var(--muted)');
+      show(`Melatih dari ${modeLabel} (validasi per-subjek: LOO/LOGO/GroupKFold sesuai jumlah data)… mungkin perlu beberapa detik.`, 'var(--muted)');
       wrap.innerHTML = '<span style="color:var(--muted)">Melatih model…</span>';
       if (dlLink) dlLink.style.display = 'none';
 
