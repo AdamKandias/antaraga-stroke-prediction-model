@@ -636,7 +636,7 @@ def _kategori_klinis_manual(
     didiskusikan dengan tim.
     """
     if riwayat_pribadi:
-        return "Tinggi", ["Subjek pernah didiagnosis stroke sebelumnya."]
+        return "Tinggi", ["Subjek sendiri memiliki riwayat stroke."]
 
     aktif = [nama for nama, _desc, on in faktor if on and nama in _FAKTOR_HITUNG_LABELS]
     poin = len(aktif)
@@ -871,7 +871,7 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
          st_bpm[1] in ("watch", "high")),
         ("Riwayat Stroke Keluarga", "Orang tua atau saudara kandung pernah menderita stroke",
          bool(riwayat_stroke)),
-        ("Riwayat Stroke Pribadi", "Subjek sendiri pernah didiagnosis stroke sebelumnya",
+        ("Riwayat Stroke Pribadi", "Subjek sendiri memiliki riwayat stroke",
          bool(riwayat_pribadi)),
     ]
     risk_html = "".join(
