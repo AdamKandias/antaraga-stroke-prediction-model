@@ -249,3 +249,31 @@ Mendampingi pengujian smartband kelima dari sisi administrasi dan pencatatan.
 📸 `TIWI_administrasi sesi kelima.png`, `TIWI_pencatatan hasil alat medis.png`
 
 ---
+
+## 2 September 2026 - Pendampingan Administrasi Pengujian 5 (- menit)
+
+**Kegiatan:**
+Mendampingi pengujian smartband kelima dari sisi administrasi dan pencatatan.
+
+**Narasi & Indikator Capaian:**
+Mendampingi pengujian kelima smartband ANTARAGA dari sisi administrasi, mencatat hasil pengukuran alat medis pembanding untuk tiap relawan, memeriksa kelengkapan berkas informed consent yang telah ditandatangani, serta mengarsipkan data hasil pengukuran sesuai kode subjek masing-masing.
+
+Indikator capaian: terarsipkannya data hasil pengujian kelima secara lengkap dan tertata per kode subjek, serta terjaminnya kelengkapan dokumen persetujuan relawan sesuai ketentuan etik penelitian.
+
+📸 `TIWI_administrasi sesi kelima.png`, `TIWI_arsip data per kode subjek.png`
+
+---
+
+## 5 September 2026 - Pengarsipan Data Tambahan dan Laporan Kemajuan (- menit)
+
+**Kegiatan:**
+Mencatat dan mengarsipkan dua data kalibrasi tambahan, sekaligus menyusun bagian administratif pada laporan kemajuan.
+
+**Narasi & Indikator Capaian:**
+Mencatat dan mengarsipkan hasil dua data kalibrasi tambahan (pengujian keenam) dari pengujian laboratorium dan alat pembanding terstandar, memastikan kesesuaian antara hasil ukur dan kode subjek. Selain itu, menyusun bagian administratif pada laporan kemajuan, termasuk rekap logbook kegiatan dan status luaran yang sudah tercapai.
+
+Indikator capaian: terarsipkannya data kalibrasi tambahan dengan lengkap, serta tersusunnya bagian administratif laporan kemajuan yang siap diperiksa tim.
+
+📸 `TIWI_arsip data tambahan lab dan standar.png`, `TIWI_bagian administratif laporan kemajuan.png`
+
+---

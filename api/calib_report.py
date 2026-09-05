@@ -177,11 +177,23 @@ def _glucose_ref(kondisi: str | None) -> str:
         return "70 - 99 (puasa)"
     if k.startswith("2j"):
         return "< 140 (2 jam PP)"
-    return "< 140 (sewaktu)"
+    return "< 200 (sewaktu)"
 
 
 def _classify_glucose(val: float | None, kondisi: str | None) -> tuple[str, str]:
-    """Ambang ADA / PERKENI, batasnya berbeda per kondisi pengambilan."""
+    """Ambang PERKENI 2021, batasnya berbeda per kondisi pengambilan.
+
+    GDS (sewaktu/acak) TIDAK memakai ambang yang sama dengan TTGO 2 jam
+    post-prandial -- ini kesalahan yang sebelumnya ada di sini. PERKENI
+    menetapkan satu ambang diagnostik untuk GDS: >= 200 mg/dL disertai
+    gejala klasik (poliuria, polidipsia, berat badan turun) mengarah ke
+    diabetes; di bawah itu bukan diagnostik lewat GDS saja. Istilah
+    "Prediabetes (TGT)" murni milik TTGO -- TGT artinya toleransi glukosa
+    terganggu, hasil dari uji 2 jam setelah beban glukosa terstandar, bukan
+    dari sekali cuplik acak. Menyamakan keduanya membuat gula darah sewaktu
+    yang sebetulnya normal (misalnya 183 mg/dL sehabis makan) salah
+    dilabeli "Prediabetes".
+    """
     if val is None:
         return ("Tidak diukur", "na")
     k = (kondisi or "sewaktu").lower()
@@ -193,14 +205,25 @@ def _classify_glucose(val: float | None, kondisi: str | None) -> tuple[str, str]
         if val < 126:
             return ("Prediabetes (GDPT)", "watch")
         return ("Rentang Diabetes", "crit")
-    # 2 jam post-prandial dan sewaktu memakai ambang yang sama
+    if k.startswith("2j"):
+        # TTGO 2 jam post-prandial: satu-satunya kondisi pengambilan yang
+        # memang punya kategori "Prediabetes (TGT)" menurut PERKENI.
+        if val < 70:
+            return ("Hipoglikemia", "high")
+        if val < 140:
+            return ("Normal", "ok")
+        if val < 200:
+            return ("Prediabetes (TGT)", "watch")
+        return ("Rentang Diabetes", "crit")
+    # Sewaktu/acak: PERKENI hanya menetapkan ambang diagnostik tunggal.
+    # Nilai 140-199 sewaktu bisa saja normal, bergantung kapan terakhir
+    # makan, sehingga ditandai sebagai anjuran periksa ulang -- bukan
+    # diberi label diagnosis yang sebenarnya tidak berlaku untuk GDS.
     if val < 70:
         return ("Hipoglikemia", "high")
-    if val < 140:
-        return ("Normal", "ok")
     if val < 200:
-        return ("Prediabetes (TGT)", "watch")
-    return ("Rentang Diabetes", "crit")
+        return ("Normal", "ok")
+    return ("Rentang Diabetes (dengan gejala klasik)", "crit")
 
 
 def _classify_chol(val: float | None) -> tuple[str, str]:
@@ -576,6 +599,181 @@ def _ttd_data_uri() -> str:
         return ""
 
 
+# Label dan satuan tiap target MLP, sama persis dengan TARGETS di
+# model/train_mlp_calibration.py -- disalin di sini karena laporan hanya
+# perlu label tampilannya, bukan seluruh modul pelatihan.
+_MLP_TARGETS: dict[str, tuple[str, str]] = {
+    "gula_darah_mg_dl": ("Gula Darah", "mg/dL"),
+    "kolesterol_mg_dl": ("Kolesterol", "mg/dL"),
+    "asam_urat_mg_dl":  ("Asam Urat", "mg/dL"),
+    "sistolik_mmhg":    ("Sistolik", "mmHg"),
+    "diastolik_mmhg":   ("Diastolik", "mmHg"),
+}
+
+
+def _build_ai_section(rec, gender: str, usia: float) -> str:
+    """Bagian laporan yang menjalankan kedua model AI ANTARAGA atas sesi ini.
+
+    MLP: menaksir lima nilai vital dari sinyal optik sesi ini sendiri, lalu
+    dibandingkan dengan nilai alat invasif yang sungguhan tercatat pada
+    sesi yang sama -- ini akurasi UNTUK SATU SESI INI, bukan metrik agregat
+    dari seluruh subjek (metrik agregat memakai validasi Leave-One-Subject-
+    Out, dilaporkan terpisah lewat menu Pelatihan MLP di dashboard).
+
+    XGBoost: menaksir probabilitas risiko stroke dari fitur yang tersedia
+    pada sesi kalibrasi. Rekaman kalibrasi tidak mencatat seluruh sembilan
+    fitur yang dipakai model (tidak ada kolom IMT, riwayat penyakit jantung,
+    status merokok, status bekerja, atau tipe tempat tinggal) -- fitur yang
+    hilang diperlakukan sebagai data hilang oleh XGBoost, mengikuti mekanisme
+    penanganan bawaannya, sama seperti endpoint prediksi produksi. Bukan
+    ditebak, dan disebutkan eksplisit di laporan supaya angkanya tidak
+    disalahpahami sebagai perkiraan penuh sembilan fitur.
+    """
+    bagian: list[str] = []
+
+    # ---------- MLP: prediksi vs aktual pada sesi ini ----------
+    from api.ml_calibration import is_calibration_model_available, predict_vitals
+
+    fitur_sinyal_lengkap = all(
+        v is not None for v in
+        (rec.ir_dc_mean, rec.ir_ac_p2p, rec.red_dc_mean, rec.red_ac_p2p, rec.bpm)
+    )
+
+    if is_calibration_model_available() and fitur_sinyal_lengkap:
+        try:
+            prediksi = predict_vitals(
+                ir_dc_mean=rec.ir_dc_mean, ir_ac_p2p=rec.ir_ac_p2p,
+                red_dc_mean=rec.red_dc_mean, red_ac_p2p=rec.red_ac_p2p,
+                bpm=rec.bpm, age_years=usia or 60.0,
+                gender_code=1.0 if gender == "L" else 0.0,
+            )
+        except Exception:
+            prediksi = {}
+
+        aktual_map = {
+            "gula_darah_mg_dl": rec.gula_darah_mg_dl,
+            "kolesterol_mg_dl": rec.kolesterol_mg_dl,
+            "asam_urat_mg_dl": rec.asam_urat_mg_dl,
+            "sistolik_mmhg": rec.sistolik_mmhg,
+            "diastolik_mmhg": rec.diastolik_mmhg,
+        }
+
+        baris_mlp: list[str] = []
+        for kunci, (label, satuan) in _MLP_TARGETS.items():
+            pred = prediksi.get(kunci)
+            if pred is None:
+                continue
+            aktual = aktual_map.get(kunci)
+            if aktual is None:
+                baris_mlp.append(
+                    f"<tr><td>{label}</td><td>{_num(pred, 1)} {satuan}</td>"
+                    f'<td style="color:var(--mut)">Tidak diukur</td>'
+                    f'<td style="color:var(--mut)">-</td></tr>'
+                )
+                continue
+            selisih = abs(aktual - pred)
+            persen_akurasi = max(0.0, 100.0 - (selisih / abs(aktual) * 100.0)) if aktual else None
+            akurasi_txt = f"{persen_akurasi:.1f}%" if persen_akurasi is not None else "-"
+            baris_mlp.append(
+                f"<tr><td>{label}</td><td>{_num(pred, 1)} {satuan}</td>"
+                f"<td>{_num(aktual, 1)} {satuan}</td><td>{akurasi_txt}</td></tr>"
+            )
+
+        if baris_mlp:
+            bagian.append(
+                '<div style="margin-bottom:10px">'
+                '<div style="font-size:8.6pt;font-weight:700;margin-bottom:4px">'
+                "Model MLP &mdash; Estimasi Vital dari Sinyal Optik</div>"
+                '<table class="ref"><thead><tr><th>Parameter</th>'
+                "<th>Prediksi Sensor (MLP)</th><th>Aktual (Alat Invasif)</th>"
+                "<th>Akurasi Sesi Ini</th></tr></thead>"
+                f"<tbody>{''.join(baris_mlp)}</tbody></table>"
+                '<p style="font-size:7pt;color:var(--mut);margin:0 0 4px">'
+                "Akurasi di atas dihitung khusus untuk sesi ini, bukan metrik "
+                "agregat model. Metrik menyeluruh memakai validasi "
+                "Leave-One-Subject-Out dari seluruh subjek kalibrasi, "
+                "dilaporkan terpisah lewat menu Pelatihan MLP pada dashboard."
+                "</p></div>"
+            )
+    else:
+        alasan = (
+            "model belum tersedia karena data kalibrasi belum cukup untuk dilatih"
+            if not is_calibration_model_available()
+            else "sinyal optik mentah pada sesi ini tidak lengkap"
+        )
+        bagian.append(
+            '<div style="margin-bottom:10px">'
+            '<div style="font-size:8.6pt;font-weight:700;margin-bottom:4px">'
+            "Model MLP &mdash; Estimasi Vital dari Sinyal Optik</div>"
+            f'<p style="font-size:7.6pt;color:var(--mut);margin:0">'
+            f"Belum dapat ditampilkan: {alasan}.</p></div>"
+        )
+
+    # ---------- XGBoost: risiko stroke dari fitur yang tersedia ----------
+    from api.ml import predict_stroke_risk
+    from api.profile_utils import derive_hypertension
+
+    fitur_xgb: dict = {
+        "age": usia or None,
+        "gender": "Male" if gender == "L" else "Female",
+    }
+    fitur_diketahui: list[str] = []
+    if rec.gula_darah_mg_dl is not None:
+        fitur_xgb["avg_glucose_level"] = rec.gula_darah_mg_dl
+        fitur_diketahui.append("gula darah")
+    if rec.sistolik_mmhg is not None:
+        fitur_xgb["hypertension"] = int(
+            derive_hypertension(rec.sistolik_mmhg, rec.diastolik_mmhg)
+        )
+        fitur_diketahui.append("status hipertensi")
+    fitur_tidak_diketahui = [
+        "IMT", "riwayat penyakit jantung", "status merokok",
+        "status bekerja", "tipe tempat tinggal",
+    ]
+
+    if usia:
+        try:
+            hasil = predict_stroke_risk(fitur_xgb)
+            label_risiko = {"low": "Rendah", "medium": "Sedang", "high": "Tinggi"}.get(
+                hasil["risk_level"], hasil["risk_level"]
+            )
+            genting = hasil["risk_level"] in ("medium", "high")
+            daftar_diketahui = ", ".join(["usia", "jenis kelamin", *fitur_diketahui])
+            bagian.append(
+                '<div><div style="font-size:8.6pt;font-weight:700;margin-bottom:4px">'
+                "Model XGBoost &mdash; Prediksi Risiko Stroke</div>"
+                f'<div class="risk" style="margin-bottom:4px">'
+                f'<div class="rk {"on" if genting else "off"}">'
+                f'{_icon("alert" if genting else "check", 13)}'
+                f"<div><b>Probabilitas {hasil['probability'] * 100:.1f}%</b>"
+                f"<span>Tingkat risiko: {label_risiko}</span></div></div></div>"
+                f'<p style="font-size:7pt;color:var(--mut);margin:0">'
+                f"Dihitung dari fitur yang tercatat pada sesi ini: {daftar_diketahui}. "
+                f"Fitur yang tidak dicatat rekaman kalibrasi "
+                f"({', '.join(fitur_tidak_diketahui)}) diperlakukan sebagai data "
+                f"hilang oleh model (mekanisme bawaan XGBoost), bukan ditebak. "
+                f"Ambang deteksi {hasil['threshold']:.3f} &middot; "
+                f"ambang risiko tinggi 0,705, ditetapkan lewat validasi "
+                f"out-of-fold agar sensitif terhadap kasus stroke.</p></div>"
+            )
+        except Exception as exc:
+            bagian.append(
+                '<div><div style="font-size:8.6pt;font-weight:700;margin-bottom:4px">'
+                "Model XGBoost &mdash; Prediksi Risiko Stroke</div>"
+                f'<p style="font-size:7.6pt;color:var(--mut);margin:0">'
+                f"Gagal dihitung: {exc}</p></div>"
+            )
+    else:
+        bagian.append(
+            '<div><div style="font-size:8.6pt;font-weight:700;margin-bottom:4px">'
+            "Model XGBoost &mdash; Prediksi Risiko Stroke</div>"
+            '<p style="font-size:7.6pt;color:var(--mut);margin:0">'
+            "Belum dapat dihitung: usia subjek tidak tercatat.</p></div>"
+        )
+
+    return f'<h2>{_icon("chip")}Hasil Model Kecerdasan Buatan</h2>\n  {"".join(bagian)}'
+
+
 def build_record_report_html(rec, autoprint: bool = True) -> str:
     """Rakit laporan pemeriksaan A4 untuk satu rekaman kalibrasi."""
     gender = (rec.gender or "L").strip().upper()
@@ -648,6 +846,7 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
 
     # ── Faktor risiko stroke yang dapat dimodifikasi ─────────────────────
     usia = float(rec.age_years or 0)
+    riwayat_stroke = getattr(rec, "family_history_stroke", None)
     faktor = [
         ("Hipertensi", "Sistolik ≥ 140 atau diastolik ≥ 90 mmHg",
          (sis is not None and sis >= 140) or (dia is not None and dia >= 90)),
@@ -659,12 +858,17 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
          st_au[1] == "high"),
         ("Aritmia / laju tidak normal", "Denyut di luar rentang 60-100 bpm",
          st_bpm[1] in ("watch", "high")),
+        ("Riwayat Stroke Keluarga", "Orang tua atau saudara kandung pernah menderita stroke",
+         bool(riwayat_stroke)),
     ]
     risk_html = "".join(
         f'<div class="rk {"on" if on else "off"}">{_icon("alert" if on else "check", 13)}'
         f'<div><b>{nm}</b><span>{desc}</span></div></div>'
         for nm, desc, on in faktor
     )
+
+    # ── Hasil model kecerdasan buatan (MLP kalibrasi + XGBoost) ───────────
+    ai_block = _build_ai_section(rec, gender, usia)
 
     # ── Interpretasi naratif ─────────────────────────────────────────────
     poin: list[str] = []
@@ -719,11 +923,16 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
     strip_block = (f'<h2>{_icon("wave")}Rekaman Gelombang Denyut (PPG)</h2>{strip}'
                    if strip else "")
 
+    riwayat_txt = (
+        "Tidak diketahui" if riwayat_stroke is None
+        else "Ada" if riwayat_stroke else "Tidak ada"
+    )
     ident = "".join([
         _kv("ID Subjek", rec.subject_id or "-"),
         _kv("Usia", f"{_num(usia, 0)} tahun"),
         _kv("Jenis Kelamin", gender_txt),
         _kv("Kondisi Pengambilan", kondisi_txt),
+        _kv("Riwayat Stroke Keluarga", riwayat_txt),
         _kv("Perangkat", rec.device_id or "-"),
         _kv("Waktu Sesi", sesi.strftime("%d/%m/%Y · %H:%M WIB")),
     ])
@@ -803,6 +1012,8 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
   <h2>{_icon("shield")}Faktor Risiko Stroke</h2>
   <div class="risk">{risk_html}</div>
 
+  {ai_block}
+
   <h2>{_icon("book")}Landasan Nilai Rujukan</h2>
   <table class="ref">
     <thead><tr><th>Parameter</th><th>Klasifikasi</th><th>Acuan</th></tr></thead>
@@ -816,12 +1027,12 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
       <tr><td>Derajat 2: 160-179/100-109 · Derajat 3: &ge; 180/110</td></tr>
 
       <tr>
-        <td rowspan="3"><b>Gula Darah</b><br><span class="src">PERKENI 2021<br>ADA Standards of Care</span></td>
-        <td>Puasa: normal 70-99 · prediabetes 100-125 · diabetes &ge; 126</td>
-        <td rowspan="3" class="src">Ambang berbeda menurut kondisi pengambilan, sehingga kondisi puasa atau setelah makan wajib dicatat saat perekaman.</td>
+        <td rowspan="3"><b>Gula Darah</b><br><span class="src">PERKENI 2021 (Pedoman Pengelolaan dan Pencegahan DM Tipe 2)<br>ADA Standards of Care in Diabetes</span></td>
+        <td>Puasa (GDP): normal 70-99 · prediabetes (GDPT) 100-125 · diabetes &ge; 126</td>
+        <td rowspan="3" class="src">Tiga kondisi pengambilan punya ambang berbeda dan TIDAK boleh disamakan -- sewaktu (GDS) hanya punya satu ambang diagnostik (&ge; 200 disertai gejala klasik), berbeda dari TTGO 2 jam yang punya zona prediabetes (TGT) mulai 140. Kondisi pengambilan wajib dicatat saat perekaman.</td>
       </tr>
-      <tr><td>2 jam setelah makan: normal &lt; 140 · prediabetes 140-199 · diabetes &ge; 200</td></tr>
-      <tr><td>Sewaktu: normal &lt; 140 · waspada 140-199 · rentang diabetes &ge; 200</td></tr>
+      <tr><td>TTGO 2 jam setelah beban glukosa: normal &lt; 140 · prediabetes (TGT) 140-199 · diabetes &ge; 200</td></tr>
+      <tr><td>Sewaktu/acak (GDS): normal &lt; 200 · rentang diabetes &ge; 200 disertai gejala klasik (bukan diagnosis tunggal, disarankan konfirmasi GDP/TTGO)</td></tr>
 
       <tr>
         <td><b>Kolesterol Total</b><br><span class="src">NCEP ATP III</span></td>

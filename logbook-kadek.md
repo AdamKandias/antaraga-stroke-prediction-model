@@ -274,3 +274,31 @@ Mengoordinasikan pengujian smartband kelima.
 📸 `KADEK_koordinasi sesi kelima.png`, `KADEK_pencatatan hasil sesi.png`
 
 ---
+
+## 2 September 2026 - Koordinasi Pengujian 5 Smartband (- menit)
+
+**Kegiatan:**
+Mengoordinasikan pengujian smartband kelima.
+
+**Narasi & Indikator Capaian:**
+Mengoordinasikan pelaksanaan pengujian kelima smartband ANTARAGA, mencakup penjadwalan sesi dengan relawan baru yang komposisinya disesuaikan dengan prioritas subjek yang ditetapkan sebelumnya, memastikan kelengkapan berkas informed consent, serta memeriksa kesiapan alat ukur medis pembanding sebelum sesi berlangsung.
+
+Indikator capaian: terlaksananya pengujian kelima sesuai jadwal dengan kelengkapan dokumen persetujuan relawan, serta terpenuhinya sebagian target komposisi subjek yang telah direncanakan.
+
+📸 `KADEK_koordinasi sesi kelima.png`, `KADEK_kelengkapan informed consent sesi kelima.png`
+
+---
+
+## 5 September 2026 - Koordinasi Penambahan Data dan Laporan Kemajuan (- menit)
+
+**Kegiatan:**
+Mengoordinasikan penambahan data kalibrasi lanjutan serta memimpin penyusunan laporan kemajuan secara menyeluruh.
+
+**Narasi & Indikator Capaian:**
+Mengoordinasikan penambahan dua data kalibrasi lanjutan (pengujian keenam) dari pengujian laboratorium dan alat pembanding terstandar, sekaligus memimpin penyusunan laporan kemajuan secara menyeluruh, memastikan tiap bagian dari anggota tim tergarap dan konsisten satu sama lain sebelum diasistensikan ke dosen pendamping.
+
+Indikator capaian: terkoordinasinya penambahan data kalibrasi lanjutan, serta tersusunnya draf laporan kemajuan yang menyeluruh dan siap diasistensikan.
+
+📸 `KADEK_koordinasi penambahan data lanjutan.png`, `KADEK_penyusunan laporan kemajuan menyeluruh.png`
+
+---

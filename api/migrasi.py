@@ -88,12 +88,54 @@ def _tambah_device_key_ke_profil(engine: Engine) -> None:
             )
 
 
+def _tambah_kolom_notifikasi_sedang(engine: Engine) -> None:
+    """Sediakan jeda terpisah untuk notifikasi risiko Sedang.
+
+    Sebelum ini hanya ada satu kolom (`last_notified_at`) yang menahan
+    notifikasi Tinggi. Menambah pengiriman untuk Sedang tanpa kolom baru
+    berarti kedua tingkat berbagi satu jeda -- notifikasi Sedang yang baru
+    saja terkirim bisa membungkam notifikasi Tinggi yang menyusul beberapa
+    menit kemudian, padahal eskalasi ke Tinggi wajib selalu tersampaikan.
+    """
+    if _punya_kolom(engine, "users", "last_notified_medium_at"):
+        return
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE users ADD COLUMN last_notified_medium_at DATETIME"))
+        logger.info("[migrasi] kolom users.last_notified_medium_at dibuat")
+
+
+def _tambah_riwayat_stroke_ke_kalibrasi(engine: Engine) -> None:
+    """Tambah kolom riwayat stroke keluarga pada rekaman kalibrasi.
+
+    Dipakai sebagai faktor risiko klinis yang ditampilkan di laporan cetak,
+    berdiri sendiri dari model XGBoost (yang dilatih dari dataset publik
+    tanpa kolom ini).
+    """
+    if _punya_kolom(engine, "calibration_records", "family_history_stroke"):
+        return
+    with engine.begin() as conn:
+        conn.execute(text(
+            "ALTER TABLE calibration_records ADD COLUMN family_history_stroke BOOLEAN"
+        ))
+        logger.info("[migrasi] kolom calibration_records.family_history_stroke dibuat")
+
+
 def jalankan(engine: Engine) -> None:
-    """Jalankan seluruh penyesuaian skema. Dipanggil sekali saat server mulai."""
-    try:
-        _tambah_device_key_ke_profil(engine)
-    except Exception:
-        # Server tetap dinyalakan. Kegagalan migrasi tidak boleh membuat
-        # seluruh layanan mati, karena sebagian besar endpoint tidak
-        # bergantung pada kolom yang baru ditambahkan.
-        logger.exception("[migrasi] gagal menyesuaikan skema basis data")
+    """Jalankan seluruh penyesuaian skema. Dipanggil sekali saat server mulai.
+
+    Tiap langkah dibungkus try/except sendiri-sendiri: kegagalan pada satu
+    langkah tidak boleh sampai menghalangi langkah lain yang tidak
+    berhubungan untuk tetap berjalan.
+    """
+    for langkah in (
+        _tambah_device_key_ke_profil,
+        _tambah_kolom_notifikasi_sedang,
+        _tambah_riwayat_stroke_ke_kalibrasi,
+    ):
+        try:
+            langkah(engine)
+        except Exception:
+            # Server tetap dinyalakan. Kegagalan migrasi tidak boleh membuat
+            # seluruh layanan mati, karena sebagian besar endpoint tidak
+            # bergantung pada kolom yang baru ditambahkan.
+            logger.exception("[migrasi] gagal menjalankan %s", langkah.__name__)

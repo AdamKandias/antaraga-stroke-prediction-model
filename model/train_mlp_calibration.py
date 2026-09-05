@@ -25,7 +25,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, r2_score
-from sklearn.model_selection import LeaveOneOut, cross_val_predict
+from sklearn.model_selection import GroupKFold, LeaveOneGroupOut, cross_val_predict
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
 
@@ -114,7 +114,9 @@ def prepare(df: pd.DataFrame) -> pd.DataFrame:
 
 # ── Train satu target ──────────────────────────────────────────────────────
 
-def train_one(X: np.ndarray, y: np.ndarray) -> tuple[StandardScaler, MLPRegressor, dict]:
+def train_one(
+    X: np.ndarray, y: np.ndarray, groups: np.ndarray,
+) -> tuple[StandardScaler, MLPRegressor, dict]:
     scaler = StandardScaler()
     Xs = scaler.fit_transform(X)
 
@@ -128,13 +130,21 @@ def train_one(X: np.ndarray, y: np.ndarray) -> tuple[StandardScaler, MLPRegresso
         random_state=42,
     )
 
-    # Cross-validation: LOO jika <30 baris, 5-fold jika ≥30
+    # Validasi WAJIB dikelompokkan per subjek, bukan per baris. Satu orang
+    # yang direkam di beberapa sesi kalibrasi menghasilkan beberapa baris --
+    # kalau baris-baris itu boleh terpisah antara latih dan uji, model bisa
+    # "mengenali" orangnya dari sesi lain alih-alih benar-benar menebak dari
+    # sinyal optik. LeaveOneOut() biasa tidak tahu soal ini dan akan
+    # melaporkan akurasi yang bohong. Dibuktikan di
+    # model/mlp_rancangan_15agustus.ipynb: LOO per baris R²=0,720 vs
+    # GroupKFold per subjek R²=-4,737 pada data yang sama persis.
     n = len(y)
-    cv = LeaveOneOut() if n < 30 else 5
+    n_subjek = len(np.unique(groups))
+    cv = LeaveOneGroupOut() if n_subjek < 15 else GroupKFold(n_splits=5)
     y_pred_cv = cross_val_predict(
         MLPRegressor(hidden_layer_sizes=(64, 32), activation="relu",
                      solver="lbfgs", alpha=0.01, max_iter=2000, random_state=42),
-        Xs, y, cv=cv,
+        Xs, y, cv=cv, groups=groups,
     )
 
     mlp.fit(Xs, y)
@@ -147,7 +157,8 @@ def train_one(X: np.ndarray, y: np.ndarray) -> tuple[StandardScaler, MLPRegresso
 
     metrics = {
         "n": n,
-        "cv": "LOO" if n < 30 else "5-fold",
+        "n_subjek": n_subjek,
+        "cv": "LOSO (per subjek)" if n_subjek < 15 else "GroupKFold-5 (per subjek)",
         "mae": round(mae, 2),
         "rmse": round(rmse, 2),
         "r2": round(r2, 4),
@@ -245,10 +256,21 @@ def main():
 
         X = sub[FEATURES].values.astype(float)
         y = sub[target_col].values.astype(float)
+        groups = sub["subject_id"].values
 
-        scaler, mlp, metrics, y_pred_cv = train_one(X, y)
+        n_subjek = len(np.unique(groups))
+        if n_subjek < MIN_SUBJEK:
+            print(f"  ⚠  Lewati - subjek unik tidak cukup ({n_subjek}/{MIN_SUBJEK}). "
+                  f"Baris boleh banyak, tapi kalau berasal dari sedikit orang saja, "
+                  f"validasinya tidak berarti apa-apa.")
+            report_lines.append(
+                f"\n{target_label}: TIDAK CUKUP SUBJEK ({n_subjek} subjek, {len(sub)} baris)"
+            )
+            continue
 
-        print(f"  CV={metrics['cv']}  n={metrics['n']}")
+        scaler, mlp, metrics, y_pred_cv = train_one(X, y, groups)
+
+        print(f"  CV={metrics['cv']}  n={metrics['n']} baris dari {metrics['n_subjek']} subjek")
         print(f"  R²    = {metrics['r2']}")
         print(f"  MAE   = {metrics['mae']}")
         print(f"  RMSE  = {metrics['rmse']}")
@@ -262,7 +284,7 @@ def main():
 
         report_lines.append(
             f"\n{target_label}\n"
-            f"  N = {metrics['n']}  CV = {metrics['cv']}\n"
+            f"  N = {metrics['n']} baris ({metrics['n_subjek']} subjek unik)  CV = {metrics['cv']}\n"
             f"  R²       = {metrics['r2']}\n"
             f"  MAE      = {metrics['mae']}\n"
             f"  RMSE     = {metrics['rmse']}\n"

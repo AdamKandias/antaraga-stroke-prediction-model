@@ -345,6 +345,54 @@ def create_profile(
     return _profile_to_response(profile)
 
 
+@app.delete("/profiles/{profile_id}", status_code=204)
+def delete_profile(
+    profile_id: str,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+) -> None:
+    """Hapus profil orang tua/lansia beserta seluruh riwayatnya.
+
+    Berbeda dari melepas gelang (DELETE /device/pair), yang sengaja
+    membiarkan riwayat tanda vital tetap tersimpan karena orangnya masih
+    dipantau -- di sini profilnya sendiri yang dihapus, sehingga orang
+    tersebut sudah tidak lagi dipantau sama sekali. Riwayat yang tersisa
+    tidak lagi relevan untuk disimpan, sehingga turut dihapus.
+
+    Menghapus satu-satunya profil yang tersisa ditolak: akun yang tidak
+    punya profil sama sekali membuat aplikasi kembali ke layar pembuatan
+    profil pertama, yang membingungkan kalau terjadi tanpa disengaja.
+    """
+    profile = db.get(models_db.Profile, profile_id)
+    if profile is None or profile.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    sisa = (
+        db.query(models_db.Profile)
+        .filter(models_db.Profile.user_id == user_id)
+        .count()
+    )
+    if sisa <= 1:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Tidak dapat menghapus satu-satunya orang tua yang dipantau. "
+                "Tambahkan profil lain terlebih dahulu, atau perbarui datanya "
+                "lewat menyunting."
+            ),
+        )
+
+    db.query(models_db.VitalReading).filter(
+        models_db.VitalReading.profile_id == profile_id
+    ).delete(synchronize_session=False)
+    db.query(models_db.PredictionLog).filter(
+        models_db.PredictionLog.profile_id == profile_id
+    ).delete(synchronize_session=False)
+
+    db.delete(profile)
+    db.commit()
+
+
 @app.get("/profiles/active", response_model=schemas.ProfileResponse)
 def get_active_profile(
     db: Session = Depends(get_db), user_id: str = Depends(get_current_user_id)
@@ -1067,33 +1115,72 @@ def ingest_firmware_batch(
         user_id=user_id, profile_id=profile.id,
     )
 
-    # --- FCM kalau HIGH -------------------------------------------------
-    if result["risk_level"] == "HIGH":
-        from api.config import FCM_NOTIFICATION_COOLDOWN_SECONDS
-        from api.fcm import send_high_risk_notification
+    # --- FCM untuk risiko Tinggi dan Sedang -----------------------------
+    #
+    # Dua tingkat, dua kolom jeda yang terpisah (last_notified_at untuk
+    # Tinggi, last_notified_medium_at untuk Sedang). Sengaja tidak berbagi
+    # satu kolom: kalau berbagi, notifikasi Sedang yang baru saja terkirim
+    # bisa membungkam notifikasi Tinggi yang menyusul selagi jeda belum
+    # habis -- padahal eskalasi ke Tinggi wajib selalu tersampaikan, berapa
+    # pun dekatnya dengan notifikasi Sedang sebelumnya.
+    # PENTING: nilai asli dari predict_stroke_risk() huruf kecil ("high",
+    # "medium", "low") -- lihat api/ml.py _risk_level(). Sebelum baris ini
+    # ditulis ulang, kode lama membandingkan dengan "HIGH" huruf besar, yang
+    # tidak pernah cocok sekali pun. Akibatnya notifikasi Tinggi otomatis
+    # tidak pernah benar-benar terkirim di produksi sejak awal dibuat --
+    # ditemukan saat menambahkan jalur Sedang ini, diperbaiki sekalian.
+    if result["risk_level"] in ("high", "medium"):
+        from api.config import (
+            FCM_MEDIUM_NOTIFICATION_COOLDOWN_SECONDS,
+            FCM_NOTIFICATION_COOLDOWN_SECONDS,
+        )
+        from api.fcm import kirim_notifikasi_uji, send_high_risk_notification
 
         user = db.query(models_db.User).filter(models_db.User.id == user_id).first()
         if user and user.fcm_token:
-            cooldown = timedelta(seconds=FCM_NOTIFICATION_COOLDOWN_SECONDS)
             now_utc = datetime.now(timezone.utc)
-            last_notified = user.last_notified_at
-            last_utc = last_notified.replace(tzinfo=timezone.utc) if last_notified else None
-            if last_utc is None or (now_utc - last_utc) > cooldown:
+
+            def _lewat_jeda(terakhir: datetime | None, detik: int) -> bool:
+                if terakhir is None:
+                    return True
+                terakhir_utc = terakhir.replace(tzinfo=timezone.utc)
+                return (now_utc - terakhir_utc) > timedelta(seconds=detik)
+
+            token_mati = False
+
+            if result["risk_level"] == "high" and _lewat_jeda(
+                user.last_notified_at, FCM_NOTIFICATION_COOLDOWN_SECONDS
+            ):
                 send_high_risk_notification.token_mati = False
-                sent = send_high_risk_notification(user.fcm_token, profile.name)
-                if sent:
+                if send_high_risk_notification(user.fcm_token, profile.name):
                     user.last_notified_at = datetime.utcnow()
-                    db.commit()
-                elif getattr(send_high_risk_notification, "token_mati", False):
-                    # Token tidak akan pernah berhasil lagi. Dibiarkan tersimpan,
-                    # server akan mencoba mengirim ke alamat mati itu setiap kali
-                    # risiko terdeteksi tinggi, dan dashboard tetap melaporkan
-                    # akunnya "siap" padahal tidak.
-                    logger.warning(
-                        "[fcm] Token akun %s dibuang karena sudah tidak berlaku", user_id,
-                    )
-                    user.fcm_token = None
-                    db.commit()
+                else:
+                    token_mati = getattr(send_high_risk_notification, "token_mati", False)
+
+            elif result["risk_level"] == "medium" and _lewat_jeda(
+                user.last_notified_medium_at, FCM_MEDIUM_NOTIFICATION_COOLDOWN_SECONDS
+            ):
+                # Memakai fungsi yang sama dengan uji coba dashboard supaya
+                # naskah pesannya satu sumber (TEMPLAT_NOTIFIKASI["sedang"]),
+                # tidak ditulis dua kali di dua tempat berbeda.
+                sent, _keterangan, mati = kirim_notifikasi_uji(
+                    user.fcm_token, profile.name, skenario="sedang",
+                )
+                if sent:
+                    user.last_notified_medium_at = datetime.utcnow()
+                token_mati = mati
+
+            if token_mati:
+                # Token tidak akan pernah berhasil lagi. Dibiarkan tersimpan,
+                # server akan mencoba mengirim ke alamat mati itu setiap kali
+                # risiko terdeteksi, dan dashboard tetap melaporkan akunnya
+                # "siap" padahal tidak.
+                logger.warning(
+                    "[fcm] Token akun %s dibuang karena sudah tidak berlaku", user_id,
+                )
+                user.fcm_token = None
+
+            db.commit()
 
     return schemas.IngestResponse(ok=True, seq=batch.seq, risk_level=result["risk_level"])
 
@@ -1202,10 +1289,29 @@ def notify_targets(db: Session = Depends(get_db)) -> dict:
     return {"akun": akun}
 
 
+@app.get("/v1/notify/scenarios", include_in_schema=False)
+def notify_scenarios() -> dict:
+    """Daftar skenario tingkat risiko yang bisa dipratinjaukan dari dashboard."""
+    from api.fcm import TEMPLAT_NOTIFIKASI
+
+    return {
+        "skenario": [
+            {
+                "kode": kode,
+                "judul": t["judul"],
+                "contoh_isi": t["isi"]("Ibu Sartika"),
+                "dikirim_otomatis": t["dikirim_otomatis"],
+            }
+            for kode, t in TEMPLAT_NOTIFIKASI.items()
+        ]
+    }
+
+
 @app.post("/v1/notify/test", include_in_schema=False)
 def notify_test(
     user_id: str = Query(..., description="Akun keluarga yang akan menerima"),
     profile_id: str | None = Query(None, description="Orang tua yang disebut di isi pesan"),
+    skenario: str = Query("tinggi", description="tinggi | sedang | rendah"),
     judul: str | None = Query(None, max_length=120),
     isi: str | None = Query(None, max_length=400),
     db: Session = Depends(get_db),
@@ -1234,7 +1340,7 @@ def notify_test(
             nama_profil = profil.name
 
     berhasil, keterangan, token_mati = kirim_notifikasi_uji(
-        user.fcm_token or "", nama_profil, judul=judul, isi=isi,
+        user.fcm_token or "", nama_profil, judul=judul, isi=isi, skenario=skenario,
     )
     if token_mati and user.fcm_token:
         user.fcm_token = None
@@ -1746,6 +1852,7 @@ def calibrate_create(
     asam_urat_mg_dl: float | None = None,
     sistolik_mmhg: float | None = None,
     diastolik_mmhg: float | None = None,
+    family_history_stroke: bool | None = None,
     db: Session = Depends(get_db),
 ) -> dict:
     """Rekam satu sesi kalibrasi.
@@ -1800,6 +1907,7 @@ def calibrate_create(
         asam_urat_mg_dl   = asam_urat_mg_dl,
         sistolik_mmhg     = sistolik_mmhg,
         diastolik_mmhg    = diastolik_mmhg,
+        family_history_stroke = family_history_stroke,
     )
     db.add(rec)
     db.commit()
@@ -1822,6 +1930,45 @@ def calibrate_list(
     return [_calib_to_dict(r) for r in q.limit(limit).all()]
 
 
+def _parse_session_ts(nilai: str, waktu_lama: datetime, tz_offset_menit: int) -> datetime:
+    """Ubah tanggal (dan opsional jam) yang dimasukkan operator, dalam zona
+    waktu lokalnya, menjadi datetime UTC naive untuk disimpan -- konsisten
+    dengan seluruh timestamp lain di basis data ini.
+
+    Terima tanggal saja ("2026-08-03") atau tanggal+jam ("2026-08-03T14:30").
+    Kalau jam tidak disertakan, jam dari waktu yang lama dipertahankan dalam
+    zona yang sama, supaya operator cukup membetulkan tanggal yang salah
+    dicatat (mis. jam server belum disetel benar saat sesi berlangsung)
+    tanpa perlu menebak ulang jam yang sudah benar.
+    """
+    nilai = nilai.strip()
+    tz = timezone(timedelta(minutes=tz_offset_menit))
+    lama_di_utc = waktu_lama if waktu_lama.tzinfo else waktu_lama.replace(tzinfo=timezone.utc)
+    lama_lokal = lama_di_utc.astimezone(tz)
+
+    if "T" in nilai or " " in nilai:
+        bagian_tgl, bagian_jam = nilai.replace(" ", "T", 1).split("T", 1)
+        potongan_jam = bagian_jam.split(":")
+        try:
+            jam = int(potongan_jam[0])
+            menit = int(potongan_jam[1]) if len(potongan_jam) > 1 else 0
+        except ValueError as exc:
+            raise ValueError(f"Format jam tidak dikenali: {bagian_jam!r}") from exc
+    else:
+        bagian_tgl = nilai
+        jam, menit = lama_lokal.hour, lama_lokal.minute
+
+    try:
+        tahun, bulan, tanggal = (int(x) for x in bagian_tgl.split("-"))
+        lokal = datetime(tahun, bulan, tanggal, jam, menit, tzinfo=tz)
+    except (ValueError, IndexError) as exc:
+        raise ValueError(
+            f"Format tanggal harus YYYY-MM-DD, diterima: {nilai!r}"
+        ) from exc
+
+    return lokal.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 @app.patch("/v1/calibrate/{record_id}")
 def calibrate_update(
     record_id: int,
@@ -1834,6 +1981,20 @@ def calibrate_update(
     asam_urat_mg_dl: float | None = None,
     sistolik_mmhg: float | None = None,
     diastolik_mmhg: float | None = None,
+    family_history_stroke: bool | None = None,
+    session_ts: str | None = Query(
+        None,
+        description="Tanggal sesi direkam yang sebenarnya, format YYYY-MM-DD "
+                     "atau YYYY-MM-DDTHH:MM (jam opsional -- kalau kosong, "
+                     "jam yang tersimpan sebelumnya dipertahankan). Dipakai "
+                     "membetulkan tanggal kalibrasi yang salah tercatat, "
+                     "misalnya karena jam perangkat belum disetel saat sesi.",
+    ),
+    tz_offset: int = Query(
+        420, ge=-840, le=840,
+        description="Selisih zona waktu operator terhadap UTC dalam menit "
+                     "saat mengetik session_ts. Bawaan 420 (WIB).",
+    ),
     db: Session = Depends(get_db),
 ) -> dict:
     """Perbarui nilai ground truth atau metadata satu rekaman kalibrasi."""
@@ -1849,6 +2010,14 @@ def calibrate_update(
     if asam_urat_mg_dl   is not None: rec.asam_urat_mg_dl   = asam_urat_mg_dl
     if sistolik_mmhg     is not None: rec.sistolik_mmhg     = sistolik_mmhg
     if diastolik_mmhg    is not None: rec.diastolik_mmhg    = diastolik_mmhg
+    if family_history_stroke is not None: rec.family_history_stroke = family_history_stroke
+    if session_ts        is not None:
+        try:
+            rec.created_at = _parse_session_ts(
+                session_ts, rec.created_at or datetime.utcnow(), tz_offset,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
     db.refresh(rec)
     return _calib_to_dict(rec)
@@ -2120,6 +2289,7 @@ def _calib_to_dict(r: models_db.CalibrationRecord) -> dict:
         "asam_urat_mg_dl":   r.asam_urat_mg_dl,
         "sistolik_mmhg":     r.sistolik_mmhg,
         "diastolik_mmhg":    r.diastolik_mmhg,
+        "family_history_stroke": r.family_history_stroke,
     }
 
 

@@ -117,6 +117,39 @@ def _klasifikasi_galat(exc: Exception) -> tuple[str, bool]:
     return (f"{nama}: {exc}", False)
 
 
+# Templat pesan per tingkat risiko. "tinggi" satu-satunya yang benar-benar
+# dikirim otomatis oleh sistem sekarang (lihat send_high_risk_notification,
+# dipanggil dari ingest_firmware_batch saat risk_level == "HIGH"). "sedang"
+# dan "rendah" disediakan untuk pratinjau lewat dashboard -- bila suatu saat
+# tim memutuskan mengirim peringatan otomatis pada tingkat itu juga, tinggal
+# menyalin polanya, bukan menulis dari nol.
+TEMPLAT_NOTIFIKASI: dict[str, dict] = {
+    "tinggi": {
+        "judul": "⚠️ Risiko Stroke Tinggi Terdeteksi",
+        "isi": lambda nama: f"Risiko stroke {nama} terdeteksi tinggi. Segera lakukan assesmen ABCD2 dan memeriksakan diri ke tenaga kesehatan dalam waktu dekat.",
+        "route": "assessment_form",
+        "dikirim_otomatis": True,
+    },
+    "sedang": {
+        "judul": "Perlu Pemeriksaan Lanjutan",
+        "isi": lambda nama: (
+            f"Risiko stroke {nama} terdeteksi tinggi. Segera lakukan assesmen ABCD2 dan memeriksakan diri ke tenaga kesehatan dalam waktu dekat."
+        ),
+        "route": "assessment_form",
+        "dikirim_otomatis": False,
+    },
+    "rendah": {
+        "judul": "Pemantauan Berjalan Normal",
+        "isi": lambda nama: (
+            f"Tanda vital {nama} saat ini berada dalam rentang normal. "
+            "Pemantauan tetap berjalan seperti biasa dan tetap jaga kesehatan."
+        ),
+        "route": "dashboard",
+        "dikirim_otomatis": False,
+    },
+}
+
+
 def send_high_risk_notification(fcm_token: str, profile_name: str) -> bool:
     """Kirim push notification ke device user saat risiko stroke HIGH.
 
@@ -133,13 +166,13 @@ def send_high_risk_notification(fcm_token: str, profile_name: str) -> bool:
     try:
         from firebase_admin import messaging
 
+        templat = TEMPLAT_NOTIFIKASI["tinggi"]
         message = messaging.Message(
             notification=messaging.Notification(
-                title="⚠️ Risiko Stroke Tinggi Terdeteksi",
-                body=f"Risiko stroke {profile_name} terdeteksi tinggi. "
-                "Segera lakukan Penilaian ABCD2.",
+                title=templat["judul"],
+                body=templat["isi"](profile_name),
             ),
-            data={"route": "assessment_form"},
+            data={"route": templat["route"]},
             token=fcm_token,
             android=messaging.AndroidConfig(
                 priority="high",
@@ -173,8 +206,15 @@ def kirim_notifikasi_uji(
     profile_name: str,
     judul: str | None = None,
     isi: str | None = None,
+    skenario: str = "tinggi",
 ) -> tuple[bool, str, bool]:
     """Kirim notifikasi percobaan dari dashboard.
+
+    [skenario] memilih templat tingkat risiko yang dipratinjaukan --
+    "tinggi", "sedang", atau "rendah" (lihat TEMPLAT_NOTIFIKASI). Hanya
+    "tinggi" yang benar-benar dikirim otomatis oleh sistem sekarang; dua
+    lainnya murni pratinjau, untuk melihat bunyi pesannya sebelum dipakai
+    sungguhan. `judul`/`isi` yang diisi manual selalu menimpa templat.
 
     Berbeda dari [send_high_risk_notification] yang hanya mengembalikan
     berhasil atau tidak, fungsi ini juga mengembalikan alasannya. Saat menguji
@@ -195,19 +235,21 @@ def kirim_notifikasi_uji(
         return False, ("Firebase belum dikonfigurasi di server. Berkas "
                        "serviceAccountKey.json tidak ditemukan atau tidak sah."), False
 
+    templat = TEMPLAT_NOTIFIKASI.get(skenario, TEMPLAT_NOTIFIKASI["tinggi"])
+
     try:
         from firebase_admin import messaging
 
         message = messaging.Message(
             notification=messaging.Notification(
-                title=judul or "Notifikasi Percobaan ANTARAGA",
-                body=isi or (f"Ini notifikasi percobaan untuk {profile_name}. "
-                             "Bila pesan ini sampai, jalur notifikasi sudah berjalan."),
+                title=judul or templat["judul"],
+                body=isi or templat["isi"](profile_name),
             ),
-            # Sengaja tidak memakai route "assessment_form" seperti peringatan
-            # sungguhan, supaya menekan notifikasi percobaan tidak membuka
-            # halaman penilaian dan meninggalkan catatan palsu.
-            data={"route": "test"},
+            # Route ikut templat, KECUALI dipertahankan sebagai "test" pada
+            # data tambahan supaya aplikasi tetap tahu ini pesan percobaan
+            # (berguna kalau nanti perlu dibedakan dari peringatan asli di
+            # sisi aplikasi), sementara route navigasinya tetap realistis.
+            data={"route": templat["route"], "percobaan": "1"},
             token=fcm_token,
             android=messaging.AndroidConfig(
                 priority="high",

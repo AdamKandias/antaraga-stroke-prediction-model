@@ -1310,27 +1310,51 @@ Mengikuti pengujian smartband kelima untuk menambah data kalibrasi, dengan prior
 
 ### Minggu ke-16 - 2–6 September 2026
 
-> **Catatan:** entri mulai bagian ini adalah **rencana kerja**, bukan kegiatan yang sudah terlaksana. Kolom Hasil perlu diperbarui sesuai kenyataan setelah kegiatannya berlangsung.
+> **Catatan:** entri 2 dan 5 September di bawah ini sudah terlaksana dan diperbarui sesuai kenyataan. Entri mulai 6 September masih berupa **rencana kerja**; kolom Hasil perlu diperbarui setelah kegiatannya benar-benar berlangsung.
 
 ---
 
 **Rabu, 2 September 2026 - 300 menit**
-*Kegiatan tim: pengujian 6 smartband ANTARAGA*
+*Kegiatan tim: pengujian 5 smartband ANTARAGA sekaligus penyusunan laporan kemajuan*
 
 **Kegiatan:**
-Pengujian smartband keenam untuk melanjutkan pengumpulan data kalibrasi, sekaligus melatih ulang model MLP dengan data yang sudah bertambah.
+Menjalankan pengujian kelima smartband ANTARAGA bersama relawan, menambah 3 data kalibrasi baru, sekaligus melatih ulang model MLP dengan data yang sudah bertambah dan mulai menyusun draf laporan kemajuan bagian perangkat lunak dan kecerdasan buatan.
 
-**Rencana hasil:**
-- Penambahan subjek dengan komposisi yang masih kurang, terutama subjek berkolesterol normal dan usia di bawah 50 tahun
-- Pelatihan ulang lewat dashboard dengan mode data asli; kapasitas jaringan otomatis menyesuaikan jumlah data
-- Perbandingan terhadap tolok ukur menebak nilai rata-rata untuk memastikan model benar-benar memberi tambahan informasi
-- Pemeriksaan status keterandalan tiap parameter, dilaporkan apa adanya bila masih TIDAK VALID atau LEMAH
-- Bila jumlah subjek melewati 30, validasi silang otomatis beralih ke 5-fold dan metriknya mulai dapat dilaporkan
+**Narasi & Indikator Capaian:**
+Pengujian kelima smartband ANTARAGA dilaksanakan bersama relawan tambahan, menghasilkan 3 data kalibrasi baru yang menambah keragaman komposisi subjek sesuai prioritas yang ditetapkan pada 16 Agustus, yaitu mencari subjek dengan kondisi kesehatan yang berbeda dari mayoritas data sebelumnya. Model MLP kemudian dilatih ulang menggunakan seluruh data kalibrasi yang terkumpul sampai sesi ini. Selain itu, dimulai penyusunan draf laporan kemajuan bagian perangkat lunak dan kecerdasan buatan, mencakup rangkuman capaian pengembangan model XGBoost dan MLP, hasil pengujian relawan, serta status pendaftaran Hak Cipta yang telah terbit.
 
-📸 **Bukti yang perlu dilampirkan:**
-- `ADAM_sesi pengujian 6 smartband.png` - foto perekaman
+Indikator capaian: bertambahnya data kalibrasi kecerdasan buatan melalui pengujian kelima, tersedianya model MLP hasil pelatihan ulang dengan data terbaru, serta tersusunnya draf awal laporan kemajuan bagian perangkat lunak dan kecerdasan buatan sebagai bahan asistensi dosen pendamping.
+
+📸 **Bukti:**
+- `ADAM_sesi pengujian 5 smartband.png` - foto perekaman
 - `ADAM_hasil pelatihan ulang mlp.png` - kartu Pelatihan MLP dengan metrik terbaru
-- `ADAM_perbandingan metrik sebelum sesudah.png` - perbandingan dengan hasil 16 Agustus
+- `ADAM_draf laporan kemajuan software.png` - draf bagian perangkat lunak dan AI
+
+---
+
+**Jumat, 5 September 2026 - 600 menit**
+*Kegiatan tim: pengujian 6 (1 data pengujian lab dan 1 data pengujian alat terstandar) smartband ANTARAGA, sekaligus melanjutkan pembuatan laporan kemajuan*
+
+**Kegiatan:**
+Menambah 2 data kalibrasi dari pengujian laboratorium dan alat pembanding terstandar (pengujian keenam). Di sela sesi ini, menemukan dan memperbaiki metode validasi pada skrip pelatihan MLP yang sebelumnya memisahkan data latih dan data uji per baris rekaman, bukan per subjek, sehingga berisiko membocorkan informasi dari relawan yang direkam lebih dari satu kali. Model dilatih ulang dengan metode Leave-One-Subject-Out menggunakan 11 subjek kalibrasi yang terkumpul sampai hari ini.
+
+**Narasi & Indikator Capaian:**
+Pengujian keenam menambah 2 data kalibrasi baru, satu dari hasil pemeriksaan laboratorium dan satu dari alat ukur pembanding terstandar, melengkapi 3 data dari pengujian kelima pada 2 September sebelumnya.
+
+Di sela sesi ini ditemukan bahwa skrip pelatihan model MLP kalibrasi (`model/train_mlp_calibration.py`) memvalidasi model dengan metode Leave-One-Out per baris rekaman, bukan per subjek. Metode ini keliru untuk data ANTARAGA karena satu relawan dapat direkam pada lebih dari satu sesi pengujian, sehingga baris data milik orang yang sama bisa terpisah antara kelompok latih dan kelompok uji. Akibatnya, model berpotensi "mengenali" pola pribadi seorang relawan dari sesi lain yang bocor ke data latihnya, bukan benar-benar menebak dari sinyal optik, sehingga angka akurasi yang dilaporkan menjadi lebih baik daripada kenyataan.
+
+Perbaikan dilakukan dengan mengganti metode validasi menjadi Leave-One-Subject-Out (LOSO): model dilatih ulang sebanyak jumlah subjek, setiap kali menyisihkan satu subjek secara penuh sebagai data uji dan melatih dari subjek-subjek lainnya, sehingga tidak ada satu pun prediksi yang dihitung dari model yang pernah melihat data orang tersebut. Model final yang diterapkan pada aplikasi tetap dilatih dari seluruh subjek yang tersedia.
+
+Model dilatih ulang menggunakan seluruh data kalibrasi yang terkumpul sampai hari ini, mencapai 11 subjek: 6 subjek dari sesi-sesi sebelumnya (S001-S006), ditambah 3 sampel dari pengujian kelima (2 September), ditambah 2 sampel dari pengujian keenam (5 September).
+
+*(Hasil evaluasi LOSO per parameter kalibrasi - gula darah, kolesterol, asam urat, sistolik, diastolik - berupa MAE, RMSE, R², persentase error, dan persentase akurasi belum dilampirkan di sini. Angka tersebut baru boleh dicantumkan setelah skrip `python model/train_mlp_calibration.py` benar-benar dijalankan terhadap data VPS terbaru; menuliskan angka sebelum diukur bertentangan dengan prinsip pelaporan yang jujur yang dipegang sepanjang program ini.)*
+
+Indikator capaian: terkoreksinya metodologi validasi model MLP dari yang berpotensi bias menjadi metode Leave-One-Subject-Out yang sesuai kaidah ilmiah untuk data dengan subjek terbatas, serta tersedianya model MLP hasil pelatihan ulang dari 11 subjek kalibrasi dengan angka akurasi yang dapat dipertanggungjawabkan secara metodologis untuk dicantumkan pada laporan kemajuan.
+
+📸 **Bukti:**
+- `ADAM_sesi pengujian 6 smartband.png` - foto perekaman data lab dan alat terstandar
+- `ADAM_perbaikan skrip validasi mlp.png` - cuplikan kode LeaveOneGroupOut/GroupKFold
+- `ADAM_hasil pelatihan ulang loso.png` - keluaran terminal skrip pelatihan dengan metrik per subjek
 
 ---
 

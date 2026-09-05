@@ -200,3 +200,31 @@ Mendampingi pengujian smartband kelima dari sisi perangkat keras.
 📸 `ALLY_penyiapan perangkat sesi kelima.png`, `ALLY_pemantauan sinyal sesi kelima.png`
 
 ---
+
+## 2 September 2026 - Pendampingan Pengujian 5 Smartband (- menit)
+
+**Kegiatan:**
+Mendampingi pengujian smartband kelima dari sisi perangkat keras.
+
+**Narasi & Indikator Capaian:**
+Mendampingi jalannya pengujian kelima smartband ANTARAGA dari sisi perangkat keras, memastikan sensor terpasang dengan benar pada relawan baru, memeriksa mutu sinyal ketiga kanal selama perekaman, serta memantau kondisi baterai agar pengiriman data tidak terputus di tengah sesi. Hasil pemeriksaan menunjukkan sinyal merah dan inframerah tetap berada pada rentang perfusi normal, konsisten dengan sesi-sesi sebelumnya.
+
+Indikator capaian: terverifikasinya mutu sinyal perangkat keras pada pengujian kelima, serta terjaminnya kelengkapan sinyal mentah tiga kanal untuk keperluan pelatihan model MLP.
+
+📸 `ALLY_pendampingan pengujian kelima.png`, `ALLY_pemantauan mutu sinyal sesi kelima.png`
+
+---
+
+## 5 September 2026 - Pendampingan Penambahan Data Kalibrasi (- menit)
+
+**Kegiatan:**
+Mendampingi penambahan dua data kalibrasi dari pengujian laboratorium dan alat pembanding terstandar, sekaligus menyempurnakan bagian perangkat keras pada laporan kemajuan.
+
+**Narasi & Indikator Capaian:**
+Mendampingi sesi tambahan pengujian keenam yang menghasilkan dua data kalibrasi baru, satu dari hasil pemeriksaan laboratorium dan satu dari alat ukur pembanding terstandar, guna memastikan mutu sinyal tetap terjaga pada penambahan data di luar jadwal reguler. Selain itu, menyempurnakan bagian perangkat keras pada draf laporan kemajuan berdasarkan masukan tim.
+
+Indikator capaian: bertambahnya dua data kalibrasi yang terverifikasi mutu sinyalnya, serta tersempurnakannya bagian perangkat keras pada laporan kemajuan.
+
+📸 `ALLY_penambahan data kalibrasi lab dan standar.png`, `ALLY_penyempurnaan bagian hardware laporan.png`
+
+---

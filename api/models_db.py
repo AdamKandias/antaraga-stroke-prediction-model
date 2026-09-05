@@ -37,6 +37,12 @@ class User(Base):
     # Throttle high-risk notifications: only send once per cooldown window.
     last_notified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # Jeda terpisah untuk notifikasi risiko SEDANG. Kolomnya sengaja beda dari
+    # last_notified_at: kalau keduanya berbagi satu jeda, notifikasi Sedang
+    # yang baru saja terkirim bisa membungkam notifikasi Tinggi yang menyusul
+    # sesaat sesudahnya, padahal eskalasi ke Tinggi wajib selalu tersampaikan.
+    last_notified_medium_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     # DEVICE_ID firmware yang di-pair ke akun ini (misal "antaraga-001").
     # Diisi lewat POST /device/pair dari mobile app.
     # Batch masuk ke /v1/ingest dicocokkan dengan field "id" di payload.
@@ -141,6 +147,13 @@ class CalibrationRecord(Base):
     asam_urat_mg_dl: Mapped[float | None] = mapped_column(Float, nullable=True)
     sistolik_mmhg: Mapped[float | None] = mapped_column(Float, nullable=True)
     diastolik_mmhg: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Riwayat stroke pada keluarga inti (orang tua/saudara kandung). Bukan
+    # fitur yang dipakai model XGBoost (model dilatih dari dataset publik
+    # yang tidak punya kolom ini) -- ditampilkan di laporan sebagai faktor
+    # risiko klinis yang berdiri sendiri, sejajar dengan hipertensi dan
+    # dislipidemia yang sama-sama dinilai terpisah dari model AI.
+    family_history_stroke: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 

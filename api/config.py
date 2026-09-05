@@ -50,6 +50,14 @@ DASHBOARD_SESSION_DAYS = int(os.getenv("DASHBOARD_SESSION_DAYS", "7"))
 # Jeda minimum (detik) antar notifikasi HIGH-risk per user supaya tidak spam.
 FCM_NOTIFICATION_COOLDOWN_SECONDS = int(os.getenv("FCM_NOTIFICATION_COOLDOWN_SECONDS", "300"))
 
+# Jeda terpisah untuk notifikasi risiko SEDANG, sengaja jauh lebih panjang
+# daripada jeda Tinggi. Sedang bukan keadaan darurat -- mengingatkan tiap
+# lima menit seperti Tinggi hanya akan membuat keluarga terbiasa mengabaikan
+# notifikasi ANTARAGA sama sekali. Bawaan satu jam.
+FCM_MEDIUM_NOTIFICATION_COOLDOWN_SECONDS = int(
+    os.getenv("FCM_MEDIUM_NOTIFICATION_COOLDOWN_SECONDS", "3600")
+)
+
 # Kunci statis untuk perangkat keras (firmware). Dikirim sebagai
 # "Authorization: Bearer <DEVICE_INGEST_KEY>" dari config.h CLOUD_API_KEY.
 # Berbeda dari JWT (yang expire) - kunci ini permanen sampai diubah manual.

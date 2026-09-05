@@ -249,3 +249,31 @@ Mendokumentasikan pengujian smartband kelima.
 📸 `ZEVEN_dokumentasi pengujian kelima.png`, `ZEVEN_arsip dokumentasi per sesi.png`
 
 ---
+
+## 2 September 2026 - Dokumentasi Pengujian 5 Smartband (- menit)
+
+**Kegiatan:**
+Mendokumentasikan pengujian smartband kelima, sekaligus mengumpulkan bahan visual untuk kebutuhan presentasi dan juga konten sosial media.
+
+**Narasi & Indikator Capaian:**
+Mendokumentasikan jalannya pengujian kelima smartband ANTARAGA dalam bentuk foto dan video, mencakup proses pemasangan alat dan pengukuran pembanding, sekaligus mengumpulkan bahan visual tambahan untuk kebutuhan presentasi PKP2 dan konten media sosial berikutnya.
+
+Indikator capaian: tersedianya dokumentasi visual pengujian kelima yang lengkap dan siap diolah menjadi bahan presentasi maupun konten publikasi.
+
+📸 `ZEVEN_dokumentasi pengujian kelima.png`, `ZEVEN_bahan visual presentasi pkp2.png`
+
+---
+
+## 5 September 2026 - Dokumentasi Data Tambahan dan Visual Laporan (- menit)
+
+**Kegiatan:**
+Mendokumentasikan sesi penambahan data kalibrasi, sekaligus menyiapkan bahan visual pendukung laporan kemajuan.
+
+**Narasi & Indikator Capaian:**
+Mendokumentasikan sesi penambahan dua data kalibrasi (pengujian keenam) dari pengujian laboratorium dan alat pembanding terstandar, serta menyiapkan bahan visual pendukung laporan kemajuan seperti tata letak dokumen dan diagram pendukung penjelasan teknis.
+
+Indikator capaian: tersedianya dokumentasi sesi penambahan data kalibrasi, serta bahan visual pendukung yang siap disertakan pada laporan kemajuan.
+
+📸 `ZEVEN_dokumentasi penambahan data lab dan standar.png`, `ZEVEN_bahan visual laporan kemajuan.png`
+
+---
