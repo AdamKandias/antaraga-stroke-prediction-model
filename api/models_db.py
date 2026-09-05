@@ -155,6 +155,11 @@ class CalibrationRecord(Base):
     # dislipidemia yang sama-sama dinilai terpisah dari model AI.
     family_history_stroke: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
+    # Subjek sendiri pernah didiagnosis stroke sebelumnya -- berbeda dari
+    # family_history_stroke di atas (riwayat pada orang tua/saudara kandung).
+    # Sama-sama bukan fitur XGBoost, sama-sama hanya label di laporan.
+    personal_history_stroke: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
 

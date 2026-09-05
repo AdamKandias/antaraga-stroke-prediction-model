@@ -1448,6 +1448,12 @@
               Ada riwayat stroke di keluarga inti (orang tua/saudara kandung)
             </label>
           </div>
+          <div style="display:flex;align-items:flex-end;padding-bottom:2px">
+            <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink,inherit);cursor:pointer">
+              <input id="clRiwayatStrokePribadi" type="checkbox" style="width:15px;height:15px;cursor:pointer">
+              Subjek pernah didiagnosis stroke sendiri
+            </label>
+          </div>
         </div>
 
         <div
@@ -1672,27 +1678,19 @@
               Ada riwayat stroke di keluarga inti
             </label>
           </div>
+          <div style="display:flex;align-items:center;padding-top:4px">
+            <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;cursor:pointer">
+              <input id="editRiwayatStrokePribadi" type="checkbox" style="width:15px;height:15px;cursor:pointer">
+              Subjek pernah didiagnosis stroke sendiri
+            </label>
+          </div>
         </div>
 
-        <div
-          style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">
-          Waktu Sesi Direkam</div>
-        <p style="font-size:11px;color:var(--muted);margin:0 0 8px;line-height:1.5">
-          Pakai ini kalau tanggal yang tercatat salah, misalnya jam perangkat
-          belum disetel saat sesi berlangsung. Tanggal wajib diisi bila mengubah
-          waktu; jam boleh dikosongkan (jam yang lama dipertahankan).
-        </p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
-          <div>
-            <label class="up-label">Tanggal sebenarnya</label>
-            <input id="editTanggal" class="up-input" type="date">
-          </div>
-          <div>
-            <label class="up-label">Jam (opsional)</label>
-            <input id="editJam" class="up-input" type="time">
-          </div>
-        </div>
-        <p id="editWaktuTersimpan" style="font-size:11px;color:var(--muted);margin:-8px 0 14px"></p>
+        <!-- Tanggal/jam sesi sengaja tidak diedit lewat modal ini -- salah
+             klik operator di sini berisiko menimpa tanggal kalibrasi asli
+             yang sudah diverifikasi. Perbaikan tanggal dilakukan lewat API
+             langsung (PATCH /v1/calibrate/{id}?session_ts=...&tz_offset=...)
+             atau scripts/perbaiki_tanggal_kalibrasi.py. -->
 
         <div
           style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">
@@ -2424,6 +2422,7 @@
         gender: document.getElementById('clGender').value,
         kondisi: document.getElementById('clKondisi').value,
         family_history_stroke: document.getElementById('clRiwayatStroke').checked ? 'true' : 'false',
+        personal_history_stroke: document.getElementById('clRiwayatStrokePribadi').checked ? 'true' : 'false',
       });
       const addOpt = (id, key) => { const v = document.getElementById(id).value.trim(); if (v) p.append(key, v); };
       addOpt('clGula', 'gula_darah_mg_dl');
@@ -2444,6 +2443,7 @@
         // Reset form
         ['clSubject', 'clGula', 'clKol', 'clAU', 'clSis', 'clDia'].forEach(id => document.getElementById(id).value = '');
         document.getElementById('clRiwayatStroke').checked = false;
+        document.getElementById('clRiwayatStrokePribadi').checked = false;
         setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
       } catch (e) {
         show(`Error: ${e.message}`, 'var(--critical)');
@@ -2484,16 +2484,7 @@
       document.getElementById('editGender').value = rec.gender || 'L';
       document.getElementById('editKondisi').value = rec.kondisi || 'sewaktu';
       document.getElementById('editRiwayatStroke').checked = !!rec.family_history_stroke;
-
-      // Tanggal/jam ditampilkan kosong (bukan diisi nilai sekarang) --
-      // dikosongkan berarti "jangan ubah", supaya operator tidak tidak
-      // sengaja menimpa waktu yang sebetulnya sudah benar. Nilai yang
-      // sedang tersimpan ditampilkan sebagai teks bantuan di sebelahnya.
-      document.getElementById('editTanggal').value = '';
-      document.getElementById('editJam').value = '';
-      const tersimpanEl = document.getElementById('editWaktuTersimpan');
-      if (tersimpanEl) tersimpanEl.textContent = rec.session_ts
-        ? 'Tercatat sekarang: ' + fmtWaktu(rec.session_ts) : '';
+      document.getElementById('editRiwayatStrokePribadi').checked = !!rec.personal_history_stroke;
       document.getElementById('editGula').value = rec.gula_darah_mg_dl ?? '';
       document.getElementById('editKol').value = rec.kolesterol_mg_dl ?? '';
       document.getElementById('editAU').value = rec.asam_urat_mg_dl ?? '';
@@ -2525,22 +2516,12 @@
       p.append('gender', document.getElementById('editGender').value);
       p.append('kondisi', document.getElementById('editKondisi').value);
       p.append('family_history_stroke', document.getElementById('editRiwayatStroke').checked ? 'true' : 'false');
+      p.append('personal_history_stroke', document.getElementById('editRiwayatStrokePribadi').checked ? 'true' : 'false');
       addOpt('editGula', 'gula_darah_mg_dl');
       addOpt('editKol', 'kolesterol_mg_dl');
       addOpt('editAU', 'asam_urat_mg_dl');
       addOpt('editSis', 'sistolik_mmhg');
       addOpt('editDia', 'diastolik_mmhg');
-
-      // Tanggal wajib diisi untuk mengubah waktu sesi; jam boleh kosong
-      // (server mempertahankan jam yang lama). Dikirim dalam zona waktu
-      // browser operator, bukan diasumsikan WIB, supaya benar meski dibuka
-      // dari luar Indonesia.
-      const tglBaru = document.getElementById('editTanggal').value;
-      if (tglBaru) {
-        const jamBaru = document.getElementById('editJam').value;
-        p.append('session_ts', jamBaru ? `${tglBaru}T${jamBaru}` : tglBaru);
-        p.append('tz_offset', String(-new Date().getTimezoneOffset()));
-      }
 
       show('Menyimpan…', 'var(--muted)');
       try {
@@ -2551,7 +2532,6 @@
         }
         // Show what was actually saved so user can verify
         const parts = [];
-        if (tglBaru) parts.push(`Waktu: ${fmtWaktu(saved?.session_ts)}`);
         if (saved?.gula_darah_mg_dl != null) parts.push(`Gula: ${saved.gula_darah_mg_dl} mg/dL`);
         if (saved?.kolesterol_mg_dl != null) parts.push(`Kol: ${saved.kolesterol_mg_dl} mg/dL`);
         if (saved?.asam_urat_mg_dl != null) parts.push(`AU: ${saved.asam_urat_mg_dl} mg/dL`);

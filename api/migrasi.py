@@ -120,6 +120,22 @@ def _tambah_riwayat_stroke_ke_kalibrasi(engine: Engine) -> None:
         logger.info("[migrasi] kolom calibration_records.family_history_stroke dibuat")
 
 
+def _tambah_riwayat_stroke_pribadi_ke_kalibrasi(engine: Engine) -> None:
+    """Tambah kolom riwayat stroke pada diri subjek sendiri (bukan keluarga).
+
+    Berbeda dari family_history_stroke: kolom ini menandai subjek sendiri
+    pernah didiagnosis stroke, bukan orang tua/saudara kandungnya. Sama-sama
+    label laporan, bukan fitur XGBoost.
+    """
+    if _punya_kolom(engine, "calibration_records", "personal_history_stroke"):
+        return
+    with engine.begin() as conn:
+        conn.execute(text(
+            "ALTER TABLE calibration_records ADD COLUMN personal_history_stroke BOOLEAN"
+        ))
+        logger.info("[migrasi] kolom calibration_records.personal_history_stroke dibuat")
+
+
 def jalankan(engine: Engine) -> None:
     """Jalankan seluruh penyesuaian skema. Dipanggil sekali saat server mulai.
 
@@ -131,6 +147,7 @@ def jalankan(engine: Engine) -> None:
         _tambah_device_key_ke_profil,
         _tambah_kolom_notifikasi_sedang,
         _tambah_riwayat_stroke_ke_kalibrasi,
+        _tambah_riwayat_stroke_pribadi_ke_kalibrasi,
     ):
         try:
             langkah(engine)

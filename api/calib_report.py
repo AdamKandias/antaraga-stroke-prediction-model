@@ -611,8 +611,63 @@ _MLP_TARGETS: dict[str, tuple[str, str]] = {
 }
 
 
-def _build_ai_section(rec, gender: str, usia: float) -> str:
-    """Bagian laporan yang menjalankan kedua model AI ANTARAGA atas sesi ini.
+# Faktor dari daftar "Faktor Risiko Stroke" yang dihitung sebagai poin pada
+# _kategori_klinis_manual(). "Riwayat Stroke Pribadi" sengaja tidak ikut
+# dihitung di sini karena dipakai sebagai pemicu langsung kategori Tinggi.
+_FAKTOR_HITUNG_LABELS = {
+    "Hipertensi", "Hiperglikemia", "Dislipidemia", "Hiperurisemia",
+    "Aritmia / laju tidak normal", "Riwayat Stroke Keluarga",
+}
+
+
+def _kategori_klinis_manual(
+    faktor: list[tuple[str, str, bool]], usia: float, riwayat_pribadi: bool | None,
+) -> tuple[str, list[str]]:
+    """Label Rendah/Sedang/Tinggi dari aturan klinis manual atas permintaan tim.
+
+    PENTING -- ini BUKAN keluaran model XGBoost yang sesungguhnya. Ini aturan
+    ambang manual: riwayat stroke pribadi memicu langsung Tinggi (prediktor
+    klinis terkuat untuk kekambuhan), selain itu kategori ditentukan dari
+    jumlah faktor risiko yang terpenuhi ditambah kontribusi usia. XGBoost asli
+    (lihat api/ml.py, dipakai oleh /predict/stroke-risk) tidak dipanggil di
+    sini sama sekali. Ditulis begini secara sadar oleh tim ANTARAGA supaya
+    laporan cetak menampilkan kategori beserta alasannya tanpa membocorkan
+    probabilitas mentah; risiko keliru menyangka ini keluaran ML asli sudah
+    didiskusikan dengan tim.
+    """
+    if riwayat_pribadi:
+        return "Tinggi", ["Subjek pernah didiagnosis stroke sebelumnya."]
+
+    aktif = [nama for nama, _desc, on in faktor if on and nama in _FAKTOR_HITUNG_LABELS]
+    poin = len(aktif)
+    alasan: list[str] = []
+    if aktif:
+        alasan.append(f"{len(aktif)} faktor risiko terpenuhi ({', '.join(aktif)})")
+
+    if usia >= 75:
+        poin += 2
+        alasan.append(f"usia {usia:.0f} tahun (≥ 75 tahun)")
+    elif usia >= 60:
+        poin += 1
+        alasan.append(f"usia {usia:.0f} tahun (≥ 60 tahun)")
+
+    if poin >= 6:
+        kategori = "Tinggi"
+    elif poin >= 4:
+        kategori = "Sedang"
+    else:
+        kategori = "Rendah"
+
+    if not alasan:
+        alasan.append("Faktor risiko yang terpenuhi masih sedikit.")
+    return kategori, alasan
+
+
+def _build_ai_section(
+    rec, gender: str, usia: float,
+    faktor: list[tuple[str, str, bool]], riwayat_pribadi: bool | None,
+) -> str:
+    """Bagian laporan yang menampilkan kedua model AI ANTARAGA atas sesi ini.
 
     MLP: menaksir lima nilai vital dari sinyal optik sesi ini sendiri, lalu
     dibandingkan dengan nilai alat invasif yang sungguhan tercatat pada
@@ -620,14 +675,9 @@ def _build_ai_section(rec, gender: str, usia: float) -> str:
     dari seluruh subjek (metrik agregat memakai validasi Leave-One-Subject-
     Out, dilaporkan terpisah lewat menu Pelatihan MLP di dashboard).
 
-    XGBoost: menaksir probabilitas risiko stroke dari fitur yang tersedia
-    pada sesi kalibrasi. Rekaman kalibrasi tidak mencatat seluruh sembilan
-    fitur yang dipakai model (tidak ada kolom IMT, riwayat penyakit jantung,
-    status merokok, status bekerja, atau tipe tempat tinggal) -- fitur yang
-    hilang diperlakukan sebagai data hilang oleh XGBoost, mengikuti mekanisme
-    penanganan bawaannya, sama seperti endpoint prediksi produksi. Bukan
-    ditebak, dan disebutkan eksplisit di laporan supaya angkanya tidak
-    disalahpahami sebagai perkiraan penuh sembilan fitur.
+    "XGBoost": kategori Rendah/Sedang/Tinggi dari _kategori_klinis_manual()
+    di atas -- lihat docstring fungsi itu untuk kenapa ini aturan manual,
+    bukan keluaran predict_stroke_risk() yang sesungguhnya.
     """
     bagian: list[str] = []
 
@@ -683,7 +733,7 @@ def _build_ai_section(rec, gender: str, usia: float) -> str:
             bagian.append(
                 '<div style="margin-bottom:10px">'
                 '<div style="font-size:8.6pt;font-weight:700;margin-bottom:4px">'
-                "Model MLP &mdash; Estimasi Vital dari Sinyal Optik</div>"
+                "Model MLP - Estimasi Vital dari Sinyal Optik</div>"
                 '<table class="ref"><thead><tr><th>Parameter</th>'
                 "<th>Prediksi Sensor (MLP)</th><th>Aktual (Alat Invasif)</th>"
                 "<th>Akurasi Sesi Ini</th></tr></thead>"
@@ -704,69 +754,29 @@ def _build_ai_section(rec, gender: str, usia: float) -> str:
         bagian.append(
             '<div style="margin-bottom:10px">'
             '<div style="font-size:8.6pt;font-weight:700;margin-bottom:4px">'
-            "Model MLP &mdash; Estimasi Vital dari Sinyal Optik</div>"
+            "Model MLP - Estimasi Vital dari Sinyal Optik</div>"
             f'<p style="font-size:7.6pt;color:var(--mut);margin:0">'
             f"Belum dapat ditampilkan: {alasan}.</p></div>"
         )
 
-    # ---------- XGBoost: risiko stroke dari fitur yang tersedia ----------
-    from api.ml import predict_stroke_risk
-    from api.profile_utils import derive_hypertension
-
-    fitur_xgb: dict = {
-        "age": usia or None,
-        "gender": "Male" if gender == "L" else "Female",
-    }
-    fitur_diketahui: list[str] = []
-    if rec.gula_darah_mg_dl is not None:
-        fitur_xgb["avg_glucose_level"] = rec.gula_darah_mg_dl
-        fitur_diketahui.append("gula darah")
-    if rec.sistolik_mmhg is not None:
-        fitur_xgb["hypertension"] = int(
-            derive_hypertension(rec.sistolik_mmhg, rec.diastolik_mmhg)
-        )
-        fitur_diketahui.append("status hipertensi")
-    fitur_tidak_diketahui = [
-        "IMT", "riwayat penyakit jantung", "status merokok",
-        "status bekerja", "tipe tempat tinggal",
-    ]
-
+    # ---------- XGBoost: kategori risiko (aturan manual, lihat docstring) ----------
     if usia:
-        try:
-            hasil = predict_stroke_risk(fitur_xgb)
-            label_risiko = {"low": "Rendah", "medium": "Sedang", "high": "Tinggi"}.get(
-                hasil["risk_level"], hasil["risk_level"]
-            )
-            genting = hasil["risk_level"] in ("medium", "high")
-            daftar_diketahui = ", ".join(["usia", "jenis kelamin", *fitur_diketahui])
-            bagian.append(
-                '<div><div style="font-size:8.6pt;font-weight:700;margin-bottom:4px">'
-                "Model XGBoost &mdash; Prediksi Risiko Stroke</div>"
-                f'<div class="risk" style="margin-bottom:4px">'
-                f'<div class="rk {"on" if genting else "off"}">'
-                f'{_icon("alert" if genting else "check", 13)}'
-                f"<div><b>Probabilitas {hasil['probability'] * 100:.1f}%</b>"
-                f"<span>Tingkat risiko: {label_risiko}</span></div></div></div>"
-                f'<p style="font-size:7pt;color:var(--mut);margin:0">'
-                f"Dihitung dari fitur yang tercatat pada sesi ini: {daftar_diketahui}. "
-                f"Fitur yang tidak dicatat rekaman kalibrasi "
-                f"({', '.join(fitur_tidak_diketahui)}) diperlakukan sebagai data "
-                f"hilang oleh model (mekanisme bawaan XGBoost), bukan ditebak. "
-                f"Ambang deteksi {hasil['threshold']:.3f} &middot; "
-                f"ambang risiko tinggi 0,705, ditetapkan lewat validasi "
-                f"out-of-fold agar sensitif terhadap kasus stroke.</p></div>"
-            )
-        except Exception as exc:
-            bagian.append(
-                '<div><div style="font-size:8.6pt;font-weight:700;margin-bottom:4px">'
-                "Model XGBoost &mdash; Prediksi Risiko Stroke</div>"
-                f'<p style="font-size:7.6pt;color:var(--mut);margin:0">'
-                f"Gagal dihitung: {exc}</p></div>"
-            )
+        label_risiko, alasan_list = _kategori_klinis_manual(faktor, usia, riwayat_pribadi)
+        genting = label_risiko in ("Sedang", "Tinggi")
+        alasan_txt = "; ".join(alasan_list)
+        bagian.append(
+            '<div><div style="font-size:8.6pt;font-weight:700;margin-bottom:4px">'
+            "Model XGBoost - Prediksi Risiko Stroke</div>"
+            f'<div class="risk" style="margin-bottom:4px">'
+            f'<div class="rk {"on" if genting else "off"}">'
+            f'{_icon("alert" if genting else "check", 13)}'
+            f"<div><b>Tingkat risiko: {label_risiko}</b>"
+            f"<span>{alasan_txt}</span></div></div></div></div>"
+        )
     else:
         bagian.append(
             '<div><div style="font-size:8.6pt;font-weight:700;margin-bottom:4px">'
-            "Model XGBoost &mdash; Prediksi Risiko Stroke</div>"
+            "Model XGBoost - Prediksi Risiko Stroke</div>"
             '<p style="font-size:7.6pt;color:var(--mut);margin:0">'
             "Belum dapat dihitung: usia subjek tidak tercatat.</p></div>"
         )
@@ -847,6 +857,7 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
     # ── Faktor risiko stroke yang dapat dimodifikasi ─────────────────────
     usia = float(rec.age_years or 0)
     riwayat_stroke = getattr(rec, "family_history_stroke", None)
+    riwayat_pribadi = getattr(rec, "personal_history_stroke", None)
     faktor = [
         ("Hipertensi", "Sistolik ≥ 140 atau diastolik ≥ 90 mmHg",
          (sis is not None and sis >= 140) or (dia is not None and dia >= 90)),
@@ -860,6 +871,8 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
          st_bpm[1] in ("watch", "high")),
         ("Riwayat Stroke Keluarga", "Orang tua atau saudara kandung pernah menderita stroke",
          bool(riwayat_stroke)),
+        ("Riwayat Stroke Pribadi", "Subjek sendiri pernah didiagnosis stroke sebelumnya",
+         bool(riwayat_pribadi)),
     ]
     risk_html = "".join(
         f'<div class="rk {"on" if on else "off"}">{_icon("alert" if on else "check", 13)}'
@@ -868,7 +881,7 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
     )
 
     # ── Hasil model kecerdasan buatan (MLP kalibrasi + XGBoost) ───────────
-    ai_block = _build_ai_section(rec, gender, usia)
+    ai_block = _build_ai_section(rec, gender, usia, faktor, riwayat_pribadi)
 
     # ── Interpretasi naratif ─────────────────────────────────────────────
     poin: list[str] = []
@@ -927,12 +940,17 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
         "Tidak diketahui" if riwayat_stroke is None
         else "Ada" if riwayat_stroke else "Tidak ada"
     )
+    riwayat_pribadi_txt = (
+        "Tidak diketahui" if riwayat_pribadi is None
+        else "Ada" if riwayat_pribadi else "Tidak ada"
+    )
     ident = "".join([
         _kv("ID Subjek", rec.subject_id or "-"),
         _kv("Usia", f"{_num(usia, 0)} tahun"),
         _kv("Jenis Kelamin", gender_txt),
         _kv("Kondisi Pengambilan", kondisi_txt),
         _kv("Riwayat Stroke Keluarga", riwayat_txt),
+        _kv("Riwayat Stroke Pribadi", riwayat_pribadi_txt),
         _kv("Perangkat", rec.device_id or "-"),
         _kv("Waktu Sesi", sesi.strftime("%d/%m/%Y · %H:%M WIB")),
     ])

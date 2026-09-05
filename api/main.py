@@ -1853,6 +1853,7 @@ def calibrate_create(
     sistolik_mmhg: float | None = None,
     diastolik_mmhg: float | None = None,
     family_history_stroke: bool | None = None,
+    personal_history_stroke: bool | None = None,
     db: Session = Depends(get_db),
 ) -> dict:
     """Rekam satu sesi kalibrasi.
@@ -1908,6 +1909,7 @@ def calibrate_create(
         sistolik_mmhg     = sistolik_mmhg,
         diastolik_mmhg    = diastolik_mmhg,
         family_history_stroke = family_history_stroke,
+        personal_history_stroke = personal_history_stroke,
     )
     db.add(rec)
     db.commit()
@@ -1982,6 +1984,7 @@ def calibrate_update(
     sistolik_mmhg: float | None = None,
     diastolik_mmhg: float | None = None,
     family_history_stroke: bool | None = None,
+    personal_history_stroke: bool | None = None,
     session_ts: str | None = Query(
         None,
         description="Tanggal sesi direkam yang sebenarnya, format YYYY-MM-DD "
@@ -2011,6 +2014,7 @@ def calibrate_update(
     if sistolik_mmhg     is not None: rec.sistolik_mmhg     = sistolik_mmhg
     if diastolik_mmhg    is not None: rec.diastolik_mmhg    = diastolik_mmhg
     if family_history_stroke is not None: rec.family_history_stroke = family_history_stroke
+    if personal_history_stroke is not None: rec.personal_history_stroke = personal_history_stroke
     if session_ts        is not None:
         try:
             rec.created_at = _parse_session_ts(
@@ -2290,6 +2294,7 @@ def _calib_to_dict(r: models_db.CalibrationRecord) -> dict:
         "sistolik_mmhg":     r.sistolik_mmhg,
         "diastolik_mmhg":    r.diastolik_mmhg,
         "family_history_stroke": r.family_history_stroke,
+        "personal_history_stroke": r.personal_history_stroke,
     }
 
 

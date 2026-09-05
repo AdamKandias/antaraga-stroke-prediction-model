@@ -117,12 +117,17 @@ def _klasifikasi_galat(exc: Exception) -> tuple[str, bool]:
     return (f"{nama}: {exc}", False)
 
 
-# Templat pesan per tingkat risiko. "tinggi" satu-satunya yang benar-benar
-# dikirim otomatis oleh sistem sekarang (lihat send_high_risk_notification,
-# dipanggil dari ingest_firmware_batch saat risk_level == "HIGH"). "sedang"
-# dan "rendah" disediakan untuk pratinjau lewat dashboard -- bila suatu saat
-# tim memutuskan mengirim peringatan otomatis pada tingkat itu juga, tinggal
-# menyalin polanya, bukan menulis dari nol.
+# Templat pesan per tingkat risiko. "tinggi" dan "sedang" sama-sama dikirim
+# otomatis oleh sistem (lihat ingest_firmware_batch di api/main.py, yang
+# mengecek risk_level in ("high", "medium")) -- "tinggi" lewat
+# send_high_risk_notification, "sedang" lewat kirim_notifikasi_uji dengan
+# skenario="sedang" supaya teksnya satu sumber dengan pratinjau dashboard.
+# "rendah" murni pratinjau, tidak pernah dikirim otomatis.
+#
+# `dikirim_otomatis` di sini sekadar metadata untuk ditampilkan dashboard
+# (lewat GET /v1/notify/scenarios) -- bukan yang menentukan pengiriman
+# sungguhan. Kalau nilainya diubah tanpa mengubah pengecekan risk_level di
+# ingest_firmware_batch, dashboard akan menampilkan keterangan yang salah.
 TEMPLAT_NOTIFIKASI: dict[str, dict] = {
     "tinggi": {
         "judul": "⚠️ Risiko Stroke Tinggi Terdeteksi",
@@ -133,10 +138,11 @@ TEMPLAT_NOTIFIKASI: dict[str, dict] = {
     "sedang": {
         "judul": "Perlu Pemeriksaan Lanjutan",
         "isi": lambda nama: (
-            f"Risiko stroke {nama} terdeteksi tinggi. Segera lakukan assesmen ABCD2 dan memeriksakan diri ke tenaga kesehatan dalam waktu dekat."
+            f"Tanda vital {nama} menunjukkan risiko sedang. Disarankan "
+            "memeriksakan diri ke tenaga kesehatan dalam waktu dekat."
         ),
         "route": "assessment_form",
-        "dikirim_otomatis": False,
+        "dikirim_otomatis": True,
     },
     "rendah": {
         "judul": "Pemantauan Berjalan Normal",
