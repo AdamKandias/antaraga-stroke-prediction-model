@@ -150,6 +150,13 @@ def _classify_dia(dia: float | None) -> tuple[str, str]:
 
 
 def _classify_bpm(bpm: float | None) -> tuple[str, str]:
+    """Rentang detak jantung istirahat dewasa, American Heart Association (AHA).
+
+    Normal (sinus) 60-100 bpm, bradikardia < 60, takikardia > 100 -- rentang
+    baku AHA untuk detak jantung istirahat orang dewasa. Ini klasifikasi laju
+    dari sinyal PPG, bukan diagnosis EKG; tidak membedakan sinus bradikardia
+    dari penyebab lain (mis. blok konduksi) yang butuh EKG untuk dipastikan.
+    """
     if bpm is None:
         return ("Tidak terukur", "na")
     if bpm < 50:
@@ -236,9 +243,11 @@ def _classify_chol(val: float | None) -> tuple[str, str]:
     return ("Tinggi (Hiperkolesterolemia)", "high")
 
 
-# Ambang jenuh monosodium urat dalam serum pada 37 C dan pH 7,4.
-# Di atas nilai ini kristal dapat terbentuk, sehingga dipakai sebagai batas
-# hiperurisemia yang tidak bergantung jenis kelamin.
+# Ambang jenuh monosodium urat dalam serum pada 37 C dan pH 7,4 -- nilai
+# klasik dari literatur kelarutan urat (Loeb 1972 dan studi lanjutannya),
+# dipakai luas di pedoman gout/rheumatology (mis. ACR) sebagai target
+# treat-to-target. Di atas nilai ini kristal dapat terbentuk, sehingga
+# dipakai sebagai batas hiperurisemia yang tidak bergantung jenis kelamin.
 _URAT_JENUH = 6.8
 
 # Estrogen bersifat urikosurik (membantu pembuangan urat lewat ginjal).
@@ -248,7 +257,13 @@ _USIA_MENOPAUSE = 50
 
 
 def _uric_range(gender: str, usia: float | None) -> tuple[float, float, str]:
-    """Kembalikan (batas bawah, batas atas, keterangan kelompok)."""
+    """Kembalikan (batas bawah, batas atas, keterangan kelompok).
+
+    Rentang rujukan Mayo Clinic Laboratories (Uric Acid, Serum): laki-laki
+    3,4-7,0 mg/dL, perempuan usia subur 2,4-6,0 mg/dL. Batas perempuan
+    pascamenopause (2,4-6,5) mengikuti pergeseran akibat hilangnya efek
+    urikosurik estrogen, lihat catatan _USIA_MENOPAUSE.
+    """
     if gender == "L":
         return (3.4, 7.0, "laki-laki")
     if usia is not None and usia >= _USIA_MENOPAUSE:
@@ -1083,7 +1098,7 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
       </tr>
 
       <tr>
-        <td rowspan="3"><b>Asam Urat</b><br><span class="src">Rentang laboratorium klinik baku<br>Ambang jenuh urat 6,8 mg/dL</span></td>
+        <td rowspan="3"><b>Asam Urat</b><br><span class="src">Mayo Clinic Laboratories (rentang rujukan)<br>Kelarutan monosodium urat pada 37&deg;C/pH 7,4 (ambang jenuh)</span></td>
         <td>Laki-laki: 3,4-7,0 mg/dL</td>
         <td rowspan="3" class="src">Estrogen bersifat urikosurik. Setelah menopause kadarnya menurun sehingga batas atas perempuan bergeser naik. Nilai di antara batas rujukan dan 6,8 mg/dL ditandai batas atas, karena pada rentang itu kristal monosodium urat belum terbentuk pada 37 &deg;C dan pH 7,4.</td>
       </tr>
@@ -1091,9 +1106,9 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
       <tr><td>Perempuan pascamenopause (&ge; 50 th): 2,4-6,5 mg/dL</td></tr>
 
       <tr>
-        <td><b>Detak Jantung</b><br><span class="src">Rentang sinus dewasa istirahat</span></td>
-        <td>Normal 60-100 bpm · Bradikardia &lt; 60 · Takikardia &gt; 100</td>
-        <td class="src">Nilai diambil dari sinyal PPG kanal inframerah setelah melewati penyaring lonjakan.</td>
+        <td><b>Detak Jantung</b><br><span class="src">American Heart Association (AHA)</span></td>
+        <td>Normal (Sinus) 60-100 bpm · Bradikardia &lt; 60 · Takikardia &gt; 100</td>
+        <td class="src">Rentang detak jantung istirahat dewasa baku menurut AHA. Nilai diambil dari sinyal PPG kanal inframerah setelah melewati penyaring lonjakan, bukan EKG -- klasifikasi aritmia yang lebih rinci (mis. sinus bradikardia vs blok konduksi) tetap butuh EKG.</td>
       </tr>
     </tbody>
   </table>

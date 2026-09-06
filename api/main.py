@@ -640,6 +640,53 @@ def assess_abcd2(
     return response
 
 
+ABCD2_MASA_BERLAKU_HARI = 90
+
+
+@app.get("/assessment/abcd2/latest")
+def get_latest_abcd2(
+    profile_id: str | None = None,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+) -> dict:
+    """Assessment ABCD2 terakhir untuk profil ini, selama masih berlaku.
+
+    Dipakai supaya kartu ABCD2 di dashboard tetap tampil walau aplikasi
+    ditutup dan dibuka ulang -- assessment ini tidak perlu diisi ulang tiap
+    sesi, hasilnya tetap relevan sepanjang jendela risiko yang dipakai
+    skoring ABCD2 sendiri (2/7/90 hari sejak diisi). 404 berarti belum
+    pernah mengisi, atau assessment terakhir sudah lewat dari 90 hari.
+    """
+    profile = _resolve_profile_for_request(db, user_id, profile_id)
+    log = (
+        db.query(models_db.PredictionLog)
+        .filter(models_db.PredictionLog.profile_id == profile.id)
+        .filter(models_db.PredictionLog.endpoint == "abcd2")
+        .order_by(desc(models_db.PredictionLog.created_at))
+        .first()
+    )
+    if log is None:
+        raise HTTPException(status_code=404, detail="Belum pernah mengisi assessment ABCD2")
+
+    diisi = log.created_at.replace(tzinfo=timezone.utc)
+    kedaluwarsa = diisi + timedelta(days=ABCD2_MASA_BERLAKU_HARI)
+    if datetime.now(timezone.utc) >= kedaluwarsa:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Assessment ABCD2 terakhir sudah lewat dari {ABCD2_MASA_BERLAKU_HARI} hari",
+        )
+
+    # Gabungkan payload permintaan (komponen A/B/C/D/D mentah) dan jawaban
+    # (skor + kategori + persentase) jadi satu -- bentuknya sengaja disamakan
+    # dengan AssessmentResult.toJson() + Abcd2Response di Flutter supaya kedua
+    # model itu bisa langsung dibuat dari respons ini tanpa model baru.
+    hasil: dict = json.loads(log.request_payload)
+    hasil.update(json.loads(log.response_payload))
+    hasil["timestamp"] = _utc_iso(log.created_at)
+    hasil["expires_at"] = kedaluwarsa.isoformat()
+    return hasil
+
+
 @app.post("/estimate/vitals-from-ppg", response_model=schemas.VitalsFromPpgResponse)
 def estimate_vitals_from_ppg(
     payload: schemas.VitalsFromPpgRequest,
