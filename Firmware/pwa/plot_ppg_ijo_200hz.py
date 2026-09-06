@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Analisis PWA dari data mentah PPG SEN0203 (XIAO ESP32-C3)
+Analisis PWA dari data mentah PPG SON1303 (XIAO ESP32-C3)
 ==========================================================
 Mengubah adc_raw MENTAH menjadi 4 representasi untuk Pulse Wave Analysis:
   1. Band-pass : PPG bersih 0.5-15 Hz (pertahankan detail utk turunan)
@@ -122,7 +122,7 @@ def label_vpg(vpg_cycle):
 
 # ---------------------------------------------------------------- main
 def main():
-    ap = argparse.ArgumentParser(description="Analisis PWA PPG SEN0203")
+    ap = argparse.ArgumentParser(description="Analisis PWA PPG SON1303")
     ap.add_argument("file", nargs="?", default="rekam.txt")
     ap.add_argument("--session", type=int, default=None,
                     help="pilih sesi ke-N (default: terpanjang)")

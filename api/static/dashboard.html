@@ -21,7 +21,7 @@
 
       /* Categorical series - slots 3 · 8 · 7 (dark) */
       --c1: #199e70;
-      /* aqua  - PPG / SEN0203 */
+      /* aqua  - PPG / SON1303 */
       --c2: #e66767;
       /* red   - MAX30102 RED  */
       --c3: #9085e9;
@@ -947,11 +947,11 @@
         </div>
       </div>
       <div class="card">
-        <div class="card-ttl">PPG Mentah - SEN0203 (Green Photodiode, ADC 12-bit 0–4095)</div>
+        <div class="card-ttl">PPG Mentah - SON1303 (Green Photodiode, ADC 12-bit 0–4095)</div>
         <div class="cw"><canvas id="cPpg"></canvas></div>
         <div class="leg">
           <div class="li">
-            <div class="ld" style="background:var(--c1)"></div>PPG (SEN0203)
+            <div class="ld" style="background:var(--c1)"></div>PPG (SON1303)
           </div>
         </div>
       </div>
@@ -1443,13 +1443,15 @@
             </select>
           </div>
           <div style="display:flex;align-items:flex-end;padding-bottom:2px">
-            <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink,inherit);cursor:pointer">
+            <label
+              style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink,inherit);cursor:pointer">
               <input id="clRiwayatStroke" type="checkbox" style="width:15px;height:15px;cursor:pointer">
               Ada riwayat stroke di keluarga inti (orang tua/saudara kandung)
             </label>
           </div>
           <div style="display:flex;align-items:flex-end;padding-bottom:2px">
-            <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink,inherit);cursor:pointer">
+            <label
+              style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink,inherit);cursor:pointer">
               <input id="clRiwayatStrokePribadi" type="checkbox" style="width:15px;height:15px;cursor:pointer">
               Subjek sendiri memiliki riwayat stroke
             </label>
@@ -1499,7 +1501,8 @@
             <button class="btn btn-sm" onclick="calibExport()">⬇ Export CSV</button>
             <input type="file" id="calibImportFile" accept=".csv" style="display:none" onchange="calibImportFile()">
             <button class="btn-sec btn-sm" onclick="document.getElementById('calibImportFile').click()"
-              title="Pulihkan rekaman dari CSV cadangan (mis. hasil Export CSV sebelumnya). Aman: baris yang sudah ada di database tidak akan ditimpa/diduplikasi.">⬆ Impor CSV</button>
+              title="Pulihkan rekaman dari CSV cadangan (mis. hasil Export CSV sebelumnya). Aman: baris yang sudah ada di database tidak akan ditimpa/diduplikasi.">⬆
+              Impor CSV</button>
           </div>
         </div>
         <div style="overflow-x:auto">
@@ -2127,7 +2130,7 @@
     // ── Stats panel (persisten semua tab, identik plotter.py _tick_stats) ──
     function renderStats(analysis) {
       const ch = [
-        { id: 'statGreen', label: 'HIJAU 525 nm (SEN0203)', data: analysis.green || {}, color: 'var(--c1)' },
+        { id: 'statGreen', label: 'HIJAU 525 nm (SON1303)', data: analysis.green || {}, color: 'var(--c1)' },
         { id: 'statRed', label: 'MERAH 660 nm (MAX30102)', data: analysis.red || {}, color: 'var(--c2)' },
         { id: 'statIr', label: 'IR 880 nm (MAX30102)', data: analysis.ir || {}, color: 'var(--c3)' },
       ];
@@ -2237,7 +2240,7 @@
 
         bpmEl.innerHTML = `<div class="tiles" style="margin-bottom:12px">
       <div class="tile" style="border-color:rgba(25,158,112,.3)">
-        <div class="lbl">BPM · Hijau (SEN0203)</div>
+        <div class="lbl">BPM · Hijau (SON1303)</div>
         <div class="val" style="font-size:40px;color:${colorG}">${bpmG != null ? bpmG.toFixed(1) : '-'}</div>
         <div class="unit">denyut / menit</div>
         ${confBar(confG, colorG)}
@@ -2263,7 +2266,7 @@
       // ── Metadata batch ────────────────────────────────────────────────────
       const ovf = r.ovf > 0 ? `<b style="color:var(--critical)">${r.ovf}</b>` : '0';
       document.getElementById('rawMeta').innerHTML = `
-    <tr><td>PPG (SEN0203)</td><td>${r.n_ppg} sampel @ ${r.fs_ppg} Hz · resolusi 12-bit</td></tr>
+    <tr><td>PPG (SON1303)</td><td>${r.n_ppg} sampel @ ${r.fs_ppg} Hz · resolusi 12-bit</td></tr>
     <tr><td>MAX30102 RED</td><td>${r.n_max} sampel @ ${r.fs_max} Hz · resolusi 18-bit</td></tr>
     <tr><td>MAX30102 IR</td><td>${r.n_max} sampel @ ${r.fs_max} Hz · resolusi 18-bit</td></tr>
     <tr><td>t_unix (ms)</td><td>${r.t_unix_ms}</td></tr>

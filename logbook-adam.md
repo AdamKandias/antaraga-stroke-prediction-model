@@ -35,7 +35,7 @@
 Hari pertama pengerjaan PKM-KC ANTARAGA. Melakukan studi literatur tentang sistem deteksi risiko stroke berbasis wearable device dan membuat desain arsitektur sistem secara keseluruhan. Menentukan komponen utama: smartband (XIAO ESP32-S3), backend server (FastAPI/Python), aplikasi mobile (Flutter), dan model AI (XGBoost + MLP).
 
 Arsitektur yang dirancang:
-- Layer 1: Hardware (sensor PPG MAX30102 + SEN0203 pada XIAO ESP32-S3)
+- Layer 1: Hardware (sensor PPG MAX30102 + SON1303 pada XIAO ESP32-S3)
 - Layer 2: Backend (FastAPI, SQLAlchemy, SQLite)
 - Layer 3: AI/ML (XGBoost untuk deteksi risiko stroke, MLP untuk estimasi vital dari PPG)
 - Layer 4: Mobile App (Flutter - monitoring real-time)
@@ -1065,7 +1065,7 @@ Pengujian smartband ANTARAGA secara menyeluruh bersama tim hardware. Menguji alu
 - Dibuat penyaring di `api/bpm_filter.py` dengan empat lapis: gerbang periodisitas, koreksi kesalahan oktaf, batas laju fisiologis 20%, dan median bergulir
 - Nilai terakhir yang baik ditahan maksimum 15 detik saat sinyal hilang, agar layar tidak menampilkan tanda hubung berkedip
 - Mekanisme pemulihan ditambahkan: bila delapan pembacaan berturut-turut konsisten, penyaring menganggap detak memang berpindah level
-- **Ditemukan BPM kanal hijau terkunci di sekitar 60 bpm.** Penelusuran menunjukkan sinyal SEN0203 sudah AC-coupled di perangkat (perfusi terukur 1.719‰, padahal PPG normal 0,02–2%), dan penggabungan batch tanpa pemeriksaan kesinambungan menimbulkan lompatan periodik tepat 1 Hz yang dikunci autokorelasi
+- **Ditemukan BPM kanal hijau terkunci di sekitar 60 bpm.** Penelusuran menunjukkan sinyal SON1303 sudah AC-coupled di perangkat (perfusi terukur 1.719‰, padahal PPG normal 0,02–2%), dan penggabungan batch tanpa pemeriksaan kesinambungan menimbulkan lompatan periodik tepat 1 Hz yang dikunci autokorelasi
 - Kartu BPM siap-tampil dialihkan bersumber dari kanal inframerah yang perfusinya stabil
 - **Ditemukan kesalahan oktaf pada jalur analisis PWA**: `bpm_from_spectrum()` melaporkan 157,5 bpm padahal ketiga kanal sepakat di sekitar 78 bpm. Diperbaiki dengan penjaga sub-harmonik dan interpolasi parabola
 

@@ -19,7 +19,7 @@ Dua hal yang sengaja dijaga realistis:
 
 2. POLARITAS BENAR.  MAX30102 (merah/IR) mengeluarkan cacah mentah: saat
    sistol, darah menyerap lebih banyak cahaya sehingga cacah TURUN - sinyal
-   terbalik.  SEN0203 (hijau) sudah AC-coupled di hardware dan tidak terbalik.
+   terbalik.  SON1303 (hijau) sudah AC-coupled di hardware dan tidak terbalik.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 # ── Parameter sinyal (disetel menyerupai rekaman ANTARAGA nyata) ──────────
-FS_PPG      = 200          # SEN0203 hijau
+FS_PPG      = 200          # SON1303 hijau
 FS_MAX      = 400          # MAX30102 merah + IR
 BATCH_MS    = 1000         # satu batch = 1 detik, sama seperti firmware
 
@@ -41,7 +41,7 @@ RED_DC       = 85_000.0    # cacah mentah merah (data asli: 43k–96k)
 IR_PI_PERMIL = 1.10        # perfusi IR (data asli: 0,74–1,77‰)
 RED_PI_PERMIL = 0.95
 
-GREEN_MID   = 800.0        # SEN0203 12-bit, sudah AC-coupled
+GREEN_MID   = 800.0        # SON1303 12-bit, sudah AC-coupled
 GREEN_AMP   = 620.0
 
 RESP_HZ     = 0.25         # modulasi napas ~15×/menit

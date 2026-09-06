@@ -72,9 +72,9 @@ Dikirim setiap batch (default 500ms). **Tidak perlu Authorization header** - aut
 | `key` | string | `DEVICE_INGEST_KEY` dari .env server |
 | `seq` | int | Nomor urut batch (untuk deteksi packet loss) |
 | `ts` | int | Unix timestamp milliseconds |
-| `fs_ppg` | float | Sample rate sinyal hijau SEN0203 (Hz), biasanya 200 |
+| `fs_ppg` | float | Sample rate sinyal hijau SON1303 (Hz), biasanya 200 |
 | `fs_max` | float | Sample rate RED/IR MAX30102 (Hz), biasanya 400 |
-| `ppg` | int[] | Sinyal hijau mentah dari SEN0203 |
+| `ppg` | int[] | Sinyal hijau mentah dari SON1303 |
 | `red` | int[] | Sinyal merah mentah dari MAX30102 |
 | `ir` | int[] | Sinyal infrared mentah dari MAX30102 |
 | `bpm` | float | BPM yang sudah dihitung di firmware (opsional) |

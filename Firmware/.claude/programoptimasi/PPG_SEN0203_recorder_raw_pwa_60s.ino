@@ -1,5 +1,5 @@
 /*
- * PPG Recorder SEN0203 - DATA MENTAH untuk PWA - XIAO ESP32-C3
+ * PPG Recorder SON1303 - DATA MENTAH untuk PWA - XIAO ESP32-C3
  * ====================================================================
  * Versi FINAL pengambilan data thesis. Dioptimasi untuk analisis Pulse
  * Wave Analysis (PWA): menyimpan sinyal MENTAH seutuh mungkin supaya
@@ -113,7 +113,7 @@ void setup()
   warmupSamples = (uint32_t)(WARMUP_SECONDS * FS);
   recordSamples = (uint32_t)(RECORD_SECONDS * FS);
 
-  Serial.print(F("# PPG Recorder SEN0203 DATA MENTAH (PWA). Oversample="));
+  Serial.print(F("# PPG Recorder SON1303 DATA MENTAH (PWA). Oversample="));
   Serial.print(OVERSAMPLE);
   Serial.println(F("x, tanpa sinkron-50Hz."));
   Serial.println(F("# Pastikan elektroda ground + low-pass RC terpasang, DIAM total."));

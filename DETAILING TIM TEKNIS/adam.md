@@ -152,7 +152,7 @@ Kegiatan diawali dengan pendalaman literatur mengenai sistem deteksi risiko stro
 
 | Lapisan | Teknologi | Tanggung jawab |
 | :---- | :---- | :---- |
-| Perangkat keras | XIAO ESP32-S3 \+ MAX30102 \+ SEN0203 | Pencuplikan sinyal PPG tiga panjang gelombang |
+| Perangkat keras | XIAO ESP32-S3 \+ MAX30102 \+ SON1303 | Pencuplikan sinyal PPG tiga panjang gelombang |
 | Backend | FastAPI, SQLAlchemy, SQLite | Penerimaan data, prediksi, penyimpanan, notifikasi |
 | Kecerdasan buatan | Gradient Boosting (GBoost) \+ MLP | Prediksi risiko stroke dan estimasi vital dari PPG |
 | Aplikasi mobile | Flutter | Aplikasi mobile untuk pemantauan keluarga |
@@ -665,7 +665,7 @@ detik  mentah  tampil   status
 
 **Gejala:** BPM kanal hijau selalu di sekitar 60 dan tidak berubah.
 
-**Analisis:** perfusi kanal hijau terukur **1.719‰**, padahal PPG normal berada di 0,02-2%. Ini menandakan sinyal SEN0203 sudah AC-coupled di perangkat. Penggabungan batch tanpa pemeriksaan kesinambungan menimbulkan lompatan periodik tepat 1 Hz yang dikunci autokorelasi.
+**Analisis:** perfusi kanal hijau terukur **1.719‰**, padahal PPG normal berada di 0,02-2%. Ini menandakan sinyal SON1303 sudah AC-coupled di perangkat. Penggabungan batch tanpa pemeriksaan kesinambungan menimbulkan lompatan periodik tepat 1 Hz yang dikunci autokorelasi.
 
 **Penyelesaian:** kartu BPM siap-tampil dialihkan bersumber dari kanal inframerah yang perfusinya stabil.
 

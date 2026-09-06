@@ -60,7 +60,7 @@ Menguji pembacaan BPM pada perangkat dan menganalisis mutu sinyal ketiga kanal, 
 Menyiapkan smartband agar siap dipakai perekaman sesi kalibrasi, mencakup pemeriksaan sensor, pengisian daya, dan penyesuaian firmware agar pengiriman data stabil selama sesi berlangsung.
 
 **Hasil:**
-- Pemeriksaan ketiga kanal sensor: MAX30102 (merah dan inframerah) serta SEN0203 (hijau) membaca normal
+- Pemeriksaan ketiga kanal sensor: MAX30102 (merah dan inframerah) serta SON1303 (hijau) membaca normal
 - Pengisian daya penuh dan pengukuran sisa kapasitas setelah pemakaian percobaan
 - Penyesuaian firmware agar batch tetap terkirim saat sinyal WiFi melemah, dengan penyimpanan sementara di penyangga
 - Penyiapan dua unit smartband agar sesi dapat berjalan paralel bila ada dua subjek sekaligus

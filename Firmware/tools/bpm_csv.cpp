@@ -14,7 +14,7 @@
  *      Ini regression test: jalankan setiap kali kamu menyentuh bpm.cpp.
  *
  *   2. CSV - rekaman nyata dari
- *      ../Firmware/.claude/programoptimasi/PPG_SEN0203_recorder_raw_pwa_60s.ino
+ *      ../Firmware/.claude/programoptimasi/PPG_SON1303_recorder_raw_pwa_60s.ino
  *      (kolom: t_ms,adc_raw,ppg_bandpass). Kolom yang dipakai adalah
  *      adc_raw - MENTAH, karena bpm.cpp memfilter sendiri.
  *
@@ -268,7 +268,7 @@ int main(int argc, char **argv)
   printf("Lulus = |rerata - target| <= 1,5 bpm DAN galat maksimum <= 5 bpm.\n\n");
 
   // Kolom acAmp/noiseLsb dalam LSB ADC 12-bit. AC 200 LSB pada DC 1800
-  // setara perfusi ~111 per-mil - khas ujung jari pada SEN0203/SON1303.
+  // setara perfusi ~111 per-mil - khas ujung jari pada SON1303/SON1303.
   const SynthCfg tests[] = {
       // nama                       bpm  dtk    dc    ac  derau  wander  drop
       {45.0f, 30.0f, 1800.0f, 220.0f, 4.0f, 60.0f, 0, "bradikardia 45 bpm"},

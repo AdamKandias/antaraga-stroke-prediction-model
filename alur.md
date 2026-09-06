@@ -57,7 +57,7 @@ prediction_logs  - log lengkap setiap panggilan endpoint ML
 ## 2. Model I - MLP untuk Estimasi Vital dari PPG
 
 ### Tujuan
-Mengubah sinyal **PPG mentah** dari sensor (MAX30102 + SEN0203/SON1303) menjadi
+Mengubah sinyal **PPG mentah** dari sensor (MAX30102 + SON1303/SON1303) menjadi
 nilai vital yang dapat dibaca: tekanan darah sistolik, diastolik, dan gula darah.
 Ini memungkinkan pengukuran non-invasif tanpa manset atau alat glukometer.
 
@@ -88,7 +88,7 @@ Sinyal PPG mentah (≥ 8 detik @ fs Hz)
 
 ### Fitur Input MLP (per channel)
 
-Diulangi untuk setiap channel yang tersedia: **green** (SEN0203), **red**, **infrared** (MAX30102).
+Diulangi untuk setiap channel yang tersedia: **green** (SON1303), **red**, **infrared** (MAX30102).
 
 | Fitur | Keterangan |
 |---|---|
@@ -296,7 +296,7 @@ atau ketika risiko XGBoost tinggi. Menghitung probabilitas stroke dalam
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                          SMARTBAND ANTARAGA                              │
-│   MAX30102 (red/IR/SpO2/HR)  +  SEN0203/SON1303 (green PPG)             │
+│   MAX30102 (red/IR/SpO2/HR)  +  SON1303/SON1303 (green PPG)             │
 └────────────────────────────┬─────────────────────────────────────────────┘
                              │ BLE / WiFi
                              │ HTTP POST Bearer JWT
