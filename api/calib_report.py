@@ -149,6 +149,36 @@ def _classify_dia(dia: float | None) -> tuple[str, str]:
     return ("Optimal", "ok")
 
 
+_SYS_REF = {
+    "Optimal": "< 120", "Normal": "120 - 129", "Normal Tinggi": "130 - 139",
+    "Hipertensi Derajat 1": "140 - 159", "Hipertensi Derajat 2": "160 - 179",
+    "Hipertensi Derajat 3": "≥ 180", "Hipotensi": "< 90",
+}
+
+_DIA_REF = {
+    "Optimal": "< 80", "Normal": "80 - 84", "Normal Tinggi": "85 - 89",
+    "Hipertensi Derajat 1": "90 - 99", "Hipertensi Derajat 2": "100 - 109",
+    "Hipertensi Derajat 3": "≥ 110", "Hipotensi": "< 60",
+}
+
+
+def _sys_ref(label: str) -> str:
+    """Rentang PERHI yang cocok dengan kategori HASIL _classify_sys().
+
+    Sengaja ikut kategori yang keluar, bukan selalu "< 120" -- angka itu
+    cuma ambang Optimal, jadi salah kalau ditampilkan untuk hasil yang
+    dikategorikan Normal/Normal Tinggi/dst (nilainya bisa lebih tinggi dari
+    120 tapi memang benar bukan hipertensi).
+    """
+    return _SYS_REF.get(label, "< 120")
+
+
+def _dia_ref(label: str) -> str:
+    """Rentang PERHI yang cocok dengan kategori hasil _classify_dia(). Lihat
+    catatan _sys_ref() -- alasannya sama, untuk diastolik."""
+    return _DIA_REF.get(label, "< 80")
+
+
 def _classify_bpm(bpm: float | None) -> tuple[str, str]:
     """Rentang detak jantung istirahat dewasa, American Heart Association (AHA).
 
@@ -879,9 +909,9 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
 
     rows = "".join([
         _row("gauge", "Tekanan Darah Sistolik", "Sfigmomanometer digital",
-             _num(sis, 0), "mmHg", "< 120", st_sis),
+             _num(sis, 0), "mmHg", _sys_ref(st_sis[0]), st_sis),
         _row("gauge", "Tekanan Darah Diastolik", "Sfigmomanometer digital",
-             _num(dia, 0), "mmHg", "< 80", st_dia),
+             _num(dia, 0), "mmHg", _dia_ref(st_dia[0]), st_dia),
         _row("heart", "Denyut Jantung (HR)", "Fotopletismografi inframerah",
              _num(bpm, 0), "bpm", "60 - 100", st_bpm),
         _row("droplet", "Gula Darah", f"Glukometer · {kondisi_txt}",
