@@ -852,7 +852,7 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
     bp_val = f"{_int(sis)}/{_int(dia)}" if sis is not None and dia is not None else "-"
     tiles = "".join([
         _tile("gauge", "Tekanan Darah", bp_val, "mmHg", st_bp[0], st_bp[1]),
-        _tile("heart", "Denyut Jantung", _num(bpm, 0), "bpm", st_bpm[0], st_bpm[1]),
+        _tile("heart", "Denyut Jantung (BPM)", _num(bpm, 0), "bpm", st_bpm[0], st_bpm[1]),
         _tile("droplet", "Gula Darah", _num(gula, 0), "mg/dL", st_gula[0], st_gula[1]),
         _tile("molecule", "Asam Urat", _num(au, 1), "mg/dL", st_au[0], st_au[1]),
     ])
@@ -1031,7 +1031,7 @@ def build_record_report_html(rec, autoprint: bool = True) -> str:
   <h2>{_icon("doc")}Ringkasan Tanda Vital</h2>
   <div class="tiles">{tiles}</div>
 
-  <h2>{_icon("flask")}Hasil Pemeriksaan Laboratorium &amp; Vital</h2>
+  <h2>{_icon("flask")}Hasil Pemeriksaan Alat Terstandar</h2>
   <table>
     <thead><tr>
       <th>Parameter Pemeriksaan</th>
