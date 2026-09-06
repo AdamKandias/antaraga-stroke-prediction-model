@@ -1729,6 +1729,36 @@
       </div>
     </div>
 
+    <!-- Modal: cetak PDF dengan tanggal terbit kustom -->
+    <div id="calibPrintModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;
+  align-items:center;justify-content:center;">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:22px;
+    width:min(360px,94vw);box-shadow:0 8px 32px rgba(0,0,0,.4)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-weight:700;font-size:14px">Cetak dengan Tanggal Terbit Kustom</div>
+          <button class="btn-del" onclick="calibClosePrintModal()" style="font-size:16px;padding:2px 8px">✕</button>
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin:0 0 14px;line-height:1.5">
+          Input jam pakai format 24 jam bawaan peramban -- tidak perlu mengetik manual,
+          jadi tidak bisa salah format. Jam boleh dikosongkan (dianggap 00:00).
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+          <div>
+            <label class="up-label">Tanggal terbit</label>
+            <input id="printTanggal" class="up-input" type="date">
+          </div>
+          <div>
+            <label class="up-label">Jam (WIB, 24 jam, opsional)</label>
+            <input id="printJam" class="up-input" type="time">
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button class="btn-sec" onclick="calibClosePrintModal()">Batal</button>
+          <button class="btn btn-ok" onclick="calibPrintConfirm()">🖨 Cetak</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ── TAB 7: Access Log ── -->
     <div id="p-access-log" class="pane">
       <div class="card">
@@ -2473,22 +2503,40 @@
     // & tanda tangan laporan bisa ditentukan sendiri -- untuk mencetak ulang
     // laporan lama dengan tanggal terbit sesuai kejadian aslinya, bukan
     // tanggal hari ini dicetak.
+    //
+    // Dulu ini pakai dua prompt() teks bebas -- gampang salah ketik (satu
+    // digit jam, titik alih-alih titik dua, dsb) dan gagalnya diam-diam
+    // (alert lalu batal total, PDF tidak pernah terbuka). Input bawaan
+    // <input type="date">/<input type="time"> dipakai sebagai gantinya:
+    // nilainya SELALU format ISO 24 jam yang valid dari peramban sendiri,
+    // tidak mungkin salah ketik.
+    let _calibPrintId = null;
+
     function calibPrintCustomDate(id) {
-      const tgl = prompt('Tanggal terbit (WIB), format YYYY-MM-DD:', new Date().toISOString().slice(0, 10));
-      if (!tgl) return;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(tgl.trim())) {
-        alert('Format tanggal tidak valid. Gunakan YYYY-MM-DD, contoh 2026-08-14.');
-        return;
-      }
-      const jam = prompt('Jam terbit (WIB), format HH:MM -- kosongkan untuk 00:00:', '');
-      const jamTrim = (jam || '').trim();
-      if (jamTrim && !/^\d{2}:\d{2}$/.test(jamTrim)) {
-        alert('Format jam tidak valid. Gunakan HH:MM, contoh 14:30.');
-        return;
-      }
-      const terbit = jamTrim ? `${tgl.trim()}T${jamTrim}` : tgl.trim();
-      window.open(`/v1/calibrate/${id}/laporan.html?terbit=${encodeURIComponent(terbit)}`, '_blank', 'noopener');
+      _calibPrintId = id;
+      document.getElementById('printTanggal').value = new Date().toISOString().slice(0, 10);
+      document.getElementById('printJam').value = '';
+      document.getElementById('calibPrintModal').style.display = 'flex';
     }
+
+    function calibClosePrintModal() {
+      document.getElementById('calibPrintModal').style.display = 'none';
+      _calibPrintId = null;
+    }
+
+    function calibPrintConfirm() {
+      if (_calibPrintId == null) return;
+      const tgl = document.getElementById('printTanggal').value;
+      if (!tgl) { alert('Tanggal terbit wajib diisi.'); return; }
+      const jam = document.getElementById('printJam').value;   // '' atau "HH:MM", selalu 24 jam
+      const terbit = jam ? `${tgl}T${jam}` : tgl;
+      window.open(`/v1/calibrate/${_calibPrintId}/laporan.html?terbit=${encodeURIComponent(terbit)}`, '_blank', 'noopener');
+      calibClosePrintModal();
+    }
+
+    document.getElementById('calibPrintModal').addEventListener('click', e => {
+      if (e.target === document.getElementById('calibPrintModal')) calibClosePrintModal();
+    });
 
     function calibExport() {
       const devFilter = devId ? `?device_id=${encodeURIComponent(devId)}` : '';
