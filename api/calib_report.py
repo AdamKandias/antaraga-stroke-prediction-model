@@ -412,7 +412,7 @@ def _ppg_strip_svg(ir: np.ndarray, fs: float, seconds: float = 8.0) -> str:
       </svg>
       <div class="strip-cap">
         <span>Kanal inframerah · komponen denyut (bandpass 0,5-5 Hz)</span>
-        <span>Durasi {_num(dur, 1)} dtk · laju cuplik {_num(fs, 0)} Hz · {_int(seg.size)} sampel</span>
+        <span>Durasi {_num(dur, 1)} dtk · sampling rate {_num(fs, 0)} Hz · {_int(seg.size)} sampel</span>
       </div>
     </div>"""
 
@@ -985,7 +985,7 @@ def build_record_report_html(
     if durasi:
         poin.append(
             f"Sinyal PPG pendamping direkam <b>{_num(durasi, 1)} detik</b> "
-            f"pada laju cuplik {_num(fs, 0)} Hz."
+            f"pada sampling rate {_num(fs, 0)} Hz."
         )
     if not poin:
         # Semua nilai rujukan kosong, jangan cetak kotak interpretasi melompong.
@@ -1002,7 +1002,7 @@ def build_record_report_html(
         _kv("Merah, DC", _int(rec.red_dc_mean)),
         _kv("Merah, AC p-p", _int(rec.red_ac_p2p)),
         _kv("Rasio R (merah/IR)", _num(ratio_r, 3)),
-        _kv("Laju Cuplik", f"{_num(fs, 0)} Hz"),
+        _kv("Sampling Rate", f"{_num(fs, 0)} Hz"),
         # Dipecah jadi dua sel supaya grid tetap genap 4 kolom, aturan border
         # .tech mengandalkan jumlah sel kelipatan empat.
         _kv("Durasi Rekaman", f"{_num(durasi, 1)} dtk" if durasi else "-"),
