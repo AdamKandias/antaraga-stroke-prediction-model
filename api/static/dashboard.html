@@ -2399,8 +2399,12 @@
       <td>${fmt(r.sistolik_mmhg)}</td>
       <td>${fmt(r.diastolik_mmhg)}</td>
       <td style="color:var(--muted);font-size:10px">${fmtWaktu(r.session_ts)}</td>
-      <td><button class="btn-sec btn-sm" style="font-size:11px;padding:2px 8px;white-space:nowrap"
-            title="Cetak laporan pemeriksaan (PDF)" onclick="calibPrint(${r.id})">🖨 PDF</button></td>
+      <td style="white-space:nowrap">
+        <button class="btn-sec btn-sm" style="font-size:11px;padding:2px 8px"
+            title="Cetak laporan pemeriksaan (PDF), tanggal terbit hari ini" onclick="calibPrint(${r.id})">🖨 PDF</button>
+        <button class="btn-sec btn-sm" style="font-size:11px;padding:2px 6px"
+            title="Cetak dengan tanggal terbit kustom" onclick="calibPrintCustomDate(${r.id})">📅</button>
+      </td>
       <td><button class="btn-sec btn-sm" style="font-size:11px;padding:2px 7px" onclick="calibEdit(${r.id})">✎</button></td>
       <td><button class="btn-del" onclick="calibDelete(${r.id})">✕</button></td>
     </tr>`).join('');
@@ -2463,6 +2467,27 @@
     // sehingga user tinggal memilih "Save as PDF" di dialog cetak browser.
     function calibPrint(id) {
       window.open(`/v1/calibrate/${id}/laporan.html`, '_blank', 'noopener');
+    }
+
+    // Sama seperti calibPrint(), tapi tanggal (dan opsional jam) terbit di kop
+    // & tanda tangan laporan bisa ditentukan sendiri -- untuk mencetak ulang
+    // laporan lama dengan tanggal terbit sesuai kejadian aslinya, bukan
+    // tanggal hari ini dicetak.
+    function calibPrintCustomDate(id) {
+      const tgl = prompt('Tanggal terbit (WIB), format YYYY-MM-DD:', new Date().toISOString().slice(0, 10));
+      if (!tgl) return;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(tgl.trim())) {
+        alert('Format tanggal tidak valid. Gunakan YYYY-MM-DD, contoh 2026-08-14.');
+        return;
+      }
+      const jam = prompt('Jam terbit (WIB), format HH:MM -- kosongkan untuk 00:00:', '');
+      const jamTrim = (jam || '').trim();
+      if (jamTrim && !/^\d{2}:\d{2}$/.test(jamTrim)) {
+        alert('Format jam tidak valid. Gunakan HH:MM, contoh 14:30.');
+        return;
+      }
+      const terbit = jamTrim ? `${tgl.trim()}T${jamTrim}` : tgl.trim();
+      window.open(`/v1/calibrate/${id}/laporan.html?terbit=${encodeURIComponent(terbit)}`, '_blank', 'noopener');
     }
 
     function calibExport() {

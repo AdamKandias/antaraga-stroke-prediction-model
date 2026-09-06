@@ -2090,6 +2090,13 @@ def calibrate_delete(record_id: int, db: Session = Depends(get_db)) -> None:
 def calibrate_record_report(
     record_id: int,
     autoprint: bool = True,
+    terbit: str | None = Query(
+        None,
+        description="Tanggal terbit kustom untuk kop & tanda tangan laporan, "
+                     "format YYYY-MM-DD atau YYYY-MM-DDTHH:MM, WIB (jam opsional "
+                     "-- kosong dianggap 00:00). Kosongkan parameter ini untuk "
+                     "memakai tanggal & jam saat laporan dibuka (perilaku lama).",
+    ),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
     """Laporan hasil pemeriksaan A4 untuk satu rekaman - dibuka lalu disimpan PDF.
@@ -2102,9 +2109,29 @@ def calibrate_record_report(
     if rec is None:
         raise HTTPException(status_code=404, detail=f"Rekaman kalibrasi #{record_id} tidak ditemukan")
 
+    terbit_custom = None
+    if terbit:
+        _wib = timezone(timedelta(hours=7))
+        nilai = terbit.strip()
+        try:
+            if "T" in nilai:
+                bagian_tgl, bagian_jam = nilai.split("T", 1)
+                potongan_jam = bagian_jam.split(":")
+                jam = int(potongan_jam[0])
+                menit = int(potongan_jam[1]) if len(potongan_jam) > 1 else 0
+            else:
+                bagian_tgl, jam, menit = nilai, 0, 0
+            tahun, bulan, tanggal = (int(x) for x in bagian_tgl.split("-"))
+            terbit_custom = datetime(tahun, bulan, tanggal, jam, menit, tzinfo=_wib)
+        except (ValueError, IndexError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Format terbit tidak dikenali: {terbit!r} ({exc})",
+            )
+
     from api.calib_report import build_record_report_html
 
-    html = build_record_report_html(rec, autoprint=autoprint)
+    html = build_record_report_html(rec, autoprint=autoprint, terbit_custom=terbit_custom)
     return StreamingResponse(iter([html]), media_type="text/html; charset=utf-8")
 
 

@@ -852,14 +852,22 @@ def _build_ai_section(
     return f'<h2>{_icon("chip")}Hasil Model Kecerdasan Buatan</h2>\n  {"".join(bagian)}'
 
 
-def build_record_report_html(rec, autoprint: bool = True) -> str:
-    """Rakit laporan pemeriksaan A4 untuk satu rekaman kalibrasi."""
+def build_record_report_html(
+    rec, autoprint: bool = True, terbit_custom: datetime | None = None,
+) -> str:
+    """Rakit laporan pemeriksaan A4 untuk satu rekaman kalibrasi.
+
+    `terbit_custom` (WIB) dipakai sebagai tanggal terbit di kop dan tanda
+    tangan kalau diisi -- untuk mencetak ulang laporan lama dengan tanggal
+    terbit yang sesuai kejadian aslinya, bukan tanggal hari ini. Kosong
+    berarti tanggal terbit ikut saat laporan ini dibuat (perilaku lama).
+    """
     gender = (rec.gender or "L").strip().upper()
     gender_txt = "Laki-laki" if gender == "L" else "Perempuan"
     kondisi_txt = _KONDISI_LABEL.get((rec.kondisi or "sewaktu").lower(), "Sewaktu (Acak)")
 
     sesi = (rec.created_at or datetime.utcnow()).replace(tzinfo=timezone.utc).astimezone(_WIB)
-    terbit = datetime.now(_WIB)
+    terbit = terbit_custom if terbit_custom is not None else datetime.now(_WIB)
 
     no_doc = f"ANT/CAL/{sesi.year}/{rec.id:05d}"
     # Kode verifikasi: sidik jari isi laporan, supaya salinan cetak bisa
