@@ -1987,32 +1987,44 @@ def _parse_session_ts(nilai: str, waktu_lama: datetime, tz_offset_menit: int) ->
     waktu lokalnya, menjadi datetime UTC naive untuk disimpan -- konsisten
     dengan seluruh timestamp lain di basis data ini.
 
-    Terima tanggal saja ("2026-08-03") atau tanggal+jam ("2026-08-03T14:30").
-    Kalau jam tidak disertakan, jam dari waktu yang lama dipertahankan dalam
-    zona yang sama, supaya operator cukup membetulkan tanggal yang salah
-    dicatat (mis. jam server belum disetel benar saat sesi berlangsung)
-    tanpa perlu menebak ulang jam yang sudah benar.
+    Terima tanggal saja ("2026-08-03"), tanggal+jam ("2026-08-03T14:30" atau
+    "2026-08-03T14:30:05"), atau jam saja ("14:30" / "14:30:05"). Bagian yang
+    tidak disertakan dipertahankan dari waktu yang lama dalam zona yang sama --
+    isi tanggal saja untuk membetulkan tanggal tanpa mengubah jam, isi jam saja
+    (tanpa tanggal) untuk membetulkan jam tanpa mengubah tanggal, sehingga
+    operator tidak perlu menebak ulang bagian yang sudah benar.
     """
     nilai = nilai.strip()
     tz = timezone(timedelta(minutes=tz_offset_menit))
     lama_di_utc = waktu_lama if waktu_lama.tzinfo else waktu_lama.replace(tzinfo=timezone.utc)
     lama_lokal = lama_di_utc.astimezone(tz)
 
-    if "T" in nilai or " " in nilai:
-        bagian_tgl, bagian_jam = nilai.replace(" ", "T", 1).split("T", 1)
-        potongan_jam = bagian_jam.split(":")
+    def _urai_jam(bagian_jam: str) -> tuple[int, int, int]:
+        potongan = bagian_jam.split(":")
         try:
-            jam = int(potongan_jam[0])
-            menit = int(potongan_jam[1]) if len(potongan_jam) > 1 else 0
+            jam = int(potongan[0])
+            menit = int(potongan[1]) if len(potongan) > 1 else 0
+            detik = int(potongan[2]) if len(potongan) > 2 else 0
         except ValueError as exc:
             raise ValueError(f"Format jam tidak dikenali: {bagian_jam!r}") from exc
+        return jam, menit, detik
+
+    if "T" in nilai or " " in nilai:
+        bagian_tgl, bagian_jam = nilai.replace(" ", "T", 1).split("T", 1)
+        jam, menit, detik = _urai_jam(bagian_jam)
+    elif "-" not in nilai and ":" in nilai:
+        # Cuma jam tanpa tanggal ("14:30" / "14:30:05") -- tanggal lama
+        # dipertahankan, simetris dengan kasus tanggal-saja di bawah yang
+        # mempertahankan jam lama.
+        bagian_tgl = lama_lokal.strftime("%Y-%m-%d")
+        jam, menit, detik = _urai_jam(nilai)
     else:
         bagian_tgl = nilai
-        jam, menit = lama_lokal.hour, lama_lokal.minute
+        jam, menit, detik = lama_lokal.hour, lama_lokal.minute, lama_lokal.second
 
     try:
         tahun, bulan, tanggal = (int(x) for x in bagian_tgl.split("-"))
-        lokal = datetime(tahun, bulan, tanggal, jam, menit, tzinfo=tz)
+        lokal = datetime(tahun, bulan, tanggal, jam, menit, detik, tzinfo=tz)
     except (ValueError, IndexError) as exc:
         raise ValueError(
             f"Format tanggal harus YYYY-MM-DD, diterima: {nilai!r}"
@@ -2045,11 +2057,14 @@ def calibrate_update(
     personal_history_stroke: bool | None = None,
     session_ts: str | None = Query(
         None,
-        description="Tanggal sesi direkam yang sebenarnya, format YYYY-MM-DD "
-                     "atau YYYY-MM-DDTHH:MM (jam opsional -- kalau kosong, "
-                     "jam yang tersimpan sebelumnya dipertahankan). Dipakai "
-                     "membetulkan tanggal kalibrasi yang salah tercatat, "
-                     "misalnya karena jam perangkat belum disetel saat sesi.",
+        description="Tanggal dan/atau jam sesi yang sebenarnya. Terima "
+                     "YYYY-MM-DD (tanggal saja, jam lama dipertahankan), "
+                     "YYYY-MM-DDTHH:MM[:SS] (tanggal+jam, detik opsional), "
+                     "atau HH:MM[:SS] (jam saja, tanggal lama dipertahankan). "
+                     "Dipakai membetulkan tanggal/jam kalibrasi yang salah "
+                     "tercatat, misalnya karena jam perangkat belum disetel "
+                     "saat sesi -- tanpa perlu menebak ulang bagian yang "
+                     "sudah benar.",
     ),
     tz_offset: int = Query(
         420, ge=-840, le=840,

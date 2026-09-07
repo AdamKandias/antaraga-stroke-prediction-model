@@ -1697,9 +1697,10 @@
           Waktu Sesi Direkam</div>
         <p style="font-size:11px;color:var(--muted);margin:0 0 8px;line-height:1.5">
           Pakai ini kalau tanggal/jam yang tercatat salah (mis. jam perangkat belum
-          disetel saat sesi berlangsung). Kosongkan tanggal untuk TIDAK mengubah
-          apa-apa -- baru terisi kalau memang mau diperbaiki. Jam pakai format 24 jam
-          bawaan peramban, tidak bisa salah ketik.
+          disetel saat sesi berlangsung). Isi salah satu saja kalau cuma satu yang
+          perlu dibetulkan (mis. isi Jam saja, biarkan Tanggal kosong -- tanggalnya
+          tidak akan ikut berubah). Kosongkan keduanya untuk tidak mengubah apa-apa.
+          Jam pakai format 24 jam bawaan peramban (termasuk detik), tidak bisa salah ketik.
         </p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px">
           <div>
@@ -1707,8 +1708,8 @@
             <input id="editTanggal" class="up-input" type="date">
           </div>
           <div>
-            <label class="up-label">Jam (opsional, 24 jam)</label>
-            <input id="editJam" class="up-input" type="time">
+            <label class="up-label">Jam (opsional, 24 jam + detik)</label>
+            <input id="editJam" class="up-input" type="time" step="1">
           </div>
         </div>
         <p id="editWaktuTersimpan" style="font-size:11px;color:var(--muted);margin:0 0 16px"></p>
@@ -2689,14 +2690,17 @@
       addOpt('editSis', 'sistolik_mmhg');
       addOpt('editDia', 'diastolik_mmhg');
 
-      // Tanggal wajib diisi untuk mengubah waktu sesi; jam boleh kosong
-      // (server mempertahankan jam yang lama). Dikirim dalam zona waktu
-      // browser operator, bukan diasumsikan WIB, supaya benar meski dibuka
-      // dari luar Indonesia.
+      // Tanggal dan jam masing-masing boleh diisi sendiri-sendiri -- server
+      // mempertahankan bagian yang tidak dikirim (jam saja tanpa tanggal =
+      // tanggal lama dipertahankan, dan sebaliknya). Dulu ini keliru
+      // mensyaratkan Tanggal harus diisi dulu baru Jam ikut terkirim --
+      // kalau operator cuma isi Jam, seluruh perubahan dibuang diam-diam.
+      // Dikirim dalam zona waktu browser operator, bukan diasumsikan WIB,
+      // supaya benar meski dibuka dari luar Indonesia.
       const tglBaru = document.getElementById('editTanggal').value;
-      if (tglBaru) {
-        const jamBaru = document.getElementById('editJam').value;
-        p.append('session_ts', jamBaru ? `${tglBaru}T${jamBaru}` : tglBaru);
+      const jamBaru = document.getElementById('editJam').value;
+      if (tglBaru || jamBaru) {
+        p.append('session_ts', tglBaru && jamBaru ? `${tglBaru}T${jamBaru}` : (tglBaru || jamBaru));
         p.append('tz_offset', String(-new Date().getTimezoneOffset()));
       }
 
@@ -2709,7 +2713,7 @@
         }
         // Show what was actually saved so user can verify
         const parts = [];
-        if (tglBaru) parts.push(`Waktu: ${fmtWaktu(saved?.session_ts)}`);
+        if (tglBaru || jamBaru) parts.push(`Waktu: ${fmtWaktu(saved?.session_ts)}`);
         if (document.getElementById('editBpm').value.trim() !== '' && saved?.bpm != null) parts.push(`BPM: ${saved.bpm}`);
         if (saved?.gula_darah_mg_dl != null) parts.push(`Gula: ${saved.gula_darah_mg_dl} mg/dL`);
         if (saved?.kolesterol_mg_dl != null) parts.push(`Kol: ${saved.kolesterol_mg_dl} mg/dL`);
