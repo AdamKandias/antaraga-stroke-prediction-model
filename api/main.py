@@ -2033,6 +2033,14 @@ def calibrate_update(
     asam_urat_mg_dl: float | None = None,
     sistolik_mmhg: float | None = None,
     diastolik_mmhg: float | None = None,
+    bpm: float | None = Query(
+        None,
+        description="Koreksi manual detak jantung (dihitung server dari sinyal "
+                     "PPG, bukan alat invasif) -- dipakai untuk memperbaiki "
+                     "kesalahan oktaf yang lolos dari /v1/calibrate/recompute-bpm "
+                     "(mis. saat nilai lama dan hasil hitung ulang kebetulan "
+                     "sama-sama salah). Sinyal mentah tidak ikut berubah.",
+    ),
     family_history_stroke: bool | None = None,
     personal_history_stroke: bool | None = None,
     session_ts: str | None = Query(
@@ -2063,6 +2071,7 @@ def calibrate_update(
     if asam_urat_mg_dl   is not None: rec.asam_urat_mg_dl   = asam_urat_mg_dl
     if sistolik_mmhg     is not None: rec.sistolik_mmhg     = sistolik_mmhg
     if diastolik_mmhg    is not None: rec.diastolik_mmhg    = diastolik_mmhg
+    if bpm                is not None: rec.bpm               = bpm
     if family_history_stroke is not None: rec.family_history_stroke = family_history_stroke
     if personal_history_stroke is not None: rec.personal_history_stroke = personal_history_stroke
     if session_ts        is not None:

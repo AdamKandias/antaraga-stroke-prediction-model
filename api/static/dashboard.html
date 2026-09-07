@@ -1692,11 +1692,40 @@
           </div>
         </div>
 
-        <!-- Tanggal/jam sesi sengaja tidak diedit lewat modal ini -- salah
-             klik operator di sini berisiko menimpa tanggal kalibrasi asli
-             yang sudah diverifikasi. Perbaikan tanggal dilakukan lewat API
-             langsung (PATCH /v1/calibrate/{id}?session_ts=...&tz_offset=...)
-             atau scripts/perbaiki_tanggal_kalibrasi.py. -->
+        <div
+          style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">
+          Waktu Sesi Direkam</div>
+        <p style="font-size:11px;color:var(--muted);margin:0 0 8px;line-height:1.5">
+          Pakai ini kalau tanggal/jam yang tercatat salah (mis. jam perangkat belum
+          disetel saat sesi berlangsung). Kosongkan tanggal untuk TIDAK mengubah
+          apa-apa -- baru terisi kalau memang mau diperbaiki. Jam pakai format 24 jam
+          bawaan peramban, tidak bisa salah ketik.
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px">
+          <div>
+            <label class="up-label">Tanggal sebenarnya</label>
+            <input id="editTanggal" class="up-input" type="date">
+          </div>
+          <div>
+            <label class="up-label">Jam (opsional, 24 jam)</label>
+            <input id="editJam" class="up-input" type="time">
+          </div>
+        </div>
+        <p id="editWaktuTersimpan" style="font-size:11px;color:var(--muted);margin:0 0 16px"></p>
+
+        <div
+          style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">
+          Detak Jantung (BPM)</div>
+        <p style="font-size:11px;color:var(--muted);margin:0 0 8px;line-height:1.5">
+          Dihitung server dari sinyal PPG (autokorelasi/Welch), <b>bukan</b> nilai alat
+          invasif -- jangan diubah berdasar tebakan. Cek dulu lewat endpoint
+          <code>/v1/calibrate/recompute-bpm</code> atau hitung ulang manual dari sinyal
+          mentah sebelum mengisi di sini. Kosongkan untuk tidak mengubah.
+        </p>
+        <div style="margin-bottom:16px">
+          <label class="up-label">BPM</label>
+          <input id="editBpm" class="up-input" type="number" step="0.1" style="max-width:160px">
+        </div>
 
         <div
           style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">
@@ -2613,6 +2642,19 @@
       document.getElementById('editAU').value = rec.asam_urat_mg_dl ?? '';
       document.getElementById('editSis').value = rec.sistolik_mmhg ?? '';
       document.getElementById('editDia').value = rec.diastolik_mmhg ?? '';
+      // Tanggal/jam sengaja dikosongkan (bukan diisi nilai sekarang) -- kosong
+      // berarti "jangan ubah", nilai yang tersimpan cuma ditampilkan sebagai
+      // teks bantuan supaya operator tidak menimpa tanpa sadar apa yang ada.
+      document.getElementById('editTanggal').value = '';
+      document.getElementById('editJam').value = '';
+      const tersimpanEl = document.getElementById('editWaktuTersimpan');
+      if (tersimpanEl) tersimpanEl.textContent = rec.session_ts
+        ? 'Tercatat sekarang: ' + fmtWaktu(rec.session_ts) : '';
+      // BPM juga dikosongkan seperti tanggal -- nilai lama cuma ditampilkan lewat
+      // placeholder, bukan diisi, supaya tidak tersimpan ulang tanpa sengaja.
+      const bpmEl = document.getElementById('editBpm');
+      bpmEl.value = '';
+      bpmEl.placeholder = rec.bpm != null ? `Sekarang: ${rec.bpm}` : '';
       document.getElementById('editMsg').style.display = 'none';
 
       const modal = document.getElementById('calibEditModal');
@@ -2640,11 +2682,23 @@
       p.append('kondisi', document.getElementById('editKondisi').value);
       p.append('family_history_stroke', document.getElementById('editRiwayatStroke').checked ? 'true' : 'false');
       p.append('personal_history_stroke', document.getElementById('editRiwayatStrokePribadi').checked ? 'true' : 'false');
+      addOpt('editBpm', 'bpm');
       addOpt('editGula', 'gula_darah_mg_dl');
       addOpt('editKol', 'kolesterol_mg_dl');
       addOpt('editAU', 'asam_urat_mg_dl');
       addOpt('editSis', 'sistolik_mmhg');
       addOpt('editDia', 'diastolik_mmhg');
+
+      // Tanggal wajib diisi untuk mengubah waktu sesi; jam boleh kosong
+      // (server mempertahankan jam yang lama). Dikirim dalam zona waktu
+      // browser operator, bukan diasumsikan WIB, supaya benar meski dibuka
+      // dari luar Indonesia.
+      const tglBaru = document.getElementById('editTanggal').value;
+      if (tglBaru) {
+        const jamBaru = document.getElementById('editJam').value;
+        p.append('session_ts', jamBaru ? `${tglBaru}T${jamBaru}` : tglBaru);
+        p.append('tz_offset', String(-new Date().getTimezoneOffset()));
+      }
 
       show('Menyimpan…', 'var(--muted)');
       try {
@@ -2655,6 +2709,8 @@
         }
         // Show what was actually saved so user can verify
         const parts = [];
+        if (tglBaru) parts.push(`Waktu: ${fmtWaktu(saved?.session_ts)}`);
+        if (document.getElementById('editBpm').value.trim() !== '' && saved?.bpm != null) parts.push(`BPM: ${saved.bpm}`);
         if (saved?.gula_darah_mg_dl != null) parts.push(`Gula: ${saved.gula_darah_mg_dl} mg/dL`);
         if (saved?.kolesterol_mg_dl != null) parts.push(`Kol: ${saved.kolesterol_mg_dl} mg/dL`);
         if (saved?.asam_urat_mg_dl != null) parts.push(`AU: ${saved.asam_urat_mg_dl} mg/dL`);
