@@ -1,8 +1,11 @@
-"""Inference wrapper untuk calibration MLP (mlp_calibration.joblib).
+"""Inference wrapper untuk model estimasi vital hasil kalibrasi (mlp_calibration.joblib).
 
-Model dilatih oleh model/train_mlp_calibration.py setelah data kalibrasi
-terkumpul (minimal 10 sesi). Sebelum itu, is_calibration_model_available()
-mengembalikan False dan semua fungsi di modul ini tidak tersedia.
+Model per target dipilih otomatis dari beberapa keluarga model (MLP, SVR, KNN,
+RandomForest, XGBoost, dst.) lewat pencarian model terbaik di
+`api/main.py::calibrate_train` - bukan selalu MLP, meski nama file artifact
+dipertahankan agar tidak mengubah alur deployment yang sudah berjalan.
+Sebelum model pernah dilatih, is_calibration_model_available() mengembalikan
+False dan semua fungsi di modul ini tidak tersedia.
 
 Output per sesi:
     gula_darah_mg_dl, kolesterol_mg_dl, asam_urat_mg_dl,
@@ -67,12 +70,12 @@ def predict_vitals(
         try:
             features = m["features"]
             scaler = m["scaler"]
-            mlp = m["mlp"]
+            model = m["model"]
             # Susun ulang kolom sesuai urutan fitur model
             idx = [FEATURES.index(f) for f in features]
             X_ordered = X[:, idx]
             X_scaled = scaler.transform(X_ordered)
-            results[target_col] = float(mlp.predict(X_scaled)[0])
+            results[target_col] = float(model.predict(X_scaled)[0])
         except Exception:
             continue
 

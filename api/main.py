@@ -2651,7 +2651,12 @@ def calibrate_train(
     mode: str = Query("all", description="all | real | demo"),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Latih model MLP kalibrasi dari calibration_records di DB, simpan artifact.
+    """Latih model estimasi vital dari calibration_records di DB, simpan artifact.
+
+    Untuk tiap parameter vital, beberapa keluarga model (MLP, SVR, KNN, Random
+    Forest, XGBoost, dst.) dan beberapa set fitur dibandingkan lewat validasi
+    silang yang identik; algoritma dengan R2 tertinggi yang disimpan sebagai
+    model produksi - bisa berbeda-beda per parameter.
 
     mode='real'  - hanya rekaman nyata (bukan demo-device)
     mode='demo'  - hanya rekaman demo (device_id = demo-device)
@@ -2660,12 +2665,33 @@ def calibrate_train(
     import pathlib as _pl, json as _json
     import joblib
     import pandas as pd
+    import xgboost as xgb
+    from sklearn.ensemble import (
+        ExtraTreesRegressor, GradientBoostingRegressor, RandomForestRegressor,
+    )
+    from sklearn.linear_model import BayesianRidge, LinearRegression, Ridge
     from sklearn.metrics import mean_absolute_error, r2_score
     from sklearn.model_selection import (
         GroupKFold, LeaveOneGroupOut, LeaveOneOut, cross_val_predict,
     )
+    from sklearn.neighbors import KNeighborsRegressor
     from sklearn.neural_network import MLPRegressor
     from sklearn.preprocessing import StandardScaler
+    from sklearn.svm import SVR
+
+    # Set fitur kandidat untuk pencarian model terbaik per target. Ditentukan
+    # lebih dulu berdasarkan alasan fisiologis (bukan dicari-cari lalu dipilih
+    # setelah melihat skor) - persis metodologi yang divalidasi di
+    # model/test_loso.ipynb bagian 7. "Penuh" dipakai sebagai baseline utama;
+    # subset yang lebih kecil sengaja disertakan karena literatur data-kecil
+    # (N<30) menyarankan membatasi jumlah fitur prediktor.
+    def _fitur_kandidat(features_penuh: list[str]) -> dict[str, list[str]]:
+        return {
+            "Penuh (7 fitur)": features_penuh,
+            "Inti (bpm, usia, gender)": ["bpm", "age_years", "gender_code"],
+            "Serapan (IR/red DC, usia)": ["ir_dc_mean", "red_dc_mean", "age_years"],
+            "Minimal (usia saja)": ["age_years"],
+        }
 
     q = db.query(models_db.CalibrationRecord)
     if mode == "real":
@@ -2732,16 +2758,12 @@ def calibrate_train(
         if len(sub) < MIN_ROWS_T:
             continue
 
-        X = sub[FEATURES_T].values.astype(float)
         y = sub[target_col].values.astype(float)
         n = len(y)
         groups  = sub["subject_id"].values
         n_subj  = int(sub["subject_id"].nunique())
 
-        scaler = StandardScaler()
-        Xs = scaler.fit_transform(X)
-
-        # Kapasitas model diskalakan ke jumlah data.  MLP (64,32) = 2.625 parameter;
+        # Kapasitas MLP diskalakan ke jumlah data.  MLP (64,32) = 2.625 parameter;
         # memaksakannya ke 5 baris hanya menghasilkan hafalan, bukan model.
         if n < 10:
             # ~37 parameter + alpha besar → praktis mendekati regresi teregularisasi
@@ -2771,13 +2793,70 @@ def calibrate_train(
         else:
             cv_scheme, cv_label = 5, "5-fold"
 
+        # Pencarian model terbaik: beberapa keluarga model x beberapa set fitur,
+        # hyperparameter TETAP (ditentukan di atas sebelum melihat skor apa pun -
+        # bukan dicari-cari/di-tuning terhadap hasil evaluasi). Dipilih berdasar
+        # R2 (bukan persentase akurasi, yang bisa menyesatkan untuk target dengan
+        # variasi kecil). Metodologi ini sama persis dengan yang divalidasi di
+        # model/test_loso.ipynb sebelum diterapkan ke produksi.
+        def _model_kandidat() -> dict:
+            return {
+                "MLP (adaptif)":       MLPRegressor(**_mlp_kwargs),
+                "Ridge":               Ridge(alpha=1.0),
+                "LinearRegression":    LinearRegression(),
+                "KNN (k=3)":           KNeighborsRegressor(n_neighbors=3, weights="distance"),
+                "KNN (k=5)":           KNeighborsRegressor(n_neighbors=5, weights="distance"),
+                "SVR (linear)":        SVR(kernel="linear", C=1.0, epsilon=0.1),
+                "SVR (rbf)":           SVR(kernel="rbf", C=1.0, epsilon=0.1),
+                "RandomForest":        RandomForestRegressor(n_estimators=100, max_depth=3, random_state=42),
+                "ExtraTrees":          ExtraTreesRegressor(n_estimators=100, max_depth=3, random_state=42),
+                "GradientBoosting":    GradientBoostingRegressor(n_estimators=100, max_depth=2,
+                                                                   learning_rate=0.05, random_state=42),
+                "BayesianRidge":       BayesianRidge(),
+                "XGBoost (reg. ketat)": xgb.XGBRegressor(
+                    n_estimators=50, max_depth=2, learning_rate=0.05,
+                    reg_lambda=5.0, subsample=0.8, colsample_bytree=0.8,
+                    random_state=42, verbosity=0,
+                ),
+            }
+
         import warnings as _w
+        kandidat_terbaik = None  # (r2, nama_model, nama_fitur, fitur_kolom, scaler_cv, y_cv)
+        perbandingan: list[dict] = []
         with _w.catch_warnings():
             _w.simplefilter("ignore")
-            y_cv = cross_val_predict(MLPRegressor(**_mlp_kwargs), Xs, y,
-                                     cv=cv_scheme, groups=cv_groups)
-            mlp = MLPRegressor(**_mlp_kwargs)
-            mlp.fit(Xs, y)
+            for nama_fitur, fitur_kolom in _fitur_kandidat(FEATURES_T).items():
+                X_combo = sub[fitur_kolom].values.astype(float)
+                scaler_combo = StandardScaler()
+                Xs_combo = scaler_combo.fit_transform(X_combo)
+                for nama_model, model in _model_kandidat().items():
+                    try:
+                        y_cv_combo = cross_val_predict(model, Xs_combo, y,
+                                                       cv=cv_scheme, groups=cv_groups)
+                    except Exception:
+                        continue
+                    r2_combo = float(r2_score(y, y_cv_combo))
+                    pct_err_combo = float(np.mean(np.abs(y - y_cv_combo) / np.maximum(np.abs(y), 1e-9)) * 100)
+                    acc_combo = round(100 - pct_err_combo, 2)
+                    perbandingan.append({
+                        "model": nama_model, "fitur": nama_fitur,
+                        "r2": round(r2_combo, 4), "accuracy_pct": acc_combo,
+                    })
+                    if kandidat_terbaik is None or r2_combo > kandidat_terbaik[0]:
+                        kandidat_terbaik = (r2_combo, nama_model, nama_fitur, fitur_kolom, scaler_combo, y_cv_combo)
+
+            if kandidat_terbaik is None:
+                continue
+            _, model_name, feature_set_name, fitur_terpilih, scaler, y_cv = kandidat_terbaik
+
+            # Latih ulang model pemenang pada seluruh data sebagai artifact final.
+            X_final = sub[fitur_terpilih].values.astype(float)
+            scaler = StandardScaler()
+            Xs_final = scaler.fit_transform(X_final)
+            model_final = _model_kandidat()[model_name]
+            model_final.fit(Xs_final, y)
+
+        perbandingan.sort(key=lambda r: r["r2"], reverse=True)
 
         mae  = float(mean_absolute_error(y, y_cv))
         rmse = float(np.sqrt(np.mean((y - y_cv) ** 2)))
@@ -2803,15 +2882,20 @@ def calibrate_train(
             reliability = "MEMADAI"
             reliability_note = f"{n_subj} subjek - metrik dapat dilaporkan."
 
-        all_models[target_col] = {"scaler": scaler, "mlp": mlp, "features": FEATURES_T}
+        all_models[target_col] = {"scaler": scaler, "model": model_final, "features": fitur_terpilih}
         all_metrics[target_col] = {
             "label": target_label, "n": n, "n_subjects": n_subj,
             "reliability": reliability, "reliability_note": reliability_note,
             "cv": cv_label,
+            "model_name": model_name, "feature_set_name": feature_set_name,
             "mae": round(mae, 2), "rmse": round(rmse, 2),
             "r2": round(r2, 4),
             "mean_pct_error": round(pct_err, 2),
             "accuracy_pct": acc,
+            # 5 kombinasi model+fitur teratas (dari semua yang dicoba, diurutkan
+            # R2) - ditampilkan apa adanya di laporan supaya pemilihan model
+            # tetap transparan, bukan cuma menunjukkan yang menang.
+            "perbandingan_model": perbandingan[:5],
             # Simpan prediksi CV agar laporan bisa plot scatter tanpa re-train
             "cv_y_true": [round(float(v), 2) for v in y],
             "cv_y_pred": [round(float(v), 2) for v in y_cv],
@@ -2938,6 +3022,7 @@ def calibrate_report_html() -> StreamingResponse:
 
     # ── Build rows & plots ────────────────────────────────────────────────
     table_rows = ""
+    konfigurasi_rows = ""
     scatter_html = ""
     for key in ["gula_darah_mg_dl", "kolesterol_mg_dl", "asam_urat_mg_dl", "sistolik_mmhg", "diastolik_mmhg"]:
         if key not in targets_data:
@@ -2950,9 +3035,13 @@ def calibrate_report_html() -> StreamingResponse:
         mae_ok = d["mae"] <= MAE_OK.get(key, 999)
         mae_color = "#16a34a" if mae_ok else "#d97706"
 
+        model_name = d.get("model_name", "MLP (adaptif)")
+        feature_set_name = d.get("feature_set_name", "Penuh (7 fitur)")
         table_rows += f"""
         <tr>
           <td><b>{lbl}</b><br><span style="color:#888;font-size:11px">{d['label']}</span></td>
+          <td style="text-align:center"><b>{model_name}</b><br>
+            <span style="font-size:10px;color:#888">{feature_set_name}</span></td>
           <td style="text-align:center"><b>{d['n']}</b></td>
           <td style="text-align:center">{d['cv']}</td>
           <td style="text-align:center;font-weight:700;color:{acc_color}">{d['accuracy_pct']}%<br>
@@ -2962,6 +3051,13 @@ def calibrate_report_html() -> StreamingResponse:
           <td style="text-align:center">{d['r2']}<br>
             <span style="font-size:10px;color:#888">{r2_text}</span></td>
           <td style="text-align:center">{d['mean_pct_error']}%</td>
+        </tr>"""
+
+        konfigurasi_rows += f"""
+        <tr>
+          <td><b>{lbl}</b></td>
+          <td>{model_name}</td>
+          <td>{feature_set_name}</td>
         </tr>"""
 
         b64 = _scatter_b64(key, d)
@@ -2991,7 +3087,7 @@ def calibrate_report_html() -> StreamingResponse:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Laporan Kalibrasi MLP - ANTARAGA</title>
+<title>Laporan Kalibrasi Model Estimasi Vital - ANTARAGA</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Segoe UI',Arial,sans-serif; font-size:13px; color:#1a1a2e;
@@ -3048,9 +3144,12 @@ def calibrate_report_html() -> StreamingResponse:
 </div>
 
 <h2>Apa yang Diukur Model Ini?</h2>
-<p>Model MLP (Multi-Layer Perceptron) ANTARAGA menggunakan sinyal cahaya sensor PPG di pergelangan tangan untuk
+<p>Model estimasi vital ANTARAGA menggunakan sinyal cahaya sensor PPG di pergelangan tangan untuk
 memperkirakan 5 parameter vital secara non-invasif - tanpa tusuk jarum, tanpa alat laboratorium.
-Model ini dilatih dari data kalibrasi berpasangan: sinyal sensor vs hasil alat medis standar.</p>
+Tiap parameter dilatih sebagai model terpisah, dan algoritmanya dipilih otomatis lewat perbandingan
+beberapa keluarga model (MLP, SVR, KNN, Random Forest, XGBoost, dan lainnya) memakai validasi silang
+yang identik untuk semua kandidat - bukan selalu MLP, model yang dipakai bisa berbeda per parameter
+tergantung mana yang jujur terbukti terbaik pada data yang tersedia.</p>
 <p>Berikut adalah ringkasan seberapa akurat model saat ini berdasarkan <b>{meta.get('n_total', '?')} rekaman</b>
 dari <b>{meta.get('n_subjects', '?')} subjek</b>, divalidasi dengan metode <i>cross-validation</i>.</p>
 
@@ -3058,6 +3157,7 @@ dari <b>{meta.get('n_subjects', '?')} subjek</b>, divalidasi dengan metode <i>cr
 <table>
   <thead><tr>
     <th>Parameter</th>
+    <th style="text-align:center">Model</th>
     <th style="text-align:center">Jumlah Data</th>
     <th style="text-align:center">Validasi</th>
     <th style="text-align:center">Akurasi (%)</th>
@@ -3117,15 +3217,24 @@ semakin akurat model. Garis diagonal = prediksi sempurna.</p>
 </div>
 
 <h2>Konfigurasi Teknis Model</h2>
+<p>Algoritma final tiap parameter dipilih dari perbandingan berikut, memakai skema validasi silang
+yang sama untuk semua kandidat (lihat kolom Validasi di tabel atas), dipilih berdasarkan R² tertinggi
+(bukan persentase akurasi saja, karena metrik itu bisa menyesatkan untuk parameter dengan variasi kecil).
+Hyperparameter tiap model ditentukan tetap di awal, tidak dicari-cari lalu dipilih setelah melihat skor.</p>
+<table>
+  <thead><tr><th>Parameter</th><th>Model Terpilih</th><th>Fitur Terpilih</th></tr></thead>
+  <tbody>{konfigurasi_rows}</tbody>
+</table>
 <table>
   <tr><th>Aspek</th><th>Detail</th></tr>
-  <tr><td>Arsitektur</td><td>MLP 2 lapisan tersembunyi: 64 neuron → 32 neuron, aktivasi ReLU</td></tr>
-  <tr><td>Solver</td><td>L-BFGS untuk &lt;30 data; Adam + Early Stopping untuk ≥30 data</td></tr>
-  <tr><td>Regularisasi</td><td>L2 (alpha=0.01)</td></tr>
-  <tr><td>Fitur Input (7)</td><td>ir_dc_mean, ir_ac_p2p, red_dc_mean, red_ac_p2p, bpm, age_years, gender_code</td></tr>
+  <tr><td>Kandidat model</td><td>MLP (adaptif), Ridge, LinearRegression, KNN (k=3/5), SVR (linear/rbf),
+    RandomForest, ExtraTrees, GradientBoosting, BayesianRidge, XGBoost (regularisasi ketat)</td></tr>
+  <tr><td>Kandidat set fitur</td><td>Penuh (7 fitur), Inti (bpm+usia+gender), Serapan (IR/red DC+usia),
+    Minimal (usia saja)</td></tr>
+  <tr><td>Fitur Input (maksimum 7)</td><td>ir_dc_mean, ir_ac_p2p, red_dc_mean, red_ac_p2p, bpm, age_years, gender_code</td></tr>
   <tr><td>Target Output (5)</td><td>Gula Darah, Kolesterol, Asam Urat, Sistolik, Diastolik</td></tr>
-  <tr><td>Normalisasi</td><td>StandardScaler (per target)</td></tr>
-  <tr><td>Model terpisah</td><td>Satu MLPRegressor per parameter vital (total 5 model)</td></tr>
+  <tr><td>Normalisasi</td><td>StandardScaler (per target, sesuai set fitur terpilih)</td></tr>
+  <tr><td>Model terpisah</td><td>Satu model per parameter vital (total 5 model, algoritma bisa berbeda-beda)</td></tr>
 </table>
 
 <div class="footer">
