@@ -2766,12 +2766,15 @@ def calibrate_train(
         # Kapasitas MLP diskalakan ke jumlah data.  MLP (64,32) = 2.625 parameter;
         # memaksakannya ke 5 baris hanya menghasilkan hafalan, bukan model.
         if n < 10:
-            # ~37 parameter + alpha besar → praktis mendekati regresi teregularisasi
+            # ~37 parameter + alpha besar → praktis mendekati regresi teregularisasi.
+            # max_iter dipangkas (5000→800): lbfgs pada data sekecil ini konvergen jauh
+            # lebih awal; nilai besar sebelumnya hanya memperlambat endpoint /v1/calibrate/train
+            # tanpa mengubah hasil (diverifikasi tidak mengubah R2 pemenang per parameter).
             _mlp_kwargs = dict(hidden_layer_sizes=(4,), activation="relu",
-                               solver="lbfgs", alpha=1.0, max_iter=5000, random_state=42)
+                               solver="lbfgs", alpha=1.0, max_iter=800, random_state=42)
         elif n < 30:
             _mlp_kwargs = dict(hidden_layer_sizes=(16, 8), activation="relu",
-                               solver="lbfgs", alpha=0.1, max_iter=3000, random_state=42)
+                               solver="lbfgs", alpha=0.1, max_iter=600, random_state=42)
         else:
             _mlp_kwargs = dict(hidden_layer_sizes=(64, 32), activation="relu",
                                solver="adam", alpha=0.01, max_iter=500, random_state=42,
@@ -2808,15 +2811,21 @@ def calibrate_train(
                 "KNN (k=5)":           KNeighborsRegressor(n_neighbors=5, weights="distance"),
                 "SVR (linear)":        SVR(kernel="linear", C=1.0, epsilon=0.1),
                 "SVR (rbf)":           SVR(kernel="rbf", C=1.0, epsilon=0.1),
-                "RandomForest":        RandomForestRegressor(n_estimators=100, max_depth=3, random_state=42),
-                "ExtraTrees":          ExtraTreesRegressor(n_estimators=100, max_depth=3, random_state=42),
-                "GradientBoosting":    GradientBoostingRegressor(n_estimators=100, max_depth=2,
-                                                                   learning_rate=0.05, random_state=42),
+                # n_estimators dipangkas (100→20, 50→20): pada N sekecil ini, hutan besar
+                # cuma menambah waktu tanpa menambah akurasi cross-validation secara berarti
+                # (diverifikasi: hasil pemenang per parameter tidak berubah). Endpoint training
+                # menguji 4 set fitur x 12 model x 5 target = 240 kombinasi per klik, jadi
+                # biaya per model dikali besar - versi awal (100/50 estimators) menyebabkan
+                # 504 Gateway Timeout di VPS.
+                "RandomForest":        RandomForestRegressor(n_estimators=20, max_depth=3, random_state=42),
+                "ExtraTrees":          ExtraTreesRegressor(n_estimators=20, max_depth=3, random_state=42),
+                "GradientBoosting":    GradientBoostingRegressor(n_estimators=20, max_depth=2,
+                                                                   learning_rate=0.1, random_state=42),
                 "BayesianRidge":       BayesianRidge(),
                 "XGBoost (reg. ketat)": xgb.XGBRegressor(
-                    n_estimators=50, max_depth=2, learning_rate=0.05,
+                    n_estimators=20, max_depth=2, learning_rate=0.1,
                     reg_lambda=5.0, subsample=0.8, colsample_bytree=0.8,
-                    random_state=42, verbosity=0,
+                    random_state=42, verbosity=0, n_jobs=1,
                 ),
             }
 
