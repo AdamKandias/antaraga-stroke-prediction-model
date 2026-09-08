@@ -882,7 +882,7 @@
     <div class="tabbar">
       <button class="tab on" onclick="tab('raw',this)">📡 Data Asli</button>
       <button class="tab" onclick="tab('pwa',this)">🌊 Setelah PWA</button>
-      <button class="tab" onclick="tab('mlp',this)">🧠 Setelah MLP</button>
+      <button class="tab" onclick="tab('mlp',this)">🧠 Setelah Estimasi Vital</button>
       <button class="tab" onclick="tab('xgb',this)">🎯 Setelah XGBoost</button>
       <button class="tab" onclick="tab('fw',this)">⚙️ Firmware</button>
       <button class="tab" onclick="tab('pwa-cfg',this)">🔧 PWA</button>
@@ -1015,7 +1015,7 @@
         </div>
       </div>
       <div class="card">
-        <div class="card-ttl">Fitur Morfologi yang Diekstrak (Input ke MLP)</div>
+        <div class="card-ttl">Fitur Morfologi yang Diekstrak (Input ke Model Estimasi Vital)</div>
         <div id="featWrap">
           <div class="empty">
             <h3>Menunggu data…</h3>
@@ -1024,13 +1024,13 @@
       </div>
     </div>
 
-    <!-- ── TAB 3: MLP ── -->
+    <!-- ── TAB 3: Estimasi Vital ── -->
     <div id="p-mlp" class="pane">
       <div id="mlpNote"></div>
 
       <div class="card" style="margin-bottom:14px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-          <div class="card-ttl" style="margin:0">Prediksi MLP Kalibrasi</div>
+          <div class="card-ttl" style="margin:0">Prediksi Estimasi Vital (Kalibrasi)</div>
           <span id="mlpSrcBadge" style="font-size:10px;padding:2px 8px;border-radius:10px;
         background:rgba(58,190,120,.15);color:var(--good);font-weight:600">-</span>
         </div>
@@ -1062,7 +1062,7 @@
         </div>
       </div>
 
-      <!-- Tile kalibrasi MLP: kolesterol + asam urat -->
+      <!-- Tile kalibrasi estimasi vital: kolesterol + asam urat -->
       <div id="mlpCalibTiles" style="display:none;margin-top:14px">
         <div class="tiles">
           <div class="tile">
@@ -1080,9 +1080,9 @@
         </div>
       </div>
 
-      <!-- Risk flags dari kalibrasi MLP -->
+      <!-- Risk flags dari kalibrasi estimasi vital -->
       <div id="mlpRiskFlags" style="display:none;margin-top:12px">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:5px;font-weight:600">FAKTOR RISIKO (MLP)</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:5px;font-weight:600">FAKTOR RISIKO (ESTIMASI VITAL)</div>
         <div id="mlpFlagBadges" style="display:flex;flex-wrap:wrap;gap:5px"></div>
       </div>
     </div>
@@ -1401,8 +1401,7 @@
           style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em">Navigasi:</span>
         <button class="btn-sec btn-sm" onclick="tab('raw',document.querySelector('.tab'))">📡 Data Asli</button>
         <button class="btn-sec btn-sm" onclick="tab('pwa',document.querySelectorAll('.tab')[1])">🌊 PWA Signal</button>
-        <button class="btn-sec btn-sm" onclick="tab('mlp',document.querySelectorAll('.tab')[2])">🧠 Estimasi
-          MLP</button>
+        <button class="btn-sec btn-sm" onclick="tab('mlp',document.querySelectorAll('.tab')[2])">🧠 Estimasi Vital</button>
         <button class="btn-sec btn-sm" onclick="tab('xgb',document.querySelectorAll('.tab')[3])">🎯 Prediksi
           Stroke</button>
       </div>
@@ -1548,7 +1547,7 @@
         <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">
           Generate ratusan rekaman sinyal PPG sintetis dengan korelasi fisiologis realistis (multi-subjek, usia 20–82,
           L/P, kondisi berbeda, termasuk pola hipertensi sistolik terisolasi/wide pulse pressure pada lansia)
-          untuk menguji pipeline pelatihan MLP tanpa perlu data kalibrasi nyata.
+          untuk menguji pipeline pelatihan model estimasi vital tanpa perlu data kalibrasi nyata.
         </p>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <button class="btn btn-ok" onclick="calibGenDemo()">⚡ Generate 250 Baris Demo</button>
@@ -1596,7 +1595,7 @@
           </div>
         </div>
         <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">
-          Ambil 20 sampel acak dari database, jalankan inferensi MLP, dan bandingkan prediksi dengan nilai referensi.
+          Ambil 20 sampel acak dari database, jalankan inferensi estimasi vital, dan bandingkan prediksi dengan nilai referensi.
           Pastikan model sudah dilatih dulu.
         </p>
         <span id="calibTestMsg" style="font-size:12px;display:none"></span>
@@ -2734,7 +2733,7 @@
       if (e.target === document.getElementById('calibEditModal')) calibCloseEdit();
     });
 
-    // ── Laporan hasil pelatihan MLP ──────────────────────────────────────────────
+    // ── Laporan hasil pelatihan model estimasi vital ──────────────────────────────
     async function calibLoadReport() {
       const wrap = document.getElementById('calibReportWrap');
       const dlLink = document.getElementById('calibReportDlLink');
@@ -2828,7 +2827,7 @@
       } catch (e) { show(`Error: ${e.message}`, 'var(--critical)'); }
     }
 
-    // ── Jalankan training MLP ────────────────────────────────────────────────────
+    // ── Jalankan training model estimasi vital ─────────────────────────────────────
     async function calibRunTrain(mode) {
       const btnReal = document.getElementById('calibTrainBtnReal');
       const btnDemo = document.getElementById('calibTrainBtnDemo');
@@ -3007,17 +3006,17 @@
 
     // ── Regresi linier (placeholder gula darah / kolesterol / asam urat) ──
 
-    // ── MLP ──
+    // ── Estimasi Vital ──
     function renderMlp(m) {
       const noteEl = document.getElementById('mlpNote');
       const badge = document.getElementById('mlpSrcBadge');
       const cv = (m && m.calib_vitals) || null;
 
-      // Sumber tunggal: MLP kalibrasi.  Model lama (ppg_vitals_model.joblib) tidak
+      // Sumber tunggal: model estimasi vital kalibrasi.  Model lama (ppg_vitals_model.joblib) tidak
       // dipakai lagi - artefaknya tidak pernah dibuat, dan nilainya menimpa hasil
       // training kalibrasi yang sebenarnya.
       if (!cv) {
-        noteEl.innerHTML = `<div class="note">⏳ ${(m && m.message) || 'Model MLP kalibrasi belum dilatih - buka tab Kalibrasi lalu klik "Latih dari Data Asli".'}</div>`;
+        noteEl.innerHTML = `<div class="note">⏳ ${(m && m.message) || 'Model estimasi vital belum dilatih - buka tab Kalibrasi lalu klik "Latih dari Data Asli".'}</div>`;
         if (badge) { badge.textContent = 'BELUM DILATIH'; badge.style.background = 'rgba(250,178,25,.15)'; badge.style.color = 'var(--warn)'; }
         ['mSys', 'mDia', 'mGlu', 'mKol', 'mUrat'].forEach(id => { const e = document.getElementById(id); if (e) e.textContent = '-'; });
         ['mSysSt', 'mDiaSt', 'mGluSt', 'mKolSt', 'mUratSt'].forEach(id => { const e = document.getElementById(id); if (e) e.textContent = ''; });
@@ -3040,7 +3039,7 @@
       tile('mKol', 'mKolSt', cv.kolesterol_mg_dl, kolStatus);
       tile('mUrat', 'mUratSt', cv.asam_urat_mg_dl, uratStatus);
 
-      // Risk flags dari kalibrasi MLP
+      // Risk flags dari kalibrasi estimasi vital
       const flags = m.risk_flags || [];
       const flagWrap = document.getElementById('mlpRiskFlags');
       const flagBadges = document.getElementById('mlpFlagBadges');

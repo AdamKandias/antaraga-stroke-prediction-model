@@ -741,7 +741,7 @@ async def sim_start(
 ) -> dict:
     """Nyalakan simulator: batch PPG sintetis dikirim tiap detik ke /v1/ingest.
 
-    Alur hilirnya identik dengan perangkat asli - MLP vital, XGBoost risiko,
+    Alur hilirnya identik dengan perangkat asli - estimasi vital, XGBoost risiko,
     penyimpanan reading, sampai notifikasi FCM ke mobile app.
     """
     from api import hw_simulator
@@ -1006,7 +1006,7 @@ def ingest_firmware_batch(
 ) -> schemas.IngestResponse:
     """Endpoint utama yang dipanggil firmware setiap BATCH_MS (default 500 ms).
     User diidentifikasi lewat device_key (batch.id) yang di-pair via mobile app.
-    Pipeline: PPG → estimasi vital (MLP jika tersedia) → stroke risk (XGBoost)
+    Pipeline: PPG → estimasi vital (jika tersedia) → stroke risk (XGBoost)
     → simpan reading → FCM kalau HIGH."""
     start = time.perf_counter()
 
@@ -1059,7 +1059,7 @@ def ingest_firmware_batch(
             pass  # model belum dilatih atau sinyal terlalu pendek
 
     if not vitals:
-        # Jatuh ke MLP KALIBRASI (mlp_calibration.joblib) - model yang dilatih
+        # Jatuh ke MODEL ESTIMASI VITAL (mlp_calibration.joblib) - model yang dilatih
         # lewat tab Kalibrasi.  Tanpa cabang ini, model hasil latihan tidak
         # pernah terpakai di alur ingest: ml_vitals mencari artefak lain
         # (ppg_vitals_model.joblib) yang belum tentu ada, sehingga vitals tetap
@@ -1101,7 +1101,7 @@ def ingest_firmware_batch(
                     vitals["blood_glucose_mg_dl"] = cv["gula_darah_mg_dl"]
                 vitals.update({k: v for k, v in cv.items() if k not in vitals})
             except Exception as exc:
-                logger.warning("[INGEST] MLP kalibrasi gagal untuk %s: %s", batch.id, exc)
+                logger.warning("[INGEST] Estimasi vital kalibrasi gagal untuk %s: %s", batch.id, exc)
 
     if not vitals:
         # Masih kosong: ambil vital terakhir yang sudah ada di DB
@@ -1571,7 +1571,7 @@ def ingest_latest_dashboard(
     db: Session = Depends(get_db),
 ) -> dict:
     """Kembalikan data terbaru dari device dalam 4 tahap pemrosesan:
-    raw → PWA → MLP → XGBoost. Dipakai oleh /dashboard."""
+    raw → PWA → Estimasi Vital → XGBoost. Dipakai oleh /dashboard."""
     batches = ingest_buffer.get_window_s(device_id, window_s)
     if not batches:
         # Kembalikan 200 (bukan 404) agar log tidak penuh "error" untuk kondisi normal
@@ -1605,7 +1605,7 @@ def ingest_latest_dashboard(
     # --- Stage 2: PWA (gunakan window penuh untuk akurasi BPM) ---
     stage_pwa = _compute_pwa(all_ppg, all_red, all_ir, fs_ppg, fs_max)
 
-    # --- Stage 3: MLP ---
+    # --- Stage 3: Estimasi Vital ---
     stage_mlp = _compute_mlp(all_ppg, all_red, all_ir, fs_ppg)
 
     # --- Stage 4: XGBoost (ambil dari DB) ---
@@ -1811,9 +1811,9 @@ def _compute_mlp(ppg: list, red: list, ir: list, fs_ppg: int) -> dict:
         except Exception as exc:
             out = {"available": False, "message": str(exc)}
     else:
-        out["message"] = "Model MLP belum dilatih - menunggu data kalibrasi dari hardware"
+        out["message"] = "Model estimasi vital belum dilatih - menunggu data kalibrasi dari hardware"
 
-    # --- Calibration MLP (gula, kolesterol, asam_urat, sistolik, diastolik) ---
+    # --- Calibration: estimasi vital (gula, kolesterol, asam_urat, sistolik, diastolik) ---
     if is_calibration_model_available() and ir and red:
         try:
             fs_m = float(fs_ppg)
@@ -1831,7 +1831,7 @@ def _compute_mlp(ppg: list, red: list, ir: list, fs_ppg: int) -> dict:
             out["risk_flags"]   = compute_risk_flags_from_vitals(calib_vitals)
             out["available"]    = True
             out["source"]       = "mlp_calibration.joblib"
-            # Pesan "belum dilatih" dari model lama menyesatkan begitu MLP
+            # Pesan "belum dilatih" dari model lama menyesatkan begitu estimasi vital
             # kalibrasi berhasil - buang supaya UI tidak menampilkan keduanya.
             out.pop("message", None)
         except Exception:
@@ -2161,7 +2161,7 @@ def calibrate_record_report(
 
 @app.get("/v1/calibrate/training-report")
 def calibrate_training_report() -> dict:
-    """Baca hasil pelatihan MLP terakhir dari artifacts (jika sudah dilatih)."""
+    """Baca hasil pelatihan model estimasi vital terakhir dari artifacts (jika sudah dilatih)."""
     import pathlib
     metrics_path = pathlib.Path(__file__).resolve().parent.parent / "model" / "artifacts" / "mlp_calibration_metrics.json"
     if not metrics_path.exists():
@@ -2643,7 +2643,7 @@ def calibrate_clear_demo(db: Session = Depends(get_db)) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# /v1/calibrate/train  - latih MLP inline dari data di DB
+# /v1/calibrate/train  - latih model estimasi vital inline dari data di DB
 # ---------------------------------------------------------------------------
 
 @app.post("/v1/calibrate/train")
@@ -3133,7 +3133,7 @@ def calibrate_report_html() -> StreamingResponse:
 <div class="cover">
   <div style="font-size:11px;font-weight:700;letter-spacing:.12em;color:#3987e5;text-transform:uppercase;margin-bottom:6px">
     ANTARAGA · Stroke Prediction Model</div>
-  <h1>Laporan Kalibrasi Model MLP</h1>
+  <h1>Laporan Kalibrasi Model Estimasi Vital</h1>
   <div class="subtitle">Estimasi Non-Invasif Vital Sign melalui Sensor PPG</div>
   <div class="meta-grid">
     <span class="meta-chip">📅 Dilatih: {trained_at_str}</span>
@@ -3260,7 +3260,7 @@ def calibrate_predict_test(
     n: int = Query(20, ge=5, le=200),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Ambil n rekaman acak dari DB (dengan ground truth), jalankan inferensi MLP,
+    """Ambil n rekaman acak dari DB (dengan ground truth), jalankan inferensi estimasi vital,
     kembalikan perbandingan prediksi vs referensi per sampel dan per target."""
     from api.ml_calibration import is_calibration_model_available, predict_vitals
 

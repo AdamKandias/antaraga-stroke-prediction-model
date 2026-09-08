@@ -39,7 +39,7 @@ def _load_artifact() -> dict:
     import joblib
     if not ARTIFACT_PATH.exists():
         raise FileNotFoundError(
-            f"Calibration MLP not found at {ARTIFACT_PATH}. "
+            f"Calibration model not found at {ARTIFACT_PATH}. "
             "Run `python model/train_mlp_calibration.py` after collecting calibration data."
         )
     return joblib.load(ARTIFACT_PATH)
@@ -54,7 +54,7 @@ def predict_vitals(
     age_years: float = 60.0,
     gender_code: float = 0.5,  # 0=P, 1=L, 0.5=tidak diketahui
 ) -> dict[str, float]:
-    """Prediksi vital sign dari fitur PPG menggunakan calibration MLP.
+    """Prediksi vital sign dari fitur PPG menggunakan model kalibrasi estimasi vital.
 
     Mengembalikan dict dengan key sesuai target yang berhasil dilatih,
     misalnya: gula_darah_mg_dl, kolesterol_mg_dl, asam_urat_mg_dl,
@@ -83,7 +83,7 @@ def predict_vitals(
 
 
 def compute_risk_flags_from_vitals(vitals: dict[str, float]) -> list[str]:
-    """Flag risiko stroke berbasis nilai vital sign dari MLP kalibrasi."""
+    """Flag risiko stroke berbasis nilai vital sign dari model kalibrasi estimasi vital."""
     flags: list[str] = []
 
     kolesterol = vitals.get("kolesterol_mg_dl")

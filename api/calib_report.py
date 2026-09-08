@@ -644,10 +644,10 @@ def _ttd_data_uri() -> str:
         return ""
 
 
-# Label dan satuan tiap target MLP, sama persis dengan TARGETS di
+# Label dan satuan tiap target estimasi vital, sama persis dengan TARGETS di
 # model/train_mlp_calibration.py -- disalin di sini karena laporan hanya
 # perlu label tampilannya, bukan seluruh modul pelatihan.
-_MLP_TARGETS: dict[str, tuple[str, str]] = {
+_VITAL_TARGETS: dict[str, tuple[str, str]] = {
     "gula_darah_mg_dl": ("Gula Darah", "mg/dL"),
     "kolesterol_mg_dl": ("Kolesterol", "mg/dL"),
     "asam_urat_mg_dl":  ("Asam Urat", "mg/dL"),
@@ -714,11 +714,11 @@ def _build_ai_section(
 ) -> str:
     """Bagian laporan yang menampilkan kedua model AI ANTARAGA atas sesi ini.
 
-    MLP: menaksir lima nilai vital dari sinyal optik sesi ini sendiri, lalu
+    Estimasi Vital: menaksir lima nilai vital dari sinyal optik sesi ini sendiri, lalu
     dibandingkan dengan nilai alat invasif yang sungguhan tercatat pada
     sesi yang sama -- ini akurasi UNTUK SATU SESI INI, bukan metrik agregat
     dari seluruh subjek (metrik agregat memakai validasi Leave-One-Subject-
-    Out, dilaporkan terpisah lewat menu Pelatihan MLP di dashboard).
+    Out, dilaporkan terpisah lewat menu Pelatihan Model Estimasi Vital di dashboard).
 
     "XGBoost": kategori Rendah/Sedang/Tinggi dari _kategori_klinis_manual()
     di atas -- lihat docstring fungsi itu untuk kenapa ini aturan manual,
@@ -726,7 +726,7 @@ def _build_ai_section(
     """
     bagian: list[str] = []
 
-    # ---------- MLP: prediksi vs aktual pada sesi ini ----------
+    # ---------- Estimasi Vital: prediksi vs aktual pada sesi ini ----------
     from api.ml_calibration import is_calibration_model_available, predict_vitals
 
     fitur_sinyal_lengkap = all(
@@ -754,7 +754,7 @@ def _build_ai_section(
         }
 
         baris_mlp: list[str] = []
-        for kunci, (label, satuan) in _MLP_TARGETS.items():
+        for kunci, (label, satuan) in _VITAL_TARGETS.items():
             pred = prediksi.get(kunci)
             if pred is None:
                 continue
@@ -801,16 +801,16 @@ def _build_ai_section(
             bagian.append(
                 '<div style="margin-bottom:10px">'
                 '<div style="font-size:8.6pt;font-weight:700;margin-bottom:4px">'
-                "Model MLP - Estimasi Vital dari Sinyal Optik</div>"
+                "Model Estimasi Vital dari Sinyal Optik</div>"
                 '<table class="ref"><thead><tr><th>Parameter</th>'
-                "<th>Prediksi Sensor (MLP)</th><th>Aktual (Alat Invasif)</th>"
+                "<th>Prediksi Sensor</th><th>Aktual (Alat Invasif)</th>"
                 "<th>Akurasi Sesi Ini</th></tr></thead>"
                 f"<tbody>{''.join(baris_mlp)}</tbody></table>"
                 '<p style="font-size:7pt;color:var(--mut);margin:0 0 4px">'
                 "Akurasi di atas dihitung khusus untuk sesi ini, bukan metrik "
                 "agregat model. Metrik menyeluruh memakai validasi "
                 "Leave-One-Subject-Out dari seluruh subjek kalibrasi, "
-                "dilaporkan terpisah lewat menu Pelatihan MLP pada dashboard."
+                "dilaporkan terpisah lewat menu Pelatihan Model Estimasi Vital pada dashboard."
                 "</p></div>"
             )
     else:
@@ -822,7 +822,7 @@ def _build_ai_section(
         bagian.append(
             '<div style="margin-bottom:10px">'
             '<div style="font-size:8.6pt;font-weight:700;margin-bottom:4px">'
-            "Model MLP - Estimasi Vital dari Sinyal Optik</div>"
+            "Model Estimasi Vital dari Sinyal Optik</div>"
             f'<p style="font-size:7.6pt;color:var(--mut);margin:0">'
             f"Belum dapat ditampilkan: {alasan}.</p></div>"
         )
@@ -957,7 +957,7 @@ def build_record_report_html(
         for nm, desc, on in faktor
     )
 
-    # ── Hasil model kecerdasan buatan (MLP kalibrasi + XGBoost) ───────────
+    # ── Hasil model kecerdasan buatan (estimasi vital + XGBoost) ───────────
     ai_block = _build_ai_section(rec, gender, usia, faktor, riwayat_pribadi)
 
     # ── Interpretasi naratif ─────────────────────────────────────────────
