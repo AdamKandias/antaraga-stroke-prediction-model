@@ -2661,37 +2661,16 @@ def calibrate_train(
     mode='real'  - hanya rekaman nyata (bukan demo-device)
     mode='demo'  - hanya rekaman demo (device_id = demo-device)
     mode='all'   - semua rekaman (default)
-    """
-    import pathlib as _pl, json as _json
-    import joblib
-    import pandas as pd
-    import xgboost as xgb
-    from sklearn.ensemble import (
-        ExtraTreesRegressor, GradientBoostingRegressor, RandomForestRegressor,
-    )
-    from sklearn.linear_model import BayesianRidge, LinearRegression, Ridge
-    from sklearn.metrics import mean_absolute_error, r2_score
-    from sklearn.model_selection import (
-        GroupKFold, LeaveOneGroupOut, LeaveOneOut, cross_val_predict,
-    )
-    from sklearn.neighbors import KNeighborsRegressor
-    from sklearn.neural_network import MLPRegressor
-    from sklearn.preprocessing import StandardScaler
-    from sklearn.svm import SVR
 
-    # Set fitur kandidat untuk pencarian model terbaik per target. Ditentukan
-    # lebih dulu berdasarkan alasan fisiologis (bukan dicari-cari lalu dipilih
-    # setelah melihat skor) - persis metodologi yang divalidasi di
-    # model/test_loso.ipynb bagian 7. "Penuh" dipakai sebagai baseline utama;
-    # subset yang lebih kecil sengaja disertakan karena literatur data-kecil
-    # (N<30) menyarankan membatasi jumlah fitur prediktor.
-    def _fitur_kandidat(features_penuh: list[str]) -> dict[str, list[str]]:
-        return {
-            "Penuh (7 fitur)": features_penuh,
-            "Inti (bpm, usia, gender)": ["bpm", "age_years", "gender_code"],
-            "Serapan (IR/red DC, usia)": ["ir_dc_mean", "red_dc_mean", "age_years"],
-            "Minimal (usia saja)": ["age_years"],
-        }
+    Catatan: kalau endpoint ini timeout (pencarian ~240 kombinasi model x
+    fitur bisa berat di VPS kecil), jalankan model/train_mlp_calibration.py
+    langsung di server lewat SSH - skrip itu pakai logika training yang
+    identik (lihat api/vital_model_training.py) dan menulis artifact yang
+    sama, jadi hasilnya otomatis terpakai tanpa perlu lewat HTTP sama sekali.
+    """
+    from api.vital_model_training import (
+        FEATURES_T, MIN_ROWS_T, records_to_dataframe, save_artifacts, train_all,
+    )
 
     q = db.query(models_db.CalibrationRecord)
     if mode == "real":
@@ -2702,20 +2681,6 @@ def calibrate_train(
     if not rows:
         label = {"real": "data asli", "demo": "demo data"}.get(mode, "kalibrasi")
         raise HTTPException(status_code=400, detail=f"Belum ada {label} di database")
-
-    FEATURES_T = ["ir_dc_mean", "ir_ac_p2p", "red_dc_mean", "red_ac_p2p",
-                  "bpm", "age_years", "gender_code"]
-    TARGETS_T = {
-        "gula_darah_mg_dl": "Gula Darah (mg/dL)",
-        "kolesterol_mg_dl":  "Kolesterol (mg/dL)",
-        "asam_urat_mg_dl":   "Asam Urat (mg/dL)",
-        "sistolik_mmhg":     "Sistolik (mmHg)",
-        "diastolik_mmhg":    "Diastolik (mmHg)",
-    }
-    # 5 = batas bawah teknis (LOO butuh minimal 3, di bawah 5 tidak ada sisa
-    # untuk diuji sama sekali).  Metrik di bawah 30 subjek TIDAK bermakna -
-    # lihat field "reliability" pada tiap target.
-    MIN_ROWS_T = 5
 
     records = [
         {
@@ -2735,12 +2700,7 @@ def calibrate_train(
         }
         for r in rows
     ]
-    df = pd.DataFrame(records)
-    df["gender_code"] = (df["gender"].str.upper() == "L").astype(float)
-    for col in FEATURES_T:
-        if col not in df.columns:
-            df[col] = float("nan")
-    df[FEATURES_T] = df[FEATURES_T].apply(pd.to_numeric, errors="coerce")
+    df = records_to_dataframe(records)
 
     if len(df) < MIN_ROWS_T:
         raise HTTPException(status_code=400,
@@ -2749,194 +2709,21 @@ def calibrate_train(
     n_subjects = df["subject_id"].nunique() if "subject_id" in df.columns else "?"
     trained_at = datetime.now(timezone.utc).isoformat()
 
-    all_metrics: dict = {}
-    all_models:  dict = {}
-
-    for target_col, target_label in TARGETS_T.items():
-        sub = df[df[target_col].notna()].copy()
-        sub = sub[sub[FEATURES_T].notna().all(axis=1)]
-        if len(sub) < MIN_ROWS_T:
-            continue
-
-        y = sub[target_col].values.astype(float)
-        n = len(y)
-        groups  = sub["subject_id"].values
-        n_subj  = int(sub["subject_id"].nunique())
-
-        # Kapasitas MLP diskalakan ke jumlah data.  MLP (64,32) = 2.625 parameter;
-        # memaksakannya ke 5 baris hanya menghasilkan hafalan, bukan model.
-        if n < 10:
-            # ~37 parameter + alpha besar → praktis mendekati regresi teregularisasi.
-            # max_iter dipangkas (5000→800): lbfgs pada data sekecil ini konvergen jauh
-            # lebih awal; nilai besar sebelumnya hanya memperlambat endpoint /v1/calibrate/train
-            # tanpa mengubah hasil (diverifikasi tidak mengubah R2 pemenang per parameter).
-            _mlp_kwargs = dict(hidden_layer_sizes=(4,), activation="relu",
-                               solver="lbfgs", alpha=1.0, max_iter=800, random_state=42)
-        elif n < 30:
-            _mlp_kwargs = dict(hidden_layer_sizes=(16, 8), activation="relu",
-                               solver="lbfgs", alpha=0.1, max_iter=600, random_state=42)
-        else:
-            _mlp_kwargs = dict(hidden_layer_sizes=(64, 32), activation="relu",
-                               solver="adam", alpha=0.01, max_iter=500, random_state=42,
-                               learning_rate_init=0.01, early_stopping=True,
-                               n_iter_no_change=15, validation_fraction=0.1)
-
-        # Skema CV: bila satu subjek punya >1 rekaman, kelompokkan per subjek.
-        # Tanpa ini, rekaman orang yang sama masuk ke data latih DAN data uji -
-        # metrik jadi optimistis palsu (leakage), model terlihat akurat padahal menghafal.
-        cv_groups = None
-        if n_subj < n and n_subj >= 2:
-            if n_subj >= 5:
-                cv_scheme, cv_label = GroupKFold(n_splits=min(5, n_subj)), f"GroupKFold/subjek"
-            else:
-                cv_scheme, cv_label = LeaveOneGroupOut(), "LOGO/subjek"
-            cv_groups = groups
-        elif n < 30:
-            cv_scheme, cv_label = LeaveOneOut(), "LOO"
-        else:
-            cv_scheme, cv_label = 5, "5-fold"
-
-        # Pencarian model terbaik: beberapa keluarga model x beberapa set fitur,
-        # hyperparameter TETAP (ditentukan di atas sebelum melihat skor apa pun -
-        # bukan dicari-cari/di-tuning terhadap hasil evaluasi). Dipilih berdasar
-        # R2 (bukan persentase akurasi, yang bisa menyesatkan untuk target dengan
-        # variasi kecil). Metodologi ini sama persis dengan yang divalidasi di
-        # model/test_loso.ipynb sebelum diterapkan ke produksi.
-        def _model_kandidat() -> dict:
-            return {
-                "MLP (adaptif)":       MLPRegressor(**_mlp_kwargs),
-                "Ridge":               Ridge(alpha=1.0),
-                "LinearRegression":    LinearRegression(),
-                "KNN (k=3)":           KNeighborsRegressor(n_neighbors=3, weights="distance"),
-                "KNN (k=5)":           KNeighborsRegressor(n_neighbors=5, weights="distance"),
-                "SVR (linear)":        SVR(kernel="linear", C=1.0, epsilon=0.1),
-                "SVR (rbf)":           SVR(kernel="rbf", C=1.0, epsilon=0.1),
-                # n_estimators dipangkas (100→20, 50→20): pada N sekecil ini, hutan besar
-                # cuma menambah waktu tanpa menambah akurasi cross-validation secara berarti
-                # (diverifikasi: hasil pemenang per parameter tidak berubah). Endpoint training
-                # menguji 4 set fitur x 12 model x 5 target = 240 kombinasi per klik, jadi
-                # biaya per model dikali besar - versi awal (100/50 estimators) menyebabkan
-                # 504 Gateway Timeout di VPS.
-                "RandomForest":        RandomForestRegressor(n_estimators=20, max_depth=3, random_state=42),
-                "ExtraTrees":          ExtraTreesRegressor(n_estimators=20, max_depth=3, random_state=42),
-                "GradientBoosting":    GradientBoostingRegressor(n_estimators=20, max_depth=2,
-                                                                   learning_rate=0.1, random_state=42),
-                "BayesianRidge":       BayesianRidge(),
-                "XGBoost (reg. ketat)": xgb.XGBRegressor(
-                    n_estimators=20, max_depth=2, learning_rate=0.1,
-                    reg_lambda=5.0, subsample=0.8, colsample_bytree=0.8,
-                    random_state=42, verbosity=0, n_jobs=1,
-                ),
-            }
-
-        import warnings as _w
-        kandidat_terbaik = None  # (r2, nama_model, nama_fitur, fitur_kolom, scaler_cv, y_cv)
-        perbandingan: list[dict] = []
-        with _w.catch_warnings():
-            _w.simplefilter("ignore")
-            for nama_fitur, fitur_kolom in _fitur_kandidat(FEATURES_T).items():
-                X_combo = sub[fitur_kolom].values.astype(float)
-                scaler_combo = StandardScaler()
-                Xs_combo = scaler_combo.fit_transform(X_combo)
-                for nama_model, model in _model_kandidat().items():
-                    try:
-                        y_cv_combo = cross_val_predict(model, Xs_combo, y,
-                                                       cv=cv_scheme, groups=cv_groups)
-                    except Exception:
-                        continue
-                    r2_combo = float(r2_score(y, y_cv_combo))
-                    pct_err_combo = float(np.mean(np.abs(y - y_cv_combo) / np.maximum(np.abs(y), 1e-9)) * 100)
-                    acc_combo = round(100 - pct_err_combo, 2)
-                    perbandingan.append({
-                        "model": nama_model, "fitur": nama_fitur,
-                        "r2": round(r2_combo, 4), "accuracy_pct": acc_combo,
-                    })
-                    if kandidat_terbaik is None or r2_combo > kandidat_terbaik[0]:
-                        kandidat_terbaik = (r2_combo, nama_model, nama_fitur, fitur_kolom, scaler_combo, y_cv_combo)
-
-            if kandidat_terbaik is None:
-                continue
-            _, model_name, feature_set_name, fitur_terpilih, scaler, y_cv = kandidat_terbaik
-
-            # Latih ulang model pemenang pada seluruh data sebagai artifact final.
-            X_final = sub[fitur_terpilih].values.astype(float)
-            scaler = StandardScaler()
-            Xs_final = scaler.fit_transform(X_final)
-            model_final = _model_kandidat()[model_name]
-            model_final.fit(Xs_final, y)
-
-        perbandingan.sort(key=lambda r: r["r2"], reverse=True)
-
-        mae  = float(mean_absolute_error(y, y_cv))
-        rmse = float(np.sqrt(np.mean((y - y_cv) ** 2)))
-        r2   = float(r2_score(y, y_cv))
-        pct_err = float(np.mean(np.abs(y - y_cv) / np.maximum(np.abs(y), 1e-9)) * 100)
-        acc  = round(100 - pct_err, 2)
-
-        # Status keterandalan - dilaporkan apa adanya agar angka di bawah ini
-        # tidak dibaca sebagai validasi alat.
-        if n_subj < 10:
-            reliability = "TIDAK VALID"
-            reliability_note = (
-                f"Hanya {n_subj} subjek. Metrik di bawah ini hasil undian sampel, "
-                "bukan ukuran akurasi alat. Butuh ≥30 subjek agar bermakna."
-            )
-        elif n_subj < 30:
-            reliability = "LEMAH"
-            reliability_note = (
-                f"{n_subj} subjek - metrik masih sangat goyah. "
-                "Target ≥30 subjek untuk angka yang bisa dipertanggungjawabkan."
-            )
-        else:
-            reliability = "MEMADAI"
-            reliability_note = f"{n_subj} subjek - metrik dapat dilaporkan."
-
-        all_models[target_col] = {"scaler": scaler, "model": model_final, "features": fitur_terpilih}
-        all_metrics[target_col] = {
-            "label": target_label, "n": n, "n_subjects": n_subj,
-            "reliability": reliability, "reliability_note": reliability_note,
-            "cv": cv_label,
-            "model_name": model_name, "feature_set_name": feature_set_name,
-            "mae": round(mae, 2), "rmse": round(rmse, 2),
-            "r2": round(r2, 4),
-            "mean_pct_error": round(pct_err, 2),
-            "accuracy_pct": acc,
-            # 5 kombinasi model+fitur teratas (dari semua yang dicoba, diurutkan
-            # R2) - ditampilkan apa adanya di laporan supaya pemilihan model
-            # tetap transparan, bukan cuma menunjukkan yang menang.
-            "perbandingan_model": perbandingan[:5],
-            # Simpan prediksi CV agar laporan bisa plot scatter tanpa re-train
-            "cv_y_true": [round(float(v), 2) for v in y],
-            "cv_y_pred": [round(float(v), 2) for v in y_cv],
-        }
+    all_models, all_metrics = train_all(df)
 
     if not all_models:
         raise HTTPException(status_code=400,
                             detail="Tidak ada target yang cukup datanya untuk dilatih")
 
-    artifact_dir = _pl.Path(__file__).resolve().parent.parent / "model" / "artifacts"
-    artifact_dir.mkdir(parents=True, exist_ok=True)
-    artifact_path = artifact_dir / "mlp_calibration.joblib"
-    metrics_path  = artifact_dir / "mlp_calibration_metrics.json"
-
     meta = {
-        "_meta": {
-            "trained_at": trained_at,
-            "n_total": len(df),
-            "n_subjects": n_subjects,
-            "mode": mode,
-        }
+        "trained_at": trained_at,
+        "n_total": len(df),
+        "n_subjects": n_subjects,
+        "mode": mode,
     }
-    metrics_with_meta = {**meta, **all_metrics}
-    joblib.dump(all_models, artifact_path)
-    metrics_path.write_text(_json.dumps(metrics_with_meta, indent=2, ensure_ascii=False))
-
-    # Invalidate lru_cache di ml_calibration.py agar prediksi berikutnya pakai model baru
-    try:
-        from api.ml_calibration import _load_artifact
-        _load_artifact.cache_clear()
-    except Exception:
-        pass
+    save_artifacts(all_models, all_metrics, meta)
+    # Tidak perlu invalidasi cache manual - api/ml_calibration.py mendeteksi
+    # perubahan artifact lewat mtime file, otomatis reload di request berikutnya.
 
     return {"success": True, "metrics": all_metrics,
             "models_trained": list(all_models.keys()),

@@ -7,6 +7,11 @@ dipertahankan agar tidak mengubah alur deployment yang sudah berjalan.
 Sebelum model pernah dilatih, is_calibration_model_available() mengembalikan
 False dan semua fungsi di modul ini tidak tersedia.
 
+Cache artifact dicek ulang berdasarkan mtime file (bukan lru_cache murni),
+supaya training yang dijalankan dari proses lain - lewat skrip CLI
+model/train_mlp_calibration.py di server, bukan cuma lewat endpoint HTTP di
+proses yang sama - otomatis terdeteksi tanpa perlu restart server.
+
 Output per sesi:
     gula_darah_mg_dl, kolesterol_mg_dl, asam_urat_mg_dl,
     sistolik_mmhg, diastolik_mmhg
@@ -14,7 +19,6 @@ Output per sesi:
 
 from __future__ import annotations
 
-from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -29,20 +33,27 @@ FEATURES = [
     "bpm", "age_years", "gender_code",
 ]
 
+_cache: dict | None = None
+_cache_mtime: float | None = None
+
 
 def is_calibration_model_available() -> bool:
     return ARTIFACT_PATH.exists()
 
 
-@lru_cache(maxsize=1)
 def _load_artifact() -> dict:
-    import joblib
+    global _cache, _cache_mtime
     if not ARTIFACT_PATH.exists():
         raise FileNotFoundError(
             f"Calibration model not found at {ARTIFACT_PATH}. "
             "Run `python model/train_mlp_calibration.py` after collecting calibration data."
         )
-    return joblib.load(ARTIFACT_PATH)
+    mtime = ARTIFACT_PATH.stat().st_mtime
+    if _cache is None or mtime != _cache_mtime:
+        import joblib
+        _cache = joblib.load(ARTIFACT_PATH)
+        _cache_mtime = mtime
+    return _cache
 
 
 def predict_vitals(
