@@ -278,14 +278,14 @@ Mengoordinasikan pengujian smartband kelima.
 ## 2 September 2026 - Koordinasi Pengujian 5 Smartband (- menit)
 
 **Kegiatan:**
-Mengoordinasikan pengujian smartband kelima.
+Mengoordinasikan pengujian smartband kelima, sekaligus melakukan pembelian strip kolesterol tambahan.
 
 **Narasi & Indikator Capaian:**
-Mengoordinasikan pelaksanaan pengujian kelima smartband ANTARAGA, mencakup penjadwalan sesi dengan relawan baru yang komposisinya disesuaikan dengan prioritas subjek yang ditetapkan sebelumnya, memastikan kelengkapan berkas informed consent, serta memeriksa kesiapan alat ukur medis pembanding sebelum sesi berlangsung.
+Mengoordinasikan pelaksanaan pengujian kelima smartband ANTARAGA, mencakup penjadwalan sesi dengan relawan baru yang komposisinya disesuaikan dengan prioritas subjek yang ditetapkan sebelumnya, memastikan kelengkapan berkas informed consent, serta memeriksa kesiapan alat ukur medis pembanding sebelum sesi berlangsung. Selain itu, dilakukan pembelian strip kolesterol tambahan sebagai kelengkapan alat ukur pendukung pengujian, mengingat persediaan strip yang ada perlu ditambah untuk mendukung sesi-sesi pengujian berikutnya.
 
-Indikator capaian: terlaksananya pengujian kelima sesuai jadwal dengan kelengkapan dokumen persetujuan relawan, serta terpenuhinya sebagian target komposisi subjek yang telah direncanakan.
+Indikator capaian: terlaksananya pengujian kelima sesuai jadwal dengan kelengkapan dokumen persetujuan relawan, terpenuhinya sebagian target komposisi subjek yang telah direncanakan, serta tersedianya kelengkapan alat ukur pendukung (strip kolesterol tambahan) untuk keberlanjutan sesi pengujian.
 
-📸 `KADEK_koordinasi sesi kelima.png`, `KADEK_kelengkapan informed consent sesi kelima.png`
+📸 `KADEK_koordinasi sesi kelima.png`, `KADEK_kelengkapan informed consent sesi kelima.png`, `KADEK_bukti pembelian strip kolesterol.png`
 
 ---
 

@@ -391,200 +391,77 @@ Writing Committee for the PERSIST Collaborators (2025) "Long-term risk of stroke
 | 11 | Latensi transmisi | Diukur < 2 detik dari Wi-Fi smartband ke VPS, memenuhi target < 3 detik | <!-- GAMBAR: dokumentasi pengukuran latensi. Sumber: Drive 2 Agustus 2026 --> |
 | 12 | Pembacaan Heart Rate (BPM) | BPM dihitung server via autokorelasi FFT pada sinyal inframerah setelah penyaring lonjakan 4 lapis; dikoreksi manual pada 2 dari 6 kasus awal yang mengalami kesalahan oktaf (lihat Tabel L.3b) | <!-- GAMBAR: grafik perbandingan BPM tersimpan vs hitung ulang --> |
 
-**Tabel L.3b Verifikasi Perhitungan Ulang BPM (Koreksi Oktaf)**
+**Tabel L.3b Verifikasi Perhitungan Ulang BPM (Koreksi Oktaf) -- Seluruh 11 Subjek**
 
-| Subjek | BPM Tersimpan | BPM Hitung Ulang | Rasio | Tindakan |
+| Subjek | BPM Tersimpan (Awal) | BPM Hitung Ulang | Rasio | Tindakan |
 |---|---|---|---|---|
 | S001 | 70,1 | 70,3 | 1,003 | Tidak diubah |
 | S002 | 93,6 | 91,4 | 0,977 | Tidak diubah |
-| S003 | 42,9 | 84,0 | 1,959 | Diperbaiki (kesalahan oktaf) |
+| S003 | 42,9 | 84,0 | 1,959 | Diperbaiki -> 84,0 (kesalahan oktaf) |
 | S004 | 103,1 | 104,4 | 1,012 | Tidak diubah |
 | S005 | 63,9 | 65,2 | 1,020 | Tidak diubah |
-| S006 | 40,9 | 82,6 | 2,020 | Diperbaiki (kesalahan oktaf) |
+| S006 | 40,9 | 82,6 | 2,020 | Diperbaiki -> 82,6 (kesalahan oktaf) |
+| S007 | 81,6 | 43,0 | 0,527 | **Tidak diubah** -- hasil hitung ulang gagal lolos verifikasi (confidence metode autokorelasi 0,177, di bawah ambang 0,30 sistem sendiri); nilai lama tetap dipakai |
+| S008 | 88,4 | -- | -- | Tidak bisa diverifikasi -- sinyal tersimpan cuma ~2 detik (di bawah minimum 4 detik yang dibutuhkan algoritme manapun) |
+| S009 | 51,2 | 60,9 | 1,189 | Belum diputuskan -- bukan pola oktaf yang bersih (rasio jauh dari 2,0/0,5), butuh alat pembanding untuk memastikan |
+| S010 | 81,0 | 82,1 | 1,014 | Tidak diubah |
+| S011 | 42,7 | 45,0 (endpoint recompute) / **83,7** (puncak spektrum murni tanpa gerbang oktaf) | 1,054 (menyesatkan) | **Diperbaiki -> 83,7** -- dikonfirmasi lewat alat pembanding (oximeter/tensimeter, ~83 bpm) yang dicatat operator saat sesi; endpoint recompute otomatis TIDAK menandai ini karena nilai lama dan hasil hitung ulangnya kebetulan sama-sama salah dengan cara yang mirip (lihat pembahasan) |
 
-Dua pembacaan yang mendekati setengah nilai kanal lain diperbaiki melalui koreksi oktaf. Mekanisme server juga dilengkapi gerbang periodisitas, batas perubahan fisiologis, dan median bergulir untuk menekan lonjakan.
+Dua pembacaan (S003, S006) yang mendekati setengah nilai kanal lain diperbaiki melalui koreksi oktaf otomatis. S007 dan S011 ternyata **tidak bisa diandalkan lewat perbandingan rasio otomatis saja**: S007 karena sinyal aslinya sendiri terlalu bising untuk metode apa pun (confidence rendah di dua algoritme independen), dan S011 karena nilai lama dan hasil hitung ulang endpoint kebetulan sama-sama terjebak di frekuensi setengahnya, sehingga rasionya terlihat "wajar" (1,054) padahal keduanya meleset -- baru ketahuan setelah dicek silang terhadap puncak spektrum murni dan alat pembanding sungguhan. Mekanisme server juga dilengkapi gerbang periodisitas, batas perubahan fisiologis, dan median bergulir untuk menekan lonjakan sesaat.
 
 ### 1.4 Pengujian Terintegrasi pada Relawan
 
 Enam kegiatan pengujian tercatat pada logbook sampai 5 September 2026. Sebelas kode subjek (S001-S011) [PERLU DICEK: sesuaikan setelah logbook diperbarui sore ini] telah dipakai pada sesi kalibrasi. Identitas subjek disamarkan untuk menjaga kerahasiaan. Bagian ini menyajikan tiga hal per relawan: data profil, perbandingan alat medis vs prediksi MLP, dan hasil deteksi risiko stroke — persis seperti yang sudah ditampilkan di laporan cetak per-subjek (`https://antaraga.web.id/v1/calibrate/{id}/laporan.html`), cuma direkap jadi satu tabel untuk semua relawan sekaligus.
 
-**Tabel L.4a Data Profil Relawan** (satu kartu per subjek, format sama dengan "Data Subjek" di laporan cetak individual)
+**Tabel L.4a Data Profil Relawan** (field jadi baris, subjek jadi kolom, dikelompokkan maksimal 4 subjek per tabel supaya tetap 5 kolom dan enak dicetak A4)
 
-**Subjek S001**
+**Tabel L.4a.1 -- Subjek S001 s.d. S004**
 
-| Field | Nilai |
-|---|---|
-| Usia | 20 |
-| Gender | L |
-| Kondisi Pengambilan | Sewaktu |
-| Merokok | [PERLU DIISI] |
-| Riwayat Penyakit Jantung | [PERLU DIISI] |
-| Status Bekerja | [PERLU DIISI] |
-| Tipe Tempat Tinggal | [PERLU DIISI] |
-| Riwayat Diabetes | [PERLU DIISI] |
-| Riwayat Stroke Keluarga | Belum tercatat |
-| Riwayat Stroke Pribadi | Belum tercatat |
-| Tanggal Pengujian | 3 Agustus 2026 |
+| Field | S001 | S002 | S003 | S004 |
+|---|---|---|---|---|
+| Usia | 20 | 57 | 75 | 70 |
+| Gender | L | P | P | P |
+| Kondisi Pengambilan | Sewaktu | Sewaktu | Sewaktu | Sewaktu |
+| Merokok | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] |
+| Riwayat Penyakit Jantung | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] |
+| Status Bekerja | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] |
+| Tipe Tempat Tinggal | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] |
+| Riwayat Diabetes | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] |
+| Riwayat Stroke Keluarga | Belum tercatat | Belum tercatat | Belum tercatat | Belum tercatat |
+| Riwayat Stroke Pribadi | Belum tercatat | Belum tercatat | Belum tercatat | Belum tercatat |
+| Tanggal Pengujian | 3 Agustus 2026 | 6 Agustus 2026 | 6 Agustus 2026 | 10 Agustus 2026 |
 
-**Subjek S002**
+**Tabel L.4a.2 -- Subjek S005 s.d. S008**
 
-| Field | Nilai |
-|---|---|
-| Usia | 57 |
-| Gender | P |
-| Kondisi Pengambilan | Sewaktu |
-| Merokok | [PERLU DIISI] |
-| Riwayat Penyakit Jantung | [PERLU DIISI] |
-| Status Bekerja | [PERLU DIISI] |
-| Tipe Tempat Tinggal | [PERLU DIISI] |
-| Riwayat Diabetes | [PERLU DIISI] |
-| Riwayat Stroke Keluarga | Belum tercatat |
-| Riwayat Stroke Pribadi | Belum tercatat |
-| Tanggal Pengujian | 6 Agustus 2026 |
+| Field | S005 | S006 | S007 | S008 |
+|---|---|---|---|---|
+| Usia | 76 | 75 | 75 | 62 |
+| Gender | L | P | L | L |
+| Kondisi Pengambilan | Sewaktu | Sewaktu | Sewaktu | Sewaktu |
+| Merokok | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] |
+| Riwayat Penyakit Jantung | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] |
+| Status Bekerja | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] |
+| Tipe Tempat Tinggal | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] |
+| Riwayat Diabetes | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] |
+| Riwayat Stroke Keluarga | Belum tercatat | Belum tercatat | Belum tercatat | Belum tercatat |
+| Riwayat Stroke Pribadi | Belum tercatat | Belum tercatat | Belum tercatat | Belum tercatat |
+| Tanggal Pengujian | 10 Agustus 2026 | 14 Agustus 2026 | 2 September 2026 | 2 September 2026 |
 
-**Subjek S003**
+**Tabel L.4a.3 -- Subjek S009 s.d. S011**
 
-| Field | Nilai |
-|---|---|
-| Usia | 75 |
-| Gender | P |
-| Kondisi Pengambilan | Sewaktu |
-| Merokok | [PERLU DIISI] |
-| Riwayat Penyakit Jantung | [PERLU DIISI] |
-| Status Bekerja | [PERLU DIISI] |
-| Tipe Tempat Tinggal | [PERLU DIISI] |
-| Riwayat Diabetes | [PERLU DIISI] |
-| Riwayat Stroke Keluarga | Belum tercatat |
-| Riwayat Stroke Pribadi | Belum tercatat |
-| Tanggal Pengujian | 6 Agustus 2026 |
-
-**Subjek S004**
-
-| Field | Nilai |
-|---|---|
-| Usia | 70 |
-| Gender | P |
-| Kondisi Pengambilan | Sewaktu |
-| Merokok | [PERLU DIISI] |
-| Riwayat Penyakit Jantung | [PERLU DIISI] |
-| Status Bekerja | [PERLU DIISI] |
-| Tipe Tempat Tinggal | [PERLU DIISI] |
-| Riwayat Diabetes | [PERLU DIISI] |
-| Riwayat Stroke Keluarga | Belum tercatat |
-| Riwayat Stroke Pribadi | Belum tercatat |
-| Tanggal Pengujian | 10 Agustus 2026 |
-
-**Subjek S005**
-
-| Field | Nilai |
-|---|---|
-| Usia | 76 |
-| Gender | L |
-| Kondisi Pengambilan | Sewaktu |
-| Merokok | [PERLU DIISI] |
-| Riwayat Penyakit Jantung | [PERLU DIISI] |
-| Status Bekerja | [PERLU DIISI] |
-| Tipe Tempat Tinggal | [PERLU DIISI] |
-| Riwayat Diabetes | [PERLU DIISI] |
-| Riwayat Stroke Keluarga | Belum tercatat |
-| Riwayat Stroke Pribadi | Belum tercatat |
-| Tanggal Pengujian | 10 Agustus 2026 |
-
-**Subjek S006**
-
-| Field | Nilai |
-|---|---|
-| Usia | 75 |
-| Gender | P |
-| Kondisi Pengambilan | Sewaktu |
-| Merokok | [PERLU DIISI] |
-| Riwayat Penyakit Jantung | [PERLU DIISI] |
-| Status Bekerja | [PERLU DIISI] |
-| Tipe Tempat Tinggal | [PERLU DIISI] |
-| Riwayat Diabetes | [PERLU DIISI] |
-| Riwayat Stroke Keluarga | Belum tercatat |
-| Riwayat Stroke Pribadi | Belum tercatat |
-| Tanggal Pengujian | 14 Agustus 2026 |
-
-**Subjek S007**
-
-| Field | Nilai |
-|---|---|
-| Usia | 75 |
-| Gender | L |
-| Kondisi Pengambilan | Sewaktu |
-| Merokok | [PERLU DIISI] |
-| Riwayat Penyakit Jantung | [PERLU DIISI] |
-| Status Bekerja | [PERLU DIISI] |
-| Tipe Tempat Tinggal | [PERLU DIISI] |
-| Riwayat Diabetes | [PERLU DIISI] |
-| Riwayat Stroke Keluarga | Belum tercatat |
-| Riwayat Stroke Pribadi | Belum tercatat |
-| Tanggal Pengujian | 2 September 2026 |
-
-**Subjek S008**
-
-| Field | Nilai |
-|---|---|
-| Usia | 62 |
-| Gender | L |
-| Kondisi Pengambilan | Sewaktu |
-| Merokok | [PERLU DIISI] |
-| Riwayat Penyakit Jantung | [PERLU DIISI] |
-| Status Bekerja | [PERLU DIISI] |
-| Tipe Tempat Tinggal | [PERLU DIISI] |
-| Riwayat Diabetes | [PERLU DIISI] |
-| Riwayat Stroke Keluarga | Belum tercatat |
-| Riwayat Stroke Pribadi | Belum tercatat |
-| Tanggal Pengujian | 2 September 2026 |
-
-**Subjek S009**
-
-| Field | Nilai |
-|---|---|
-| Usia | 62 |
-| Gender | L |
-| Kondisi Pengambilan | Sewaktu |
-| Merokok | [PERLU DIISI] |
-| Riwayat Penyakit Jantung | [PERLU DIISI] |
-| Status Bekerja | [PERLU DIISI] |
-| Tipe Tempat Tinggal | [PERLU DIISI] |
-| Riwayat Diabetes | [PERLU DIISI] |
-| Riwayat Stroke Keluarga | Belum tercatat |
-| Riwayat Stroke Pribadi | Belum tercatat |
-| Tanggal Pengujian | 2 September 2026 |
-
-**Subjek S010**
-
-| Field | Nilai |
-|---|---|
-| Usia | — [PERLU DIISI, sore ini] |
-| Gender | — [PERLU DIISI, sore ini] |
-| Kondisi Pengambilan | — [PERLU DIISI, sore ini] |
-| Merokok | [PERLU DIISI] |
-| Riwayat Penyakit Jantung | [PERLU DIISI] |
-| Status Bekerja | [PERLU DIISI] |
-| Tipe Tempat Tinggal | [PERLU DIISI] |
-| Riwayat Diabetes | [PERLU DIISI] |
-| Riwayat Stroke Keluarga | Belum tercatat |
-| Riwayat Stroke Pribadi | Belum tercatat |
-| Tanggal Pengujian | [PERLU DIISI, sore ini] |
-
-**Subjek S011**
-
-| Field | Nilai |
-|---|---|
-| Usia | — [PERLU DIISI, sore ini] |
-| Gender | — [PERLU DIISI, sore ini] |
-| Kondisi Pengambilan | — [PERLU DIISI, sore ini] |
-| Merokok | [PERLU DIISI] |
-| Riwayat Penyakit Jantung | [PERLU DIISI] |
-| Status Bekerja | [PERLU DIISI] |
-| Tipe Tempat Tinggal | [PERLU DIISI] |
-| Riwayat Diabetes | [PERLU DIISI] |
-| Riwayat Stroke Keluarga | Belum tercatat |
-| Riwayat Stroke Pribadi | Belum tercatat |
-| Tanggal Pengujian | [PERLU DIISI, sore ini] |
+| Field | S009 | S010 | S011 |
+|---|---|---|---|
+| Usia | 62 | — [PERLU DIISI, sore ini] | — [PERLU DIISI, sore ini] |
+| Gender | L | — [PERLU DIISI, sore ini] | — [PERLU DIISI, sore ini] |
+| Kondisi Pengambilan | Sewaktu | — [PERLU DIISI, sore ini] | — [PERLU DIISI, sore ini] |
+| Merokok | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] |
+| Riwayat Penyakit Jantung | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] |
+| Status Bekerja | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] |
+| Tipe Tempat Tinggal | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] |
+| Riwayat Diabetes | [PERLU DIISI] | [PERLU DIISI] | [PERLU DIISI] |
+| Riwayat Stroke Keluarga | Belum tercatat | Belum tercatat | Belum tercatat |
+| Riwayat Stroke Pribadi | Belum tercatat | Belum tercatat | Belum tercatat |
+| Tanggal Pengujian | 2 September 2026 | [PERLU DIISI, sore ini] | [PERLU DIISI, sore ini] |
 
 > **Penting, ini bukan cuma sel kosong biasa:** kolom Merokok, Riwayat Penyakit Jantung, Status Bekerja, Tipe Tempat Tinggal, dan Riwayat Diabetes **memang tidak pernah ditanyakan/dicatat di sistem kalibrasi** (`CalibrationRecord` tidak punya kolom untuk field-field ini sama sekali — beda dari Profil di aplikasi mobile produksi yang memang punya field itu). Kalau tim punya catatan ini dari formulir informed consent/wawancara relawan, isi manual dari situ. Kolom Riwayat Stroke Keluarga/Pribadi *sudah ada* kolomnya di database, cuma belum pernah diisi untuk kesembilan relawan ini — isi lewat tombol edit di dashboard kalibrasi (✎), bukan ditebak.
 
@@ -613,60 +490,60 @@ Kategori di bawah dihitung dari aturan klinis manual yang sama dengan yang dipak
 
 ### 1.5 Evaluasi Model AI dan Pemrosesan Sinyal
 
-**XGBoost**
+Dipisah jadi tiga tabel per topik, tiap tabel diurutkan sesuai tanggal kejadian di logbook (bukan cuma dikelompokkan per topik) supaya dokumentasi yang ditempel di kolom kanan mengikuti alur pengerjaan sungguhan.
 
-| No | Keterangan | Sumber Dokumentasi |
-|---|---|---|
-| 1 | Confusion matrix | Data uji (n=1.533): TN=553, FP=905, FN=2, TP=73 (dari `model/artifacts/metrics.json`) <!-- GAMBAR: visualisasikan sebagai heatmap, bisa dari model/xgboost_stroke_training.ipynb --> |
-| 2 | Precision-Recall curve | <!-- GAMBAR: idem, plot PR curve dari proses tuning --> |
-| 3 | ROC curve | <!-- GAMBAR: idem, kurva ROC-AUC 0,823 --> |
-| 4 | Hasil cross-validation | RandomizedSearchCV, StratifiedKFold 5 lipatan, 40 kombinasi parameter x 5 lipatan = 200 proses pelatihan (lihat Tabel 4.3) |
-| 5 | Perbandingan model | XGBoost (AP 0,2313) vs HistGradientBoosting (AP 0,2281) -- lihat Tabel 4.3 |
-| 6 | Threshold 0,042 | Ambang deteksi biner, dipilih dari evaluasi Out-of-Fold untuk memaksimalkan recall (0,973) |
-| 7 | Threshold 0,705 | Ambang kategori risiko tinggi, dipilih dari F1-score terbaik (0,2946) |
-| 8 | Recall 97,3% | 73 dari 75 kasus stroke pada data uji berhasil terdeteksi pada threshold 0,042 |
-| 9 | Parameter/tuning penting | Hasil final `RandomizedSearchCV`: `scale_pos_weight`=19,55; `n_estimators`=100; `max_depth`=4; `learning_rate`=0,03; `min_child_weight`=5; `subsample`=1,0; `colsample_bytree`=1,0; `reg_lambda`=1,0 (`n_estimators` dst. dari `model/artifacts/metrics.json` model produksi) |
-| 10 | Kategori risiko per-relawan (laporan kalibrasi & Tabel L.4c) | Bukan probabilitas mentah dari model produksi di atas — laporan kalibrasi per-subjek dan Tabel L.4c memakai aturan klinis manual (jumlah faktor risiko terpenuhi + usia; riwayat stroke pribadi otomatis "Tinggi") supaya kategori bisa dijelaskan alasannya tanpa membocorkan angka probabilitas. Lihat kode `_kategori_klinis_manual()` di `api/calib_report.py`. |
+**Tabel L.5a Pemrosesan Sinyal (Sensor -> Server)**
 
-**MLP**
+| No | Kegiatan | Tanggal | Dokumentasi |
+|---|---|---|---|
+| 1 | Pengembangan firmware akuisisi sinyal sensor SON1303 (kanal hijau) | 7 Juli 2026 | <!-- GAMBAR: cuplikan kode/log firmware akuisisi --> |
+| 2 | Pengujian sensor MAX30102 -- ditemukan alamat I2C tidak terbaca (cacat pabrik) | 10 Juli 2026 | *(sudah ada di draf lama: foto sensor + serial monitor)* |
+| 3 | Pembelian dan pengujian sensor MAX30102 pengganti | 11 Juli 2026 | <!-- GAMBAR: foto sensor pengganti + hasil uji --> |
+| 4 | Perbaikan interferensi noise 50 Hz pada SON1303 (penambahan ferrite bead) | *[PERLU DICEK: tanggal spesifik di logbook]* | *(sudah ada di draf lama: grafik adc_raw sebelum/sesudah)* |
+| 5 | Pemindahan algoritma pemrosesan sinyal (bandpass Butterworth 0,5-5 Hz, autokorelasi FFT untuk BPM) dari firmware ke server; dirilisnya dashboard web pemantauan sinyal tiga kanal secara real-time | 2 Agustus 2026 | <!-- GAMBAR: screenshot dashboard pemantauan sinyal. Drive: https://drive.google.com/drive/folders/1wQFfujfRy92qY0tw745Bu_1Rl8RG64Am --> |
+| 6 | Pengujian BPM dan analisis error terhadap oximeter/tensimeter sebagai alat pembanding | 2 Agustus 2026 | *(link Drive sama seperti baris 5)* |
+| 7 | Verifikasi ulang BPM dari sinyal mentah tersimpan (koreksi kesalahan oktaf) | berkelanjutan, terbaru 7-8 September 2026 | Lihat Tabel L.3b |
 
-| No | Keterangan | Sumber Dokumentasi |
-|---|---|---|
-| 1 | Pipeline lima model | Satu MLPRegressor terpisah per parameter (gula darah, kolesterol, asam urat, sistolik, diastolik), fitur input: ir_dc_mean, ir_ac_p2p, red_dc_mean, red_ac_p2p, bpm, usia, kode gender |
-| 2 | Screenshot dashboard pelatihan | <!-- GAMBAR: screenshot tab "Pelatihan MLP" dashboard antaraga.web.id, ambil saat finalisasi laporan --> |
-| 3 | Data kalibrasi | 9 subjek (S001-S009) saat ini; akan jadi 11 subjek (+S010, S011) setelah logbook diperbarui sore ini — lihat Tabel 4.6/L.4b, perbarui bersamaan dengan Tabel 4.4 |
-| 4 | Grafik training | <!-- GAMBAR: scatter plot prediksi vs aktual, bisa diunduh dari tombol "Unduh Laporan HTML" di dashboard --> |
-| 5 | MAE/RMSE/MAPE/R² | Lihat Tabel 4.4 (BAB 4.4.2) |
+**Tabel L.5b Model XGBoost (Prediksi Risiko Stroke)**
+
+| No | Kegiatan | Tanggal | Dokumentasi |
+|---|---|---|---|
+| 1 | Studi dataset dan model baseline XGBoost | 7 Juli 2026 | <!-- GAMBAR: cuplikan notebook studi awal --> |
+| 2 | Studi penanganan class imbalance; rasio pembobotan awal dihitung 1:19,52 dari keseluruhan dataset | 10 Juli 2026 | <!-- GAMBAR: cuplikan perhitungan rasio kelas --> |
+| 3 | Pengujian model tanpa pembobotan -- membuktikan kelemahan akibat class imbalance (recall sangat rendah) | 11 Juli 2026 | <!-- GAMBAR: metrik model tanpa pembobotan --> |
+| 4 | Penyetelan hiperparameter dan komparasi XGBoost vs HistGradientBoosting | 13-14 Juli 2026 | <!-- GAMBAR: cuplikan RandomizedSearchCV --> |
+| 5 | Validasi akhir: XGBoost ditetapkan final (AP 0,2313 vs 0,2281 HistGradientBoosting), `scale_pos_weight`=19,55 | 16 Juli 2026 | <!-- GAMBAR: Gambar 4.4 (bar chart perbandingan) --> |
+| 6 | Evaluasi performa recall model final pada data uji | 18 Juli 2026 | <!-- GAMBAR: hasil evaluasi recall --> |
+| 7 | Optimasi threshold klasifikasi -- ditetapkan 0,042 (deteksi) dan 0,705 (risiko tinggi) | 21 Juli 2026 | <!-- GAMBAR: kurva Precision-Recall --> |
+| 8 | Confusion matrix, ROC-AUC, dan parameter tuning final model produksi | -- (rangkuman `model/artifacts/metrics.json`) | Data uji (n=1.533): TN=553, FP=905, FN=2, TP=73; ROC-AUC=0,823; `n_estimators`=100, `max_depth`=4, `learning_rate`=0,03, `min_child_weight`=5, `subsample`=1,0, `colsample_bytree`=1,0, `reg_lambda`=1,0 <!-- GAMBAR: visualisasikan confusion matrix sebagai heatmap --> |
+| 9 | Kategori risiko per-relawan yang ditampilkan di laporan kalibrasi (Tabel L.4c) | -- | Bukan probabilitas mentah dari model produksi di atas -- laporan kalibrasi per-subjek memakai aturan klinis manual (jumlah faktor risiko + usia; riwayat stroke pribadi otomatis "Tinggi") supaya kategorinya bisa dijelaskan alasannya tanpa membocorkan angka probabilitas. Lihat `_kategori_klinis_manual()` di `api/calib_report.py`. |
+
+**Tabel L.5c Model MLP (Estimasi Vital dari Sinyal PPG)**
+
+| No | Kegiatan | Tanggal | Dokumentasi |
+|---|---|---|---|
+| 1 | Pengembangan antarmuka kalibrasi dashboard, untuk merekam pasangan sinyal PPG dan nilai alat invasif | 5 Agustus 2026 | <!-- GAMBAR: screenshot antarmuka kalibrasi --> |
+| 2 | Rancangan pipeline lima model MLP (satu `MLPRegressor` per parameter: gula darah, kolesterol, asam urat, sistolik, diastolik), fitur input: ir_dc_mean, ir_ac_p2p, red_dc_mean, red_ac_p2p, bpm, usia, kode gender | pertengahan Agustus 2026 | <!-- GAMBAR: diagram pipeline / cuplikan notebook rancangan --> |
+| 3 | Pelatihan awal model dari data kalibrasi yang terkumpul | 16 Agustus 2026 | <!-- GAMBAR: screenshot dashboard pelatihan --> |
+| 4 | Evaluasi kuantitatif (Leave-One-Subject-Out: MAE, RMSE, R²), diperbarui tiap penambahan data kalibrasi baru | berkelanjutan, terbaru 2-7 September 2026 (9-11 subjek) | Lihat Tabel 4.4 (BAB 4.4.2) -- unduh laporan HTML lengkap lewat dashboard untuk grafik scatter prediksi vs aktual |
 
 ### 1.6 Bukti Luaran Digital ANTARAGA
 
-**Aplikasi Mobile**
+**Tabel L.6a Aplikasi Mobile**
 
-| No | Keterangan | Dokumentasi |
-|---|---|---|
-| 1 | Halaman login/registrasi | <!-- GAMBAR: screenshot aplikasi --> |
-| 2 | Dashboard utama | <!-- GAMBAR: screenshot aplikasi --> |
-| 3 | Statistik harian | <!-- GAMBAR: screenshot aplikasi --> |
-| 4 | Asesmen ABCD2 + hasil | <!-- GAMBAR: screenshot aplikasi --> |
+| No | Kegiatan | Tanggal | Dokumentasi |
+|---|---|---|---|
+| 1 | Inisialisasi aplikasi mobile Flutter | 21 Juni 2026 | <!-- GAMBAR: screenshot commit/scaffold awal --> |
+| 2 | Penyelesaian antarmuka aplikasi mobile (login, registrasi, profil, dashboard) | 2 Juli 2026 | <!-- GAMBAR: screenshot halaman login/registrasi/dashboard --> |
+| 3 | Integrasi aplikasi mobile dengan backend dan pengembangan fitur distribusi APK | 23 Agustus 2026 | <!-- GAMBAR: screenshot statistik harian & asesmen ABCD2 --> |
+| 4 | Persiapan akun Google Play Console dan pembayaran biaya pendaftaran | 29 Agustus 2026 | <!-- GAMBAR: screenshot Google Play Console (sensor/crop email & info sensitif sebelum ditempel) -- nama aplikasi ANTARAGA, status pendaftaran/rilis, tanggal publikasi jika sudah tercantum. Drive: https://drive.google.com/drive/folders/107l7Drt_-EqX-IKg4z_x3ub-AA2ruDBM --> |
 
-**Pendaftaran Google Play**
+**Tabel L.6b Video Simulasi dan Media Sosial**
 
-*[PERLU DICEK/DILENGKAPI — sertakan:]*
-- Screenshot Google Play Console
-- Nama aplikasi: ANTARAGA
-- Status pendaftaran/rilis saat ini
-- Tanggal publikasi jika sudah tercantum
-- **Sensor/crop email dan informasi sensitif sebelum menempel screenshot** (sesuai kesepakatan tim soal data yang boleh dipublikasikan)
-
-Sumber logbook: 29 Agustus 2026, "tersiapkannya akun Google Play Console beserta pembayaran biaya pendaftaran" (Drive: https://drive.google.com/drive/folders/107l7Drt_-EqX-IKg4z_x3ub-AA2ruDBM).
-
-**Video Simulasi dan Pengujian**
-
-Tautan video: <https://drive.google.com/file/d/13KHnk6g6ESceC37GzXaLVtgXvqBJEyDb/view?usp=drive_link>
-
-**Media Sosial**
-
-<!-- GAMBAR: screenshot semua konten (4 unggahan: 1 Juni, 6 Juni, 4 Juli, 29 Agustus) -- link Drive per tanggal ada di Lampiran 3 -->
+| No | Kegiatan | Tanggal | Dokumentasi |
+|---|---|---|---|
+| 1 | Video simulasi dan pengujian ANTARAGA | -- | <https://drive.google.com/file/d/13KHnk6g6ESceC37GzXaLVtgXvqBJEyDb/view?usp=drive_link> |
+| 2 | Publikasi media sosial (4 unggahan) | 1 Juni, 6 Juni, 4 Juli, 29 Agustus 2026 | <!-- GAMBAR: screenshot semua konten -- link Drive per tanggal ada di Lampiran 3 -->
 
 ### 1.7 Validasi Medis dan Kepatuhan Etik
 

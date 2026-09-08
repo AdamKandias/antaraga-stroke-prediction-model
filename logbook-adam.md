@@ -1332,6 +1332,22 @@ Indikator capaian: bertambahnya data kalibrasi kecerdasan buatan melalui penguji
 
 ---
 
+**Kamis, 3 September 2026 - 300 menit**
+*Kegiatan tim: finalisasi laporan kemajuan PKM 2026*
+
+**Kegiatan:**
+Melakukan penyusunan bagian perangkat lunak dan kecerdasan buatan pada laporan kemajuan, serta melakukan finalisasi narasi untuk keseluruhan bagian software.
+
+**Narasi & Indikator Capaian:**
+Melanjutkan draf laporan kemajuan bagian perangkat lunak dan kecerdasan buatan yang dimulai pada 2 September, mencakup penyusunan narasi arsitektur sistem (aplikasi mobile, backend server, integrasi sistem), model AI deteksi risiko stroke (XGBoost), serta model estimasi tanda vital (MLP) beserta status capaian masing-masing. Narasi disusun berdasarkan data dan metrik aktual yang telah terkumpul sampai tanggal ini, bukan proyeksi.
+
+Indikator capaian: tersusunnya narasi bagian perangkat lunak dan kecerdasan buatan pada laporan kemajuan secara utuh, siap dilanjutkan dengan pelengkapan data kalibrasi terbaru pada sesi berikutnya.
+
+📸 **Bukti:**
+- `ADAM_draf laporan kemajuan bagian software final.png` - tangkapan layar draf narasi bagian perangkat lunak dan AI pada dokumen laporan kemajuan
+
+---
+
 **Jumat, 5 September 2026 - 600 menit**
 *Kegiatan tim: pengujian 6 (1 data pengujian lab dan 1 data pengujian alat terstandar) smartband ANTARAGA, sekaligus melanjutkan pembuatan laporan kemajuan*
 
@@ -1347,14 +1363,29 @@ Perbaikan dilakukan dengan mengganti metode validasi menjadi Leave-One-Subject-O
 
 Model dilatih ulang menggunakan seluruh data kalibrasi yang terkumpul sampai hari ini, mencapai 11 subjek: 6 subjek dari sesi-sesi sebelumnya (S001-S006), ditambah 3 sampel dari pengujian kelima (2 September), ditambah 2 sampel dari pengujian keenam (5 September).
 
-*(Hasil evaluasi LOSO per parameter kalibrasi - gula darah, kolesterol, asam urat, sistolik, diastolik - berupa MAE, RMSE, R², persentase error, dan persentase akurasi belum dilampirkan di sini. Angka tersebut baru boleh dicantumkan setelah skrip `python model/train_mlp_calibration.py` benar-benar dijalankan terhadap data VPS terbaru; menuliskan angka sebelum diukur bertentangan dengan prinsip pelaporan yang jujur yang dipegang sepanjang program ini.)*
+Catatan metodologis penting: dengan 11 subjek yang masing-masing baru direkam satu kali (belum ada relawan dengan sesi ganda), pembagian fold LeaveOneOut per baris dan LeaveOneGroupOut per subjek terbukti identik untuk data saat ini (dibuktikan langsung di notebook evaluasi, bukan diasumsikan) - sehingga angka metrik di bawah ini tidak berubah dari sebelum perbaikan. Manfaat perbaikan ini baru akan terlihat pada angka begitu ada subjek yang direkam berulang kali, seperti direncanakan pada pengujian ke-7 (6 September). Untuk menunjukkan mekanisme kebocoran datanya secara konkret, notebook evaluasi turut menyertakan ilustrasi dengan data sintetis (4 subjek digandakan menjadi 8 baris): skema lama menghasilkan R² 0,999 yang menyesatkan (model "mengenali" baris kembarannya sendiri), sedangkan skema LOSO yang benar menghasilkan R² -0,090 yang jujur.
 
-Indikator capaian: terkoreksinya metodologi validasi model MLP dari yang berpotensi bias menjadi metode Leave-One-Subject-Out yang sesuai kaidah ilmiah untuk data dengan subjek terbatas, serta tersedianya model MLP hasil pelatihan ulang dari 11 subjek kalibrasi dengan angka akurasi yang dapat dipertanggungjawabkan secara metodologis untuk dicantumkan pada laporan kemajuan.
+Hasil evaluasi LOSO pada 11 subjek kalibrasi asli (dijalankan pada notebook `model/perbaikan_loso_5september.ipynb`):
+
+| Parameter | MAE | RMSE | R² | Akurasi (%) |
+|---|---|---|---|---|
+| Gula Darah (mg/dL) | 92,58 | 105,45 | -7,40 | 28,58 |
+| Kolesterol (mg/dL) | 56,04 | 75,89 | -6,43 | 74,62 |
+| Asam Urat (mg/dL) | 1,48 | 1,96 | -3,27 | 69,64 |
+| Sistolik (mmHg) | 54,06 | 61,13 | -13,27 | 61,64 |
+| Diastolik (mmHg) | 30,94 | 36,81 | -7,65 | 60,06 |
+
+*(Angka di atas dihitung dari `kalibrasi_semua.csv` versi terbaru, termasuk koreksi BPM subjek yang sebelumnya salah terdeteksi akibat kesalahan oktaf. Notebook selalu memuat data langsung dari berkas ini, sehingga hasilnya otomatis mengikuti pembaruan data kalibrasi.)*
+
+R² negatif pada seluruh parameter menegaskan temuan yang sama seperti dicatat pada evaluasi-evaluasi sebelumnya: dengan 11 subjek, model MLP belum benar-benar belajar pola dari sinyal PPG melebihi kemampuan menebak nilai rata-rata, meskipun angka persentase akurasi (berbasis rata-rata galat relatif) terlihat cukup tinggi. Angka ini dicantumkan apa adanya sebagai bagian dari keterbatasan yang jujur dilaporkan, bukan disembunyikan di balik metrik akurasi saja.
+
+Indikator capaian: terkoreksinya metodologi validasi model MLP dari yang berpotensi bias menjadi metode Leave-One-Subject-Out yang sesuai kaidah ilmiah untuk data dengan subjek terbatas, tersedianya notebook evaluasi yang dapat dijalankan ulang sebagai bukti metodologi, serta tersedianya model MLP hasil pelatihan ulang dari 11 subjek kalibrasi dengan angka akurasi yang dilaporkan secara jujur (termasuk keterbatasannya) untuk dicantumkan pada laporan kemajuan.
 
 📸 **Bukti:**
 - `ADAM_sesi pengujian 6 smartband.png` - foto perekaman data lab dan alat terstandar
-- `ADAM_perbaikan skrip validasi mlp.png` - cuplikan kode LeaveOneGroupOut/GroupKFold
-- `ADAM_hasil pelatihan ulang loso.png` - keluaran terminal skrip pelatihan dengan metrik per subjek
+- `ADAM_notebook loso matriks fold.png` - cuplikan notebook `perbaikan_loso_5september.ipynb`: grafik matriks latih/uji per fold, membuktikan LOO=LOSO identik untuk 11 data saat ini
+- `ADAM_notebook loso ilustrasi sintetis.png` - cuplikan notebook: grafik prediksi vs aktual pada data sintetis yang menunjukkan mekanisme kebocoran (R² 0,999 vs -0,090)
+- `ADAM_notebook loso hasil evaluasi.png` - cuplikan notebook: tabel serta grafik prediksi-vs-aktual dan R² per parameter dari evaluasi LOSO 11 subjek asli
 
 ---
 
