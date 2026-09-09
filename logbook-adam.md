@@ -1145,6 +1145,22 @@ Proses penyerahan berkas HKI ke sentra HKI kampus PENS. Melengkapi lampiran kode
 
 **Sabtu, 16 Agustus 2026 - 450 menit**
 
+**Kegiatan:**
+Menerapkan rancangan model MLP kalibrasi ke kode pelatihan produksi (`api/vital_model_training.py`), menyambungkannya ke tombol latih pada dashboard web, lalu melatihnya memakai seluruh data kalibrasi yang sudah terkumpul dari empat sesi pengujian smartband (6 relawan). Sekaligus dilakukan pemeriksaan kejujuran hasil: dibandingkan dengan tebakan paling sederhana (rata-rata nilai subjek lain, tanpa memakai sensor sama sekali) untuk memastikan model benar-benar belajar dari sinyal PPG, bukan sekadar menghafal data latih.
+
+**Hasil:**
+- Pipeline pelatihan MLP berjalan penuh: artefak (`mlp_calibration.joblib`, `mlp_calibration_metrics.json`) tersimpan dan dapat dilatih ulang lewat satu klik tombol di dashboard, tanpa perlu masuk terminal
+- **Ditemukan**: akurasi model masih rendah - R2 negatif pada mayoritas parameter, berarti model kalah dari sekadar menebak nilai rata-rata. Sebabnya jelas: 7 fitur dilatih dari hanya 5-6 baris data (subjek), jauh dari cukup
+- Teridentifikasi tiga persoalan komposisi data yang harus diperbaiki pada sesi pengujian berikutnya: tidak ada subjek berkolesterol sehat (5 dari 5 di atas 200 mg/dL), usia berhimpit dengan kondisi penyakit (satu-satunya subjek muda juga satu-satunya yang sehat - berisiko membuat model menebak dari usia saja tanpa memakai sensor), dan jumlah subjek yang masih jauh dari 30 agar validasi silang bermakna
+- Karena keterbatasan data ini, mulai studi literatur model regresi lain yang lebih tahan terhadap data sedikit sebagai kandidat pengganti MLP: SVR dan XGBoost
+
+📸 **Bukti yang perlu dilampirkan:**
+- `ADAM_pipeline pelatihan mlp di dashboard.png` - tombol latih MLP dan hasil training di tab Kalibrasi
+- `model/pelatihan_mlp_16agustus.ipynb` - notebook evaluasi kejujuran hasil (R2 vs tebakan rata-rata) beserta tabel tiga persoalan komposisi data
+- `ADAM_metrik model mlp 16 agustus.png` - isi `model/artifacts/mlp_calibration_metrics.json` hasil pelatihan hari ini
+
+---
+
 ### Minggu ke-14 - 19–23 Agustus 2026
 
 ---
@@ -1185,7 +1201,45 @@ Memastikan integrasi aplikasi mobile Flutter dengan API backend secara menyeluru
 
 ### Minggu ke-15 - 26–30 Agustus 2026
 
+---
+
+**Rabu, 27 Agustus 2026 - 360 menit**
+*Kegiatan tim: Asistensi dan bimbingan rutin bersama dosen pendamping*
+
+**Kegiatan:**
+Menjalankan seluruh kandidat algoritma (13 model x 4 set fitur, logika identik `api/vital_model_training.py`) pada data kalibrasi 6 subjek yang tersedia, untuk membandingkan MLP secara nyata melawan SVR dan XGBoost - bukan berdasarkan asumsi dari literatur saja. Hasil perbandingan ini dibawa sebagai bahan bimbingan rutin bersama dosen pendamping, sekaligus membahas progres logbook, laporan kemajuan, hasil pengujian, rencana pengujian berikutnya, dan pembagian tugas tim untuk persiapan presentasi PKP2.
+
+**Hasil:**
+- Dari 52 kombinasi model x set fitur yang dicoba per parameter, varian MLP terbaik selalu tertinggal jauh dari varian SVR/XGBoost terbaik pada seluruh 5 parameter - untuk Sistolik dan Diastolik, MLP bahkan menempati peringkat terbawah dari seluruh kombinasi yang berhasil dievaluasi
+- Temuan ini didiskusikan bersama dosen pendamping sebagai dasar penentuan arah pengembangan model berikutnya
+- Disepakati bersama dosen pendamping bahwa pengembangan berikutnya dilakukan lewat evaluasi otomatis per parameter fisiologis (bukan satu algoritma dipaksakan untuk semua target), dengan SVR dan XGBoost sebagai kandidat inti pengganti MLP
+- Dosen pendamping turut memberikan masukan terkait hasil monev 3 yang telah dilaksanakan sebelumnya
+
+📸 **Bukti yang perlu dilampirkan:**
+- `model/evaluasi_svr_xgboost_27agustus.ipynb` - notebook perbandingan MLP vs SVR vs XGBoost per parameter, termasuk grafik dan tabel peringkat
+- `ADAM_sesi bimbingan dosen pendamping 27 agustus.png` - foto sesi asistensi
+- `ADAM_catatan masukan dosen pendamping 27 agustus.png` - catatan arahan dan masukan hasil monev 3
+
+---
+
 **Jumat, 29 Agustus 2026 - 300 menit**
+
+**Kegiatan:**
+Menindaklanjuti hasil evaluasi 27 Agustus dan arahan dosen pendamping, menjalankan seleksi otomatis model per parameter fisiologis (logika identik `api.vital_model_training.train_all`, satu sumber kebenaran yang sama dipakai endpoint dashboard `/v1/calibrate/train`) untuk menetapkan konfigurasi model final pengganti MLP. Selain itu menyiapkan bahan teknis peragaan sistem ANTARAGA yang sedang berjalan untuk mendukung konten media sosial ketiga, serta membuat akun Google Play Console dan menyelesaikan pembayaran biaya pendaftaran sebagai persiapan publikasi aplikasi mobile ANTARAGA.
+
+**Hasil:**
+- Konfigurasi model final (per 6 subjek yang tersedia saat ini) ditetapkan lewat seleksi otomatis: Gula Darah → KNN (k=5), Kolesterol → Ridge, Asam Urat → GradientBoosting, Sistolik → SVR (rbf), Diastolik → RandomForest. MLP tidak lagi menang pada parameter manapun
+- Konfigurasi ditandai sebagai sementara: akan otomatis diperbarui begitu data kalibrasi bertambah pada sesi pengujian berikutnya (lihat 2 dan 5 September) - pemenang SVR/XGBoost yang lebih menyeluruh baru terlihat setelah data bertambah
+- Dengan 6 subjek, status keterandalan seluruh parameter masih "TIDAK VALID" (n_subjects < 10) - dilaporkan apa adanya, bukan sebagai bukti kesiapan alat
+- Akun Google Play Console dibuat dan biaya pendaftaran diselesaikan sebagai persiapan publikasi aplikasi mobile ANTARAGA ke Google Play Store
+- Bahan teknis peragaan sistem ANTARAGA disiapkan untuk mendukung pembuatan konten media sosial ketiga
+
+📸 **Bukti yang perlu dilampirkan:**
+- `model/konfigurasi_final_svr_xgboost_29agustus.ipynb` - notebook seleksi otomatis dan tabel konfigurasi final per parameter
+- `ADAM_akun google play console dibuat.png` - dashboard Play Console dengan status pembayaran selesai
+- `ADAM_bahan teknis peragaan sistem antaraga.png` - bahan/rekaman peragaan sistem untuk konten medsos ketiga
+
+---
 
 **Sabtu, 30 Agustus 2026 - 300 menit**
 *Kegiatan tim: pengujian 5 smartband ANTARAGA*
@@ -1213,10 +1267,58 @@ Mengikuti pengujian smartband kelima untuk menambah data kalibrasi, dengan prior
 
 **Rabu, 2 September 2026 - 300 menit**
 
+**Kegiatan:**
+Mengikuti pengujian kelima smartband ANTARAGA bersama relawan, memperoleh 3 data kalibrasi baru (S007-S009). Konfigurasi model yang ditetapkan pada 29 Agustus dijalankan ulang dengan data yang sudah bertambah, untuk memeriksa apakah keputusan mengganti MLP dengan SVR/XGBoost tetap konsisten seiring data bertambah. Data baru ditambahkan ke dataset kalibrasi dan data latih model. Selain itu mulai menyusun draf Laporan Kemajuan bagian perkembangan software ANTARAGA (aplikasi mobile, backend server, integrasi sistem, dan model AI deteksi risiko stroke).
+
+**Hasil:**
+- Data kalibrasi bertambah dari 6 menjadi 9 subjek
+- Retraining otomatis: 4 dari 5 parameter (Gula Darah, Asam Urat, Sistolik, Diastolik) berpindah model pemenang setelah data bertambah, sementara Kolesterol tetap dimenangkan Ridge - konsisten dengan sifat seleksi otomatis yang memang dirancang mengikuti data, bukan dipatok manual
+- Gula Darah kini dimenangkan XGBoost - kemenangan XGBoost pertama sejak evaluasi 27 Agustus
+- Status keterandalan tetap "TIDAK VALID" (9 subjek masih di bawah 10)
+- Strip kolesterol tambahan dibeli sebagai kelengkapan alat ukur pendukung pengujian (koordinasi Ketua Tim)
+- Draf Laporan Kemajuan bagian software mulai disusun: perkembangan aplikasi mobile, backend server, integrasi sistem, dan model AI
+
+📸 **Bukti yang perlu dilampirkan:**
+- `model/pengujian_5_retraining_2september.ipynb` - notebook perbandingan konfigurasi model sebelum (6 subjek) dan sesudah (9 subjek) penambahan data
+- `ADAM_dataset kalibrasi bertambah 9 subjek.png` - tabel dataset kalibrasi di dashboard dengan subjek S007-S009
+- `ADAM_draf laporan kemajuan bagian software awal.png` - draf awal bagian software pada Laporan Kemajuan
+
+---
+
 **Kamis, 3 September 2026 - 300 menit**
+
+**Kegiatan:**
+Menyusun bagian perangkat lunak dan kecerdasan buatan pada draf Laporan Kemajuan PKM 2026, mencakup alur pengembangan backend, aplikasi mobile, model XGBoost deteksi risiko stroke, dan model estimasi vital (MLP → SVR/XGBoost) beserta dasar tiap keputusan teknis. Sekaligus melakukan finalisasi narasi untuk keseluruhan bagian software agar konsisten dengan bagian tim lain.
+
+**Hasil:**
+- Draf bagian software pada `draft-laporan-kemajuan.md` tersusun: metode pengembangan, hasil pelatihan model, dan keterbatasan yang dilaporkan apa adanya (jumlah data kalibrasi, presisi rendah, kendala penyambungan WiFi pada firmware)
+- Narasi bagian software dirapikan agar konsisten dengan bagian perangkat keras, administrasi, dan dokumentasi visual dari anggota tim lain
+
+📸 **Bukti yang perlu dilampirkan:**
+- `ADAM_draf laporan kemajuan bagian software.png` - dokumen `draft-laporan-kemajuan.md` di VSCode/Google Docs
+- `ADAM_finalisasi narasi software.png` - tangkapan layar proses review/edit narasi bagian software
+
+---
 
 **Jumat, 5 September 2026 - 600 menit**
 
+**Kegiatan:**
+Menambah 2 data kalibrasi dari pengujian laboratorium dan alat pembanding terstandar (pengujian keenam). Di sela sesi ini, ditemukan bahwa metode validasi pada skrip pelatihan MLP sebelumnya memisahkan data latih dan data uji per baris rekaman, bukan per subjek - berisiko membocorkan informasi dari relawan yang direkam lebih dari satu kali. Model dilatih ulang dengan metode Leave-One-Subject-Out (LOSO) menggunakan 11 subjek kalibrasi yang terkumpul sampai hari ini. Dilakukan juga finalisasi implementasi model SVR dan XGBoost serta evaluasi hasil training pada 11 data relawan.
+
+**Hasil:**
+- Data kalibrasi bertambah dari 9 menjadi 11 subjek (S010, S011)
+- **Perbaikan metodologi**: skema validasi silang MLP diubah dari per-baris menjadi per-`subject_id` (LOSO) - untuk 11 subjek dengan 1 rekaman/orang saat ini, skema lama dan baru kebetulan memberi angka yang identik (dibuktikan lewat matriks fold), tapi perbaikan ini krusial untuk pengujian berikutnya begitu ada subjek yang direkam berulang kali. Ilustrasi dengan data sintetis menunjukkan skema lama bisa menghasilkan metrik yang optimis secara palsu pada kondisi tersebut
+- **Finalisasi konfigurasi model**: seleksi otomatis pada 11 subjek menetapkan SVR dan XGBoost sebagai pemenang pada seluruh 5 parameter fisiologis - Gula Darah dan Kolesterol dimenangkan XGBoost, sedangkan Asam Urat, Sistolik, dan Diastolik dimenangkan SVR. MLP tidak menang pada satupun parameter, konsisten dengan temuan sejak 27 Agustus
+- Status keterandalan naik dari "TIDAK VALID" (n<10) menjadi "LEMAH" (10≤n<30) untuk seluruh parameter - masih jauh dari target ≥30 subjek agar metrik bisa dipertanggungjawabkan, sehingga R2 dan MAE dilaporkan sebagai keterbatasan, bukan capaian akhir
+- Perbaikan metodologi validasi sudah aktif di `api/main.py` (endpoint `/v1/calibrate/train`), dipakai baik oleh dashboard maupun skrip CLI (`model/train_mlp_calibration.py`)
+
+📸 **Bukti yang perlu dilampirkan:**
+- `model/perbaikan_loso_5september.ipynb` - notebook perbaikan skema validasi LOSO beserta ilustrasi mekanisme kebocoran data
+- `model/finalisasi_svr_xgboost_5september.ipynb` - notebook konfigurasi final SVR/XGBoost per parameter beserta grafik prediksi vs aktual pada 11 subjek
+- `ADAM_pengujian keenam klinik parahita.png` - foto pengujian laboratorium dengan alat pembanding terstandar
+- `ADAM_dataset kalibrasi 11 subjek.png` - tabel dataset kalibrasi di dashboard dengan subjek S010-S011
+
+---
 
 **Minggu, 6 September 2026 - 600 menit**
 *Kegiatan tim: pembuatan laporan akhir dan pengujian 7 smartband ANTARAGA*
