@@ -1144,45 +1144,6 @@ Proses penyerahan berkas HKI ke sentra HKI kampus PENS. Melengkapi lampiran kode
 ---
 
 **Sabtu, 16 Agustus 2026 - 450 menit**
-*Kegiatan tim: pengujian 4 smartband ANTARAGA*
-
-**Kegiatan:**
-Merancang model MLP untuk kalibrasi sensor PPG, lalu menerapkannya ke kode pelatihan dan menyambungkannya ke dashboard. Model XGBoost yang sudah selesai memprediksi risiko stroke dari nilai vital, tetapi nilai-nilai itu masih harus diukur dengan alat invasif. Tugas MLP adalah menerjemahkan sinyal optik sensor menjadi nilai vital, sehingga pengguna tidak perlu ditusuk jarum atau dipasangi manset.
-
-**Hasil - perancangan model:**
-- **Ditetapkan MLP, bukan regresi linier.** Diuji pada data yang meniru dua sifat nyata: perfusi merupakan rasio AC/DC (pembagian, tidak dapat dinyatakan sebagai penjumlahan berbobot) dan efeknya dimodulasi kekakuan pembuluh yang meningkat seiring usia. Hasilnya regresi linier R² 0,868 sedangkan MLP 0,946
-- **Ditetapkan lima model terpisah**, bukan satu model lima keluaran, karena ketersediaan data tiap parameter berbeda dan skala nilainya jauh berbeda (gula darah 70–280 mg/dL berbanding asam urat 2–9,5 mg/dL)
-- **Ditetapkan aturan penskalaan kapasitas**: n<10 memakai lapisan (4,) alpha 1,0; 10≤n<30 memakai (16,8) alpha 0,1; n≥30 memakai (64,32) alpha 0,01. MLP (64,32) memiliki 2.625 parameter - memaksakannya ke 5 baris sama saja mencari 2.625 nilai dari 5 persamaan
-- **Ditetapkan pengelompokan validasi silang per subjek.** Diuji pada 6 subjek × 5 rekaman: LeaveOneOut biasa menghasilkan R² 0,720 sedangkan pengelompokan per subjek menghasilkan −4,737. Selisih 5,5 itulah kebocoran tersembunyi - model hanya mengenali sidik optik lalu menyalin nilai dari rekaman lain milik orang yang sama
-
-**Hasil - penerapan dan pelatihan:**
-- Endpoint `POST /v1/calibrate/train` dengan tiga mode: data asli, data demo, atau keduanya
-- Dua tombol pelatihan terpisah di dashboard, sehingga pelatihan tidak perlu lewat terminal lagi
-- Laporan pelatihan dapat diunduh sebagai HTML lengkap dengan scatter plot dan penjelasan awam
-- Tiap target membawa status keterandalan: **TIDAK VALID** di bawah 10 subjek, **LEMAH** pada 10–29 subjek, **MEMADAI** pada 30 subjek ke atas
-- **Hasil pelatihan pada data yang terkumpul belum layak dipakai.** Dibandingkan tolok ukur menebak nilai rata-rata tanpa memakai sensor sama sekali, MLP kalah pada 3 dari 5 parameter:
-
-| Parameter | MAE MLP | MAE tebak rata-rata | R² MLP |
-|---|---|---|---|
-| Gula Darah | 45,09 | **37,20** | −1,565 |
-| Kolesterol | 51,51 | **25,40** | −3,723 |
-| Asam Urat | **0,46** | 0,70 | +0,055 |
-| Sistolik | 22,30 | **15,80** | −1,321 |
-| Diastolik | **6,00** | 8,60 | +0,297 |
-
-- Sebabnya jelas: tujuh fitur dilatih dari lima baris data, sehingga persamaannya lebih sedikit daripada variabel yang dicari
-- Tiga persoalan komposisi dicatat untuk pengujian smartband berikutnya: belum ada subjek berkolesterol di bawah 200 mg/dL, usia berhimpit dengan kondisi penyakit, dan jumlah subjek masih 5 dari target 30
-- Angka di atas **tidak dilaporkan sebagai capaian**, melainkan sebagai penanda bahwa pengumpulan data harus dilanjutkan
-
-📸 **Bukti yang perlu dilampirkan:**
-- `ADAM_perbandingan mlp dan regresi linier.png` - notebook `model/mlp_rancangan_15agustus.ipynb` bagian 1
-- `ADAM_aturan penskalaan kapasitas mlp.png` - notebook yang sama bagian 3
-- `ADAM_uji kebocoran validasi silang.png` - notebook yang sama bagian 4
-- `ADAM_tombol pelatihan mlp di dashboard.png` - kartu Pelatihan MLP dengan dua tombol
-- `ADAM_perbandingan mlp dengan tebakan rata rata.png` - notebook `model/pelatihan_mlp_16agustus.ipynb`
-- `ADAM_status keterandalan tiap target.png` - hasil pelatihan menampilkan status TIDAK VALID
-
----
 
 ### Minggu ke-14 - 19–23 Agustus 2026
 
@@ -1224,68 +1185,7 @@ Memastikan integrasi aplikasi mobile Flutter dengan API backend secara menyeluru
 
 ### Minggu ke-15 - 26–30 Agustus 2026
 
----
-
-**Selasa, 26 Agustus 2026 - 180 menit**
-*Kegiatan tim: Workshop Teknik Presentasi PKP2*
-
-**Kegiatan:**
-Mengikuti Workshop Teknik Presentasi PKP2 yang diselenggarakan PKM Center PENS, sekaligus menyiapkan kerangka bagian teknis yang akan dibawakan.
-
-**Hasil:**
-- Memahami struktur presentasi yang diharapkan penilai: latar belakang, kebaruan, metode, capaian terukur, dan rencana lanjutan
-- Kerangka bagian teknis disusun dengan penekanan pada capaian yang dapat diangkakan: ROC-AUC 0,823, recall 0,973, dan dua belas fitur aplikasi mobile yang berjalan
-- Disiapkan antisipasi pertanyaan tersulit: alasan presisi 0,075, jumlah data kalibrasi yang masih 5 subjek, dan pembeda dengan penelitian terdahulu
-- Catatan dari pemateri: setiap klaim harus dapat ditunjukkan buktinya saat sesi tanya jawab, sehingga seluruh angka disiapkan bersama notebook pendukungnya
-
-📸 **Bukti yang perlu dilampirkan:**
-- `ADAM_workshop teknik presentasi pkp2.png` - foto saat mengikuti workshop
-- `ADAM_kerangka presentasi bagian teknis.png` - kerangka yang disusun
-
----
-
-**Kamis, 28 Agustus 2026 - 360 menit**
-*Kegiatan tim: Asistensi laporan kemajuan ke dosen pendamping*
-
-**Kegiatan:**
-Menyusun bagian perangkat lunak dan kecerdasan buatan pada laporan kemajuan, lalu mengasistensikannya ke dosen pendamping.
-
-**Hasil:**
-- Rangkuman capaian model XGBoost: ROC-AUC 0,823, recall 0,973 (73 dari 75 penderita terdeteksi), ambang deteksi 0,042 yang ditetapkan lewat target recall pada prediksi out-of-fold
-- Rangkuman aplikasi mobile: dua belas fitur berjalan, tersambung ke sembilan endpoint
-- Rangkuman infrastruktur: backend daring di www.antaraga.web.id, penerapan otomatis, dashboard pemantauan, pembaruan firmware jarak jauh
-- Daftar dua belas kendala beserta solusinya disusun dalam bentuk rantai masalah sampai penyelesaian
-- Dinyatakan terus terang bahwa model MLP kalibrasi **belum layak dilaporkan sebagai capaian** karena baru terkumpul 5 dari 30 subjek yang dibutuhkan
-- Perbandingan dengan skor klinis ABCD² disiapkan sebagai pembelaan atas presisi rendah: ABCD² yang dirujuk pedoman AHA bekerja pada sensitivitas 0,89 dengan PPV 0,08, sedangkan ANTARAGA 0,973 dengan PPV 0,075
-
-*(Catatan hasil asistensi perlu dilengkapi sesuai masukan yang sebenarnya diberikan dosen pendamping.)*
-
-📸 **Bukti yang perlu dilampirkan:**
-- `ADAM_bagian software laporan kemajuan.png` - dokumen laporan bagian perangkat lunak
-- `ADAM_daftar kendala dan solusi.png` - tabel dua belas kendala
-- `ADAM_asistensi laporan ke dosen pendamping.png` - foto saat asistensi
-
----
-
 **Jumat, 29 Agustus 2026 - 300 menit**
-*Kegiatan tim: finalisasi dan pengunggahan Pengiklanan Konten Medsos 3*
-
-**Kegiatan:**
-Menyiapkan bahan teknis untuk konten media sosial ketiga, berupa peragaan sistem ANTARAGA yang sedang berjalan, lalu membantu proses finalisasi dan pengunggahannya.
-
-**Hasil:**
-- Rekaman layar dashboard pemantauan dengan sinyal PPG tiga kanal berjalan
-- Rekaman layar aplikasi mobile menampilkan kartu vital dan tingkat risiko
-- Peragaan alur peringatan dini: sinyal masuk, model memprediksi, notifikasi sampai ke ponsel keluarga
-- Bahan diserahkan ke anggota tim yang menangani konten, lalu ikut memeriksa hasil suntingan agar penjelasan teknisnya tidak keliru
-- Dipastikan tidak ada kredensial, alamat server internal, maupun data subjek yang ikut terekam dalam tayangan
-
-📸 **Bukti yang perlu dilampirkan:**
-- `ADAM_rekaman layar dashboard untuk konten.png` - cuplikan rekaman dashboard
-- `ADAM_rekaman layar aplikasi mobile.png` - cuplikan rekaman aplikasi
-- `ADAM_konten medsos 3 terunggah.png` - unggahan di media sosial
-
----
 
 **Sabtu, 30 Agustus 2026 - 300 menit**
 *Kegiatan tim: pengujian 5 smartband ANTARAGA*
@@ -1310,84 +1210,13 @@ Mengikuti pengujian smartband kelima untuk menambah data kalibrasi, dengan prior
 
 ### Minggu ke-16 - 2–6 September 2026
 
-> **Catatan:** entri 2 dan 5 September di bawah ini sudah terlaksana dan diperbarui sesuai kenyataan. Entri mulai 6 September masih berupa **rencana kerja**; kolom Hasil perlu diperbarui setelah kegiatannya benar-benar berlangsung.
-
----
 
 **Rabu, 2 September 2026 - 300 menit**
-*Kegiatan tim: pengujian 5 smartband ANTARAGA sekaligus penyusunan laporan kemajuan*
-
-**Kegiatan:**
-Menjalankan pengujian kelima smartband ANTARAGA bersama relawan, menambah 3 data kalibrasi baru, sekaligus melatih ulang model MLP dengan data yang sudah bertambah dan mulai menyusun draf laporan kemajuan bagian perangkat lunak dan kecerdasan buatan.
-
-**Narasi & Indikator Capaian:**
-Pengujian kelima smartband ANTARAGA dilaksanakan bersama relawan tambahan, menghasilkan 3 data kalibrasi baru yang menambah keragaman komposisi subjek sesuai prioritas yang ditetapkan pada 16 Agustus, yaitu mencari subjek dengan kondisi kesehatan yang berbeda dari mayoritas data sebelumnya. Model MLP kemudian dilatih ulang menggunakan seluruh data kalibrasi yang terkumpul sampai sesi ini. Selain itu, dimulai penyusunan draf laporan kemajuan bagian perangkat lunak dan kecerdasan buatan, mencakup rangkuman capaian pengembangan model XGBoost dan MLP, hasil pengujian relawan, serta status pendaftaran Hak Cipta yang telah terbit.
-
-Indikator capaian: bertambahnya data kalibrasi kecerdasan buatan melalui pengujian kelima, tersedianya model MLP hasil pelatihan ulang dengan data terbaru, serta tersusunnya draf awal laporan kemajuan bagian perangkat lunak dan kecerdasan buatan sebagai bahan asistensi dosen pendamping.
-
-📸 **Bukti:**
-- `ADAM_sesi pengujian 5 smartband.png` - foto perekaman
-- `ADAM_hasil pelatihan ulang mlp.png` - kartu Pelatihan MLP dengan metrik terbaru
-- `ADAM_draf laporan kemajuan software.png` - draf bagian perangkat lunak dan AI
-
----
 
 **Kamis, 3 September 2026 - 300 menit**
-*Kegiatan tim: finalisasi laporan kemajuan PKM 2026*
-
-**Kegiatan:**
-Melakukan penyusunan bagian perangkat lunak dan kecerdasan buatan pada laporan kemajuan, serta melakukan finalisasi narasi untuk keseluruhan bagian software.
-
-**Narasi & Indikator Capaian:**
-Melanjutkan draf laporan kemajuan bagian perangkat lunak dan kecerdasan buatan yang dimulai pada 2 September, mencakup penyusunan narasi arsitektur sistem (aplikasi mobile, backend server, integrasi sistem), model AI deteksi risiko stroke (XGBoost), serta model estimasi tanda vital (MLP) beserta status capaian masing-masing. Narasi disusun berdasarkan data dan metrik aktual yang telah terkumpul sampai tanggal ini, bukan proyeksi.
-
-Indikator capaian: tersusunnya narasi bagian perangkat lunak dan kecerdasan buatan pada laporan kemajuan secara utuh, siap dilanjutkan dengan pelengkapan data kalibrasi terbaru pada sesi berikutnya.
-
-📸 **Bukti:**
-- `ADAM_draf laporan kemajuan bagian software final.png` - tangkapan layar draf narasi bagian perangkat lunak dan AI pada dokumen laporan kemajuan
-
----
 
 **Jumat, 5 September 2026 - 600 menit**
-*Kegiatan tim: pengujian 6 (1 data pengujian lab dan 1 data pengujian alat terstandar) smartband ANTARAGA, sekaligus melanjutkan pembuatan laporan kemajuan*
 
-**Kegiatan:**
-Menambah 2 data kalibrasi dari pengujian laboratorium dan alat pembanding terstandar (pengujian keenam). Di sela sesi ini, menemukan dan memperbaiki metode validasi pada skrip pelatihan MLP yang sebelumnya memisahkan data latih dan data uji per baris rekaman, bukan per subjek, sehingga berisiko membocorkan informasi dari relawan yang direkam lebih dari satu kali. Model dilatih ulang dengan metode Leave-One-Subject-Out menggunakan 11 subjek kalibrasi yang terkumpul sampai hari ini.
-
-**Narasi & Indikator Capaian:**
-Pengujian keenam menambah 2 data kalibrasi baru, satu dari hasil pemeriksaan laboratorium dan satu dari alat ukur pembanding terstandar, melengkapi 3 data dari pengujian kelima pada 2 September sebelumnya.
-
-Di sela sesi ini ditemukan bahwa skrip pelatihan model MLP kalibrasi (`model/train_mlp_calibration.py`) memvalidasi model dengan metode Leave-One-Out per baris rekaman, bukan per subjek. Metode ini keliru untuk data ANTARAGA karena satu relawan dapat direkam pada lebih dari satu sesi pengujian, sehingga baris data milik orang yang sama bisa terpisah antara kelompok latih dan kelompok uji. Akibatnya, model berpotensi "mengenali" pola pribadi seorang relawan dari sesi lain yang bocor ke data latihnya, bukan benar-benar menebak dari sinyal optik, sehingga angka akurasi yang dilaporkan menjadi lebih baik daripada kenyataan.
-
-Perbaikan dilakukan dengan mengganti metode validasi menjadi Leave-One-Subject-Out (LOSO): model dilatih ulang sebanyak jumlah subjek, setiap kali menyisihkan satu subjek secara penuh sebagai data uji dan melatih dari subjek-subjek lainnya, sehingga tidak ada satu pun prediksi yang dihitung dari model yang pernah melihat data orang tersebut. Model final yang diterapkan pada aplikasi tetap dilatih dari seluruh subjek yang tersedia.
-
-Model dilatih ulang menggunakan seluruh data kalibrasi yang terkumpul sampai hari ini, mencapai 11 subjek: 6 subjek dari sesi-sesi sebelumnya (S001-S006), ditambah 3 sampel dari pengujian kelima (2 September), ditambah 2 sampel dari pengujian keenam (5 September).
-
-Catatan metodologis penting: dengan 11 subjek yang masing-masing baru direkam satu kali (belum ada relawan dengan sesi ganda), pembagian fold LeaveOneOut per baris dan LeaveOneGroupOut per subjek terbukti identik untuk data saat ini (dibuktikan langsung di notebook evaluasi, bukan diasumsikan) - sehingga angka metrik di bawah ini tidak berubah dari sebelum perbaikan. Manfaat perbaikan ini baru akan terlihat pada angka begitu ada subjek yang direkam berulang kali, seperti direncanakan pada pengujian ke-7 (6 September). Untuk menunjukkan mekanisme kebocoran datanya secara konkret, notebook evaluasi turut menyertakan ilustrasi dengan data sintetis (4 subjek digandakan menjadi 8 baris): skema lama menghasilkan R² 0,999 yang menyesatkan (model "mengenali" baris kembarannya sendiri), sedangkan skema LOSO yang benar menghasilkan R² -0,090 yang jujur.
-
-Hasil evaluasi LOSO pada 11 subjek kalibrasi asli (dijalankan pada notebook `model/perbaikan_loso_5september.ipynb`):
-
-| Parameter | MAE | RMSE | R² | Akurasi (%) |
-|---|---|---|---|---|
-| Gula Darah (mg/dL) | 92,58 | 105,45 | -7,40 | 28,58 |
-| Kolesterol (mg/dL) | 56,04 | 75,89 | -6,43 | 74,62 |
-| Asam Urat (mg/dL) | 1,48 | 1,96 | -3,27 | 69,64 |
-| Sistolik (mmHg) | 54,06 | 61,13 | -13,27 | 61,64 |
-| Diastolik (mmHg) | 30,94 | 36,81 | -7,65 | 60,06 |
-
-*(Angka di atas dihitung dari `kalibrasi_semua.csv` versi terbaru, termasuk koreksi BPM subjek yang sebelumnya salah terdeteksi akibat kesalahan oktaf. Notebook selalu memuat data langsung dari berkas ini, sehingga hasilnya otomatis mengikuti pembaruan data kalibrasi.)*
-
-R² negatif pada seluruh parameter menegaskan temuan yang sama seperti dicatat pada evaluasi-evaluasi sebelumnya: dengan 11 subjek, model MLP belum benar-benar belajar pola dari sinyal PPG melebihi kemampuan menebak nilai rata-rata, meskipun angka persentase akurasi (berbasis rata-rata galat relatif) terlihat cukup tinggi. Angka ini dicantumkan apa adanya sebagai bagian dari keterbatasan yang jujur dilaporkan, bukan disembunyikan di balik metrik akurasi saja.
-
-Indikator capaian: terkoreksinya metodologi validasi model MLP dari yang berpotensi bias menjadi metode Leave-One-Subject-Out yang sesuai kaidah ilmiah untuk data dengan subjek terbatas, tersedianya notebook evaluasi yang dapat dijalankan ulang sebagai bukti metodologi, serta tersedianya model MLP hasil pelatihan ulang dari 11 subjek kalibrasi dengan angka akurasi yang dilaporkan secara jujur (termasuk keterbatasannya) untuk dicantumkan pada laporan kemajuan.
-
-📸 **Bukti:**
-- `ADAM_sesi pengujian 6 smartband.png` - foto perekaman data lab dan alat terstandar
-- `ADAM_notebook loso matriks fold.png` - cuplikan notebook `perbaikan_loso_5september.ipynb`: grafik matriks latih/uji per fold, membuktikan LOO=LOSO identik untuk 11 data saat ini
-- `ADAM_notebook loso ilustrasi sintetis.png` - cuplikan notebook: grafik prediksi vs aktual pada data sintetis yang menunjukkan mekanisme kebocoran (R² 0,999 vs -0,090)
-- `ADAM_notebook loso hasil evaluasi.png` - cuplikan notebook: tabel serta grafik prediksi-vs-aktual dan R² per parameter dari evaluasi LOSO 11 subjek asli
-
----
 
 **Minggu, 6 September 2026 - 600 menit**
 *Kegiatan tim: pembuatan laporan akhir dan pengujian 7 smartband ANTARAGA*
