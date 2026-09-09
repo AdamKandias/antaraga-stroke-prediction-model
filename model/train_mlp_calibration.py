@@ -24,6 +24,14 @@ Atau di lingkungan lokal (DATABASE_URL dari .env dipakai otomatis):
 Kalau database kosong, skrip mencoba fallback membaca
 data/calibration/calibration_data.csv (format lama, kolom otomatis
 disesuaikan).
+
+Untuk melatih dari laptop sendiri lalu mengunggah hasilnya ke server (tanpa
+akses DB produksi langsung), unduh dulu data kalibrasi lewat endpoint publik,
+lalu latih dari CSV itu dengan --csv:
+    curl -sf https://www.antaraga.web.id/v1/calibrate/export.csv -o /tmp/k.csv
+    python model/train_mlp_calibration.py --csv /tmp/k.csv
+Lihat scripts/deploy_model_from_local.sh untuk alur lengkap sampai
+mengunggah artifact ke server.
 """
 
 from __future__ import annotations
@@ -83,11 +91,16 @@ def load_from_db(mode: str) -> pd.DataFrame:
 
 def load_from_csv(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path)
+    # Kolom alias dari format lama (train_ppg_vitals.py) - /v1/calibrate/export.csv
+    # menyertakan keduanya (nama asli + alias) untuk kompatibilitas, jadi hanya
+    # ganti nama kalau kolom aslinya belum ada, supaya tidak jadi duplikat.
     rename = {
         "blood_glucose_mg_dl": "gula_darah_mg_dl",
         "systolic_bp_mmhg":    "sistolik_mmhg",
         "diastolic_bp_mmhg":   "diastolik_mmhg",
     }
+    rename = {old: new for old, new in rename.items()
+              if old in df.columns and new not in df.columns}
     df.rename(columns=rename, inplace=True)
     return records_to_dataframe(df.to_dict("records"))
 
@@ -101,25 +114,39 @@ def main() -> None:
         help="all=semua rekaman, real=hanya sensor asli (default, bukan demo-device), "
              "demo=hanya data sintetis",
     )
+    parser.add_argument(
+        "--csv", type=Path, default=None,
+        help="Latih dari berkas CSV ini (mis. hasil unduh /v1/calibrate/export.csv) "
+             "alih-alih mengakses database secara langsung. Untuk melatih dari laptop "
+             "sendiri tanpa koneksi ke DB produksi.",
+    )
     args = parser.parse_args()
 
     print("=" * 60)
     print("ANTARAGA - Pelatihan Model Estimasi Vital")
     print("=" * 60)
 
-    df = load_from_db(args.mode)
-    if df.empty:
-        csv_path = ROOT / "data" / "calibration" / "calibration_data.csv"
-        if csv_path.exists():
-            print(f"DB kosong (mode={args.mode}) - baca dari {csv_path}")
-            df = load_from_csv(csv_path)
-        else:
-            label = {"real": "data asli", "demo": "demo data"}.get(args.mode, "kalibrasi")
-            print(f"\nBelum ada {label} di database, dan tidak ada CSV cadangan di {csv_path}.")
+    if args.csv is not None:
+        if not args.csv.exists():
+            print(f"\nBerkas CSV tidak ditemukan: {args.csv}")
             sys.exit(1)
+        print(f"Melatih dari CSV: {args.csv}")
+        df = load_from_csv(args.csv)
+    else:
+        df = load_from_db(args.mode)
+        if df.empty:
+            csv_path = ROOT / "data" / "calibration" / "calibration_data.csv"
+            if csv_path.exists():
+                print(f"DB kosong (mode={args.mode}) - baca dari {csv_path}")
+                df = load_from_csv(csv_path)
+            else:
+                label = {"real": "data asli", "demo": "demo data"}.get(args.mode, "kalibrasi")
+                print(f"\nBelum ada {label} di database, dan tidak ada CSV cadangan di {csv_path}.")
+                sys.exit(1)
 
     n_subjects = df["subject_id"].nunique() if "subject_id" in df.columns else "?"
-    print(f"\nDataset: {len(df)} baris, {n_subjects} subjek unik (mode={args.mode})")
+    mode_label = f"csv:{args.csv.name}" if args.csv is not None else args.mode
+    print(f"\nDataset: {len(df)} baris, {n_subjects} subjek unik (sumber={mode_label})")
 
     t0 = time.time()
     all_models, all_metrics = train_all(df)
@@ -133,7 +160,7 @@ def main() -> None:
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "n_total": len(df),
         "n_subjects": int(n_subjects) if isinstance(n_subjects, (int, float)) else n_subjects,
-        "mode": args.mode,
+        "mode": mode_label,
     }
     save_artifacts(all_models, all_metrics, meta)
 

@@ -132,6 +132,15 @@ TEMPLAT_NOTIFIKASI: dict[str, dict] = {
     "tinggi": {
         "judul": "⚠️ Risiko Stroke Tinggi Terdeteksi",
         "isi": lambda nama: f"Risiko stroke {nama} terdeteksi tinggi. Segera lakukan assesmen ABCD2 dan memeriksakan diri ke tenaga kesehatan dalam waktu dekat.",
+        # Ditampilkan sebagai banner di atas form ABCD2 saat notifikasi ini
+        # di-tap (lihat AssessmentFormScreen.contextMessage di aplikasi) --
+        # sengaja teks yang lebih lengkap daripada "isi" di atas, karena di
+        # sana pembaca sudah dalam konteks "mau mengisi form ini kenapa".
+        "pesan_asesmen": lambda nama: (
+            f"{nama} diprediksi memiliki risiko stroke tinggi berdasarkan "
+            "data vital realtime. Silakan isi form Assessment ABCD2 di "
+            "bawah ini untuk evaluasi lebih lanjut."
+        ),
         "route": "assessment_form",
         "dikirim_otomatis": True,
     },
@@ -140,6 +149,11 @@ TEMPLAT_NOTIFIKASI: dict[str, dict] = {
         "isi": lambda nama: (
             f"Tanda vital {nama} menunjukkan risiko sedang. Disarankan "
             "memeriksakan diri ke tenaga kesehatan dalam waktu dekat."
+        ),
+        "pesan_asesmen": lambda nama: (
+            f"{nama} diprediksi memiliki risiko stroke sedang berdasarkan "
+            "data vital realtime. Silakan isi form Assessment ABCD2 di "
+            "bawah ini untuk evaluasi lebih lanjut."
         ),
         "route": "assessment_form",
         "dikirim_otomatis": True,
@@ -150,14 +164,23 @@ TEMPLAT_NOTIFIKASI: dict[str, dict] = {
             f"Tanda vital {nama} saat ini berada dalam rentang normal. "
             "Pemantauan tetap berjalan seperti biasa dan tetap jaga kesehatan."
         ),
+        "pesan_asesmen": None,
         "route": "dashboard",
         "dikirim_otomatis": False,
     },
 }
 
 
-def send_high_risk_notification(fcm_token: str, profile_name: str) -> bool:
+def send_high_risk_notification(
+    fcm_token: str, profile_name: str, profile_id: str | None = None,
+) -> bool:
     """Kirim push notification ke device user saat risiko stroke HIGH.
+
+    [profile_id] disisipkan ke data payload supaya aplikasi tahu orang tua
+    mana yang dimaksud saat notifikasi ini di-tap dan membuka asesmen ABCD2
+    (lihat FcmService._routeMessage di aplikasi mobile) -- tanpa ini,
+    notifikasi selalu membuka asesmen untuk profil yang SEDANG tampil di
+    layar, bukan profil yang sebenarnya berisiko.
 
     Returns True jika berhasil dikirim, False jika gagal atau FCM tidak
     dikonfigurasi (service account key tidak ada).
@@ -173,12 +196,17 @@ def send_high_risk_notification(fcm_token: str, profile_name: str) -> bool:
         from firebase_admin import messaging
 
         templat = TEMPLAT_NOTIFIKASI["tinggi"]
+        data = {"route": templat["route"]}
+        if profile_id is not None:
+            data["profile_id"] = str(profile_id)
+        if templat.get("pesan_asesmen") is not None:
+            data["message"] = templat["pesan_asesmen"](profile_name)
         message = messaging.Message(
             notification=messaging.Notification(
                 title=templat["judul"],
                 body=templat["isi"](profile_name),
             ),
-            data={"route": templat["route"]},
+            data=data,
             token=fcm_token,
             android=messaging.AndroidConfig(
                 priority="high",
@@ -213,6 +241,7 @@ def kirim_notifikasi_uji(
     judul: str | None = None,
     isi: str | None = None,
     skenario: str = "tinggi",
+    profile_id: str | None = None,
 ) -> tuple[bool, str, bool]:
     """Kirim notifikasi percobaan dari dashboard.
 
@@ -246,16 +275,21 @@ def kirim_notifikasi_uji(
     try:
         from firebase_admin import messaging
 
+        # Route ikut templat, KECUALI dipertahankan sebagai "test" pada data
+        # tambahan supaya aplikasi tetap tahu ini pesan percobaan (berguna
+        # kalau nanti perlu dibedakan dari peringatan asli di sisi aplikasi),
+        # sementara route navigasinya tetap realistis.
+        data = {"route": templat["route"], "percobaan": "1"}
+        if profile_id is not None:
+            data["profile_id"] = str(profile_id)
+        if templat.get("pesan_asesmen") is not None:
+            data["message"] = templat["pesan_asesmen"](profile_name)
         message = messaging.Message(
             notification=messaging.Notification(
                 title=judul or templat["judul"],
                 body=isi or templat["isi"](profile_name),
             ),
-            # Route ikut templat, KECUALI dipertahankan sebagai "test" pada
-            # data tambahan supaya aplikasi tetap tahu ini pesan percobaan
-            # (berguna kalau nanti perlu dibedakan dari peringatan asli di
-            # sisi aplikasi), sementara route navigasinya tetap realistis.
-            data={"route": templat["route"], "percobaan": "1"},
+            data=data,
             token=fcm_token,
             android=messaging.AndroidConfig(
                 priority="high",

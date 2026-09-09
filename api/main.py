@@ -1202,7 +1202,7 @@ def ingest_firmware_batch(
                 user.last_notified_at, FCM_NOTIFICATION_COOLDOWN_SECONDS
             ):
                 send_high_risk_notification.token_mati = False
-                if send_high_risk_notification(user.fcm_token, profile.name):
+                if send_high_risk_notification(user.fcm_token, profile.name, profile.id):
                     user.last_notified_at = datetime.utcnow()
                 else:
                     token_mati = getattr(send_high_risk_notification, "token_mati", False)
@@ -1214,7 +1214,7 @@ def ingest_firmware_batch(
                 # naskah pesannya satu sumber (TEMPLAT_NOTIFIKASI["sedang"]),
                 # tidak ditulis dua kali di dua tempat berbeda.
                 sent, _keterangan, mati = kirim_notifikasi_uji(
-                    user.fcm_token, profile.name, skenario="sedang",
+                    user.fcm_token, profile.name, skenario="sedang", profile_id=profile.id,
                 )
                 if sent:
                     user.last_notified_medium_at = datetime.utcnow()
@@ -1379,6 +1379,7 @@ def notify_test(
         raise HTTPException(status_code=404, detail="Akun tidak ditemukan")
 
     nama_profil = "orang tua Anda"
+    profil = None
     if profile_id:
         profil = db.get(models_db.Profile, profile_id)
         if profil is None or profil.user_id != user_id:
@@ -1391,6 +1392,7 @@ def notify_test(
 
     berhasil, keterangan, token_mati = kirim_notifikasi_uji(
         user.fcm_token or "", nama_profil, judul=judul, isi=isi, skenario=skenario,
+        profile_id=profil.id if profil is not None else None,
     )
     if token_mati and user.fcm_token:
         user.fcm_token = None
