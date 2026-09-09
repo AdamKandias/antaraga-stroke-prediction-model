@@ -1,9 +1,9 @@
 {
   "_meta": {
-    "trained_at": "2026-09-09T00:02:40.798462+00:00",
+    "trained_at": "2026-09-09T00:54:32.323971+00:00",
     "n_total": 11,
     "n_subjects": 11,
-    "mode": "csv:kalibrasi_semua.csv"
+    "mode": "csv:antaraga_kalibrasi_terbaru_51327.csv"
   },
   "gula_darah_mg_dl": {
     "label": "Gula Darah (mg/dL)",
