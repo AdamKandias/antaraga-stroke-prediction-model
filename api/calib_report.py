@@ -808,7 +808,7 @@ def _build_ai_section(
                 "Akurasi di atas dihitung khusus untuk sesi ini, bukan metrik "
                 "agregat model. Metrik menyeluruh memakai validasi "
                 "Leave-One-Subject-Out dari seluruh subjek kalibrasi, "
-                "dilaporkan terpisah lewat menu Pelatihan Model Estimasi Vital pada dashboard."
+                "dilaporkan terpisah lewat menu Pelatihan Model Estimasi Fisiologis pada dashboard."
                 "</p></div>"
             )
     else:
@@ -1079,7 +1079,7 @@ def build_record_report_html(
   <h2>{_icon("user")}Data Subjek</h2>
   <dl class="ident">{ident}</dl>
 
-  <h2>{_icon("doc")}Ringkasan Tanda Vital</h2>
+  <h2>{_icon("doc")}Ringkasan Data</h2>
   <div class="tiles">{tiles}</div>
 
   <h2>{_icon("flask")}Hasil Pemeriksaan Alat Terstandar</h2>
