@@ -43,7 +43,7 @@ Gambar 4.1 Pengembangan Perangkat Keras ANTARAGA ...............................
 Gambar 4.2 Arsitektur Aktual Smartband-Server-Aplikasi ..................................... 6
 Gambar 4.3 Dashboard Pemantauan Sinyal PPG .................................................... 6
 Gambar 4.4 Perbandingan Recall Model XGBoost ................................................. 7
-Gambar 4.5 Dashboard Pelatihan Model MLP ........................................................ 7
+Gambar 4.5 Dashboard Pelatihan Model Estimasi Vital ............................................ 7
 Gambar 4.6 Pengujian Prototipe terhadap Relawan ................................................ 8
 Gambar 4.7 Konsultasi Dokter Spesialis Saraf ........................................................ 8
 Gambar 4.8 Capaian Media Sosial ANTARAGA ................................................... 8
@@ -178,12 +178,17 @@ sedangkan  ambang  keputusan  dievaluasi  menggunakan  prediksi  out-of-fold
 dan  kurva  Precision-Recall  untuk  meningkatkan  sensitivitas  terhadap  kelas
 berisiko (Luo dkk., 2025).
 
-4.  Estimasi Parameter Fisiologis Menggunakan Multi-Layer Perceptron
+4.  Estimasi Parameter Fisiologis Menggunakan Model Estimasi Vital
 
-Lima model Multi-Layer Perceptron (MLP) dikembangkan untuk memetakan
-fitur  optik  PPG  menjadi  estimasi  gula  darah,  kolesterol,  asam  urat,  tekanan
-sistolik,  dan  tekanan  diastolik.  Model  terintegrasi  dengan  dashboard  server
-sehingga dapat dilatih ulang ketika tersedia data kalibrasi baru.
+Lima model estimasi tanda vital dikembangkan untuk memetakan fitur optik PPG
+menjadi estimasi gula darah, kolesterol, asam urat, tekanan sistolik, dan tekanan
+diastolik -- satu model terpisah per parameter. Algoritma tiap model dipilih otomatis
+dari perbandingan beberapa keluarga model (MLP, SVR, KNN, Random Forest,
+XGBoost, dan lainnya) berdasarkan R2 tertinggi lewat validasi silang Leave-One-
+Subject-Out (LOSO); saat ini SVR dipakai untuk sistolik, diastolik, dan asam urat,
+sedangkan XGBoost untuk gula darah dan kolesterol (lihat BAB 4.4.2). Model
+terintegrasi dengan dashboard server sehingga dapat dilatih ulang ketika tersedia
+data kalibrasi baru.
 
 3
 
@@ -217,8 +222,9 @@ Prototipe  smartband  ANTARAGA  telah  terealisasi  dengan  capaian  90%
 sebagai smartband pendeteksi risiko stroke iskemik pada lansia, yang terintegrasi
 dengan  aplikasi  mobile  ANTARAGA  sehingga  dapat  dipantau  langsung  oleh
 keluarga. Smartband telah digunakan dalam 11 kali pengujian hingga 5 September
-2026. Sisa capaian dialokasikan untuk pelatihan lanjutan model AI (XGBoost dan
-MLP) menggunakan data kalibrasi tambahan dari sesi pengujian relawan.
+2026. Sisa capaian dialokasikan untuk pelatihan lanjutan model AI (deteksi risiko
+stroke berbasis XGBoost, dan estimasi tanda vital berbasis SVR/XGBoost) menggunakan
+data kalibrasi tambahan dari sesi pengujian relawan.
 2.4 Akun dan Konten Media Sosial ANTARAGA
 
 Publikasi  media  sosial  Instagram  telah  mencapai  100%  melalui  3  konten
@@ -284,9 +290,10 @@ ESP32-S3 sebelum fabrikasi.
 terhubung.  Pengolahan  bandpass,  FFT,  dan  BPM  dipindahkan  ke  server,
 sedangkan SQI dipertahankan di perangkat.
 
-5.  Pengembangan  Model  AI:  XGBoost  telah  dituning  dan  diterapkan  dengan
-dua  ambang  keputusan;  pipeline  lima  MLP  telah  terintegrasi  dan  dilatih
-menggunakan data kalibrasi yang tersedia.
+5.  Pengembangan Model AI: XGBoost telah dituning dan diterapkan dengan
+dua ambang keputusan untuk deteksi risiko stroke; pipeline lima model estimasi
+tanda vital (SVR/XGBoost per parameter, hasil perbandingan beberapa keluarga
+model) telah terintegrasi dan dilatih menggunakan data kalibrasi yang tersedia.
 
 6.  Pengujian  dan  Validasi:  Pengujian  subsistem,  enam  sesi  relawan,  analisis
 mutu  sinyal,  koreksi  BPM,  dan  konsultasi  dokter  spesialis  saraf  telah
@@ -706,8 +713,9 @@ penderita  stroke  yang  terlewat.  Untuk  pemrosesan  sinyal,  sistem  backend
 9
 
 menggunakan penyaring lonjakan BPM 4 lapis guna menekan artefak gerak, serta
-memanfaatkan 5 model Multi-Layer Perceptron (MLP) untuk menyusun estimasi
-indikator  kesehatan  harian.  Sebagai  penguatan  akhir,  seluruh  alur  kuesioner
+memanfaatkan 5 model estimasi tanda vital (SVR/XGBoost per parameter, dipilih
+lewat perbandingan beberapa keluarga model berbasis R2 tervalidasi LOSO) untuk
+menyusun estimasi indikator kesehatan harian.  Sebagai  penguatan  akhir,  seluruh  alur  kuesioner
 kualitatif,  instrumen  ABCD2,  dan  skenario  rujukan  prarumah  sakit  telah  melalui
 tahapan  validasi  klinis  secara  langsung  bersama  Dokter  Spesialis  Saraf  pada  7
 Agustus 2026.
@@ -969,17 +977,19 @@ Layer Perceptron)
 untuk estimasi data
 vital (tekanan darah,
 gula darah, kolesterol,
-dan adam urat)
+dan asam urat) --
+kondisi awal
 
 Menggunakan
 kombinasi model
 Support Vector
 Regression (SVR) dan
-XGBoost untuk
-estimasi data vital
-(tekanan darah, gula
-darah, koleterol, dan
-adam urat)
+XGBoost per parameter
+untuk estimasi data
+vital (tekanan darah,
+gula darah, kolesterol,
+dan asam urat) --
+kondisi saat ini
 
 Mengurangi beban perangkat
 dan memudahkan pembaruan
@@ -998,26 +1008,38 @@ imbalance (kelas stroke
 resampling data medis yang
 jumlahnya terbatas.
 
-Setelah melakukan training
-dengan data subjek dan
-membaca persentase nya,
-model MLP tidak cocok untuk
-menangani kasus dengan
-jumlah data kecil, sehingga
+Setelah dilatih dan dievaluasi
+dengan validasi silang Leave-
+One-Subject-Out (LOSO), model
+MLP tunggal terbukti kurang
+cocok untuk menangani jumlah
+data subjek yang masih
+terbatas (rata-rata akurasi
+58,9% pada perbandingan 13
+keluarga model, jauh di bawah
+model lain -- lihat
+model/test_loso.ipynb), sehingga
 dibutuhkan model lain yang
-mampu lebih baik menangani
-data kecil seperti SVR dan
-XGBoost.
+lebih tahan terhadap data kecil
+seperti SVR dan XGBoost.
 
-Dari hasil percobaan pada
-gambar ke-...... didapatkan
-bahwa model terbaik adalah
-SVR untuk estimasi asam urat,
+<!-- GAMBAR: grafik perbandingan
+akurasi 13 model dari
+model/test_loso.ipynb bagian 1
+(peringkat model) -->
+
+Dari hasil perbandingan
+tersebut, didapatkan bahwa
+model terbaik adalah SVR
+untuk estimasi asam urat,
 tekanan darah sistolik, dan
-tekanan darah diastolik.⁠
-Sedangkan XGBoost baik
-dalam mengestimasi gula
-darah dan kolesterol.
+tekanan darah diastolik,
+sedangkan XGBoost lebih baik
+dalam mengestimasi gula darah
+dan kolesterol -- algoritma ini
+yang kemudian diterapkan
+sebagai model produksi per
+parameter (lihat Tabel L.4b).
 
 15
 
@@ -1117,7 +1139,7 @@ Sebelas  kode
 telah  dilakukan  pengujian
 menggunakan  ANTARAGA.  Identitas  subjek  disamarkan  untuk  menjaga
 kerahasiaan. Bagian ini menyajikan tiga hal per relawan: data profil, perbandingan
-alat medis vs prediksi MLP, dan hasil deteksi risiko stroke.
+alat medis vs prediksi model estimasi vital, dan hasil deteksi risiko stroke.
 
 (S001-S011)
 
@@ -1461,697 +1483,114 @@ Ys
 
 2 September 2026  5 September 2026  5 September 2026
 
-Tabel L.4b Data Alat Medis vs Prediksi MLP per Relawan (ada di PDF report per
+Tabel L.4b Data Alat Medis vs Prediksi Model Estimasi Vital per Relawan (ada di PDF report per
 subjek)
 
-Alat
+Prediksi dihasilkan model produksi saat ini per parameter -- SVR untuk Sistolik, Diastolik,
+dan Asam Urat, XGBoost untuk Gula Darah dan Kolesterol (lihat BAB 4.4.2 dan model/test_loso.ipynb
+untuk metodologi pemilihannya) -- dievaluasi dengan skema Leave-One-Subject-Out (LOSO): setiap
+prediksi berasal dari model yang TIDAK pernah melihat data subjek tersebut selama pelatihan,
+bukan prediksi dari model yang sudah menghafal datanya sendiri.
 
-Tensimeter (Tekanan Darah
-Sistolilk)
+| Subjek | Parameter | Alat Terstandar (Aktual) | Prediksi Model | Akurasi (%) |
+|---|---|---|---|---|
+| S001 | Tensimeter (Tekanan Darah Sistolik) | 125,0 mmHg | 145,5 mmHg | 83,6% |
+| S001 | Tensimeter (Tekanan Darah Diastolik) | 77,0 mmHg | 90,7 mmHg | 82,2% |
+| S001 | Elvasense 3in1 EMS10 (Gula Darah) | 119,0 mg/dL | 133,3 mg/dL | 88,0% |
+| S001 | Elvasense 3in1 EMS10 (Kolesterol Total) | 212,0 mg/dL | 226,1 mg/dL | 93,4% |
+| S001 | Elvasense 3in1 EMS10 (Asam Urat) | 6,3 mg/dL | 5,4 mg/dL | 86,2% |
+| S002 | Tensimeter (Tekanan Darah Sistolik) | 173,0 mmHg | 152,0 mmHg | 87,8% |
+| S002 | Tensimeter (Tekanan Darah Diastolik) | 102,0 mmHg | 92,8 mmHg | 91,0% |
+| S002 | Elvasense 3in1 EMS10 (Gula Darah) | 101,0 mg/dL | 139,6 mg/dL | 61,8% |
+| S002 | Elvasense 3in1 EMS10 (Kolesterol Total) | 200,0 mg/dL | 229,3 mg/dL | 85,3% |
+| S002 | Elvasense 3in1 EMS10 (Asam Urat) | 4,6 mg/dL | 5,1 mg/dL | 88,9% |
+| S003 | Tensimeter (Tekanan Darah Sistolik) | 153,0 mmHg | 157,2 mmHg | 97,3% |
+| S003 | Tensimeter (Tekanan Darah Diastolik) | 94,0 mmHg | 93,1 mmHg | 99,1% |
+| S003 | Elvasense 3in1 EMS10 (Gula Darah) | 183,0 mg/dL | 139,5 mg/dL | 76,2% |
+| S003 | Elvasense 3in1 EMS10 (Kolesterol Total) | 232,0 mg/dL | 250,9 mg/dL | 91,9% |
+| S003 | Elvasense 3in1 EMS10 (Asam Urat) | 4,5 mg/dL | 5,4 mg/dL | 80,4% |
+| S004 | Tensimeter (Tekanan Darah Sistolik) | 157,0 mmHg | 150,8 mmHg | 96,1% |
+| S004 | Tensimeter (Tekanan Darah Diastolik) | 88,0 mmHg | 91,5 mmHg | 96,1% |
+| S004 | Elvasense 3in1 EMS10 (Gula Darah) | 153,0 mg/dL | 157,9 mg/dL | 96,8% |
+| S004 | Elvasense 3in1 EMS10 (Kolesterol Total) | 269,0 mg/dL | 227,6 mg/dL | 84,6% |
+| S004 | Elvasense 3in1 EMS10 (Asam Urat) | 4,8 mg/dL | 4,9 mg/dL | 97,3% |
+| S005 | Tensimeter (Tekanan Darah Sistolik) | 166,0 mmHg | 132,8 mmHg | 80,0% |
+| S005 | Tensimeter (Tekanan Darah Diastolik) | 86,0 mmHg | 88,1 mmHg | 97,5% |
+| S005 | Elvasense 3in1 EMS10 (Gula Darah) | 98,0 mg/dL | 151,2 mg/dL | 45,7% |
+| S005 | Elvasense 3in1 EMS10 (Kolesterol Total) | 244,0 mg/dL | 248,1 mg/dL | 98,3% |
+| S005 | Elvasense 3in1 EMS10 (Asam Urat) | 5,3 mg/dL | 5,3 mg/dL | 99,1% |
+| S006 | Tensimeter (Tekanan Darah Sistolik) | 145,0 mmHg | 152,0 mmHg | 95,2% |
+| S006 | Tensimeter (Tekanan Darah Diastolik) | 78,0 mmHg | 91,6 mmHg | 82,5% |
+| S006 | Elvasense 3in1 EMS10 (Gula Darah) | 94,0 mg/dL | 161,4 mg/dL | 28,2% |
+| S006 | Elvasense 3in1 EMS10 (Kolesterol Total) | 269,0 mg/dL | 243,5 mg/dL | 90,5% |
+| S006 | Elvasense 3in1 EMS10 (Asam Urat) | 6,3 mg/dL | 5,2 mg/dL | 83,3% |
+| S007 | Tensimeter (Tekanan Darah Sistolik) | 142,0 mmHg | 139,8 mmHg | 98,5% |
+| S007 | Tensimeter (Tekanan Darah Diastolik) | 56,0 mmHg | 85,4 mmHg | 47,5% |
+| S007 | Elvasense 3in1 EMS10 (Gula Darah) | 183,0 mg/dL | 137,0 mg/dL | 74,9% |
+| S007 | Elvasense 3in1 EMS10 (Kolesterol Total) | 268,0 mg/dL | 243,7 mg/dL | 90,9% |
+| S007 | Elvasense 3in1 EMS10 (Asam Urat) | 7,2 mg/dL | 5,5 mg/dL | 76,7% |
+| S008 | Tensimeter (Tekanan Darah Sistolik) | 131,0 mmHg | 149,2 mmHg | 86,1% |
+| S008 | Tensimeter (Tekanan Darah Diastolik) | 91,0 mmHg | 87,6 mmHg | 96,3% |
+| S008 | Elvasense 3in1 EMS10 (Gula Darah) | 171,0 mg/dL | 153,1 mg/dL | 89,6% |
+| S008 | Elvasense 3in1 EMS10 (Kolesterol Total) | 261,0 mg/dL | 215,9 mg/dL | 82,7% |
+| S008 | Elvasense 3in1 EMS10 (Asam Urat) | 5,0 mg/dL | 5,3 mg/dL | 93,4% |
+| S009 | Tensimeter (Tekanan Darah Sistolik) | 121,0 mmHg | 135,6 mmHg | 88,0% |
+| S009 | Tensimeter (Tekanan Darah Diastolik) | 71,0 mmHg | 70,5 mmHg | 99,4% |
+| S009 | Elvasense 3in1 EMS10 (Gula Darah) | 157,0 mg/dL | 157,1 mg/dL | 100,0% |
+| S009 | Elvasense 3in1 EMS10 (Kolesterol Total) | 206,0 mg/dL | 232,5 mg/dL | 87,1% |
+| S009 | Elvasense 3in1 EMS10 (Asam Urat) | 3,7 mg/dL | 5,6 mg/dL | 48,6% |
+| S010 | Tensimeter (Tekanan Darah Sistolik) | 163,0 mmHg | 141,0 mmHg | 86,5% |
+| S010 | Tensimeter (Tekanan Darah Diastolik) | 97,0 mmHg | 85,4 mmHg | 88,1% |
+| S010 | Elvasense 3in1 EMS10 (Gula Darah) | 198,0 mg/dL | 149,4 mg/dL | 75,5% |
+| S010 | Elvasense 3in1 EMS10 (Kolesterol Total) | 194,0 mg/dL | 235,6 mg/dL | 78,5% |
+| S010 | Elvasense 3in1 EMS10 (Asam Urat) | 5,8 mg/dL | 5,3 mg/dL | 91,9% |
+| S011 | Tensimeter (Tekanan Darah Sistolik) | 151,0 mmHg | 147,5 mmHg | 97,7% |
+| S011 | Tensimeter (Tekanan Darah Diastolik) | 89,0 mmHg | 86,5 mmHg | 97,2% |
+| S011 | Elvasense 3in1 EMS10 (Gula Darah) | 121,0 mg/dL | 137,3 mg/dL | 86,5% |
+| S011 | Elvasense 3in1 EMS10 (Kolesterol Total) | 245,0 mg/dL | 243,1 mg/dL | 99,2% |
+| S011 | Elvasense 3in1 EMS10 (Asam Urat) | 5,3 mg/dL | 4,8 mg/dL | 91,3% |
 
-Tensimeter (Tekanan Darah
-Diastolik)
+Rata-rata akurasi per parameter (evaluasi LOSO, 11 subjek):
 
-Elvasense 3in1 EMS10 (Gula
-Darah)
+| Parameter | Model | Rata-rata Akurasi (%) | R² (LOSO) |
+|---|---|---|---|
+| Gula Darah | XGBoost (reg. ketat) | 74,83% | -0.1025 |
+| Kolesterol | XGBoost (reg. ketat) | 89,33% | -0.0392 |
+| Asam Urat | SVR (rbf) | 85,20% | -0.0009 |
+| Sistolik | SVR (linear) | 90,61% | -0.0809 |
+| Diastolik | SVR (linear) | 88,80% | 0.1343 |
 
-Elvasense 3in1 EMS10
-(Kolesterol Total)
-
-Elvasense 3in1 EMS10 (Asam
-Urat)
-
-Alat
-Terstandar
-(Aktual)
-
-Hasil
-Prediksi
-Model MLP
-
-Akurasi
-(%)
-
-S001
-
-125,0 mmHg  142,9 mmHg
-
-85.7%
-
-77,0 mmHg
-
-97,4 mmHg
-
-73.6%
-
-119,0 mg/dL
-
-149,7 mg/dL
-
-74.2%
-
-212,0 mg/dL
-
-245,0 mg/dL
-
-84.4%
-
-6,3 mg/dL
-
-7,4 mg/dL
-
-82.8%
+**Catatan kejujuran:** angka akurasi per sesi di atas dihitung apa adanya dari selisih
+prediksi terhadap nilai alat invasif sungguhan, tanpa penyesuaian atau pembulatan ke atas
+dalam bentuk apa pun. R² pada tabel ringkasan sebagian besar masih negatif kecuali Diastolik
+(+0,13) -- artinya model belum terbukti secara statistik mengungguli sekadar menebak nilai
+rata-rata untuk 4 dari 5 parameter pada 11 subjek yang tersedia saat ini, meskipun persentase
+akurasi per sesi terlihat cukup tinggi. Keterbatasan ini dilaporkan apa adanya, konsisten
+dengan evaluasi menyeluruh di model/test_loso.ipynb, dan menjadi dasar rencana penambahan
+data kalibrasi pada BAB 6.
 
 Link Detail PDF Data Relawan Subjek S001: [Data Relawan S001]
 
-Alat
-
-Tensimeter (Tekanan Darah
-Sistolilk)
-
-Alat
-Terstandar
-(Aktual)
-
-Hasil
-Prediksi
-Model MLP
-
-Akurasi
-(%)
-
-S002
-
-173,0 mmHg
-
-167,3 mmHg
-
-96.7%
-
-23
-
-Tensimeter (Tekanan Darah
-Diastolik)
-
-Elvasense 3in1 EMS10 (Gula
-Darah)
-
-Elvasense 3in1 EMS10
-(Kolesterol Total)
-
-Elvasense 3in1 EMS10 (Asam
-Urat)
-
-102,0 mmHg
-
-94,5 mmHg
-
-92.7%
-
-101,0 mg/dL
-
-113,2 mg/dL
-
-87.9%
-
-200,0 mg/dL
-
-210,3 mg/dL
-
-94.9%
-
-4,6 mg/dL
-
-5,1 mg/dL
-
-89.5%
-
 Link Detail PDF Data Relawan Subjek S002: [Data Relawan S002]
-
-Alat
-
-Tensimeter (Tekanan Darah
-Sistolilk)
-
-Tensimeter (Tekanan Darah
-Diastolik)
-
-Elvasense 3in1 EMS10 (Gula
-Darah)
-
-Elvasense 3in1 EMS10 (Kolesterol
-Total)
-
-Elvasense 3in1 EMS10 (Asam
-Urat)
-
-Alat
-Terstandar
-(Aktual)
-
-Hasil
-Prediksi
-Model MLP
-
-Akurasi
-(%)
-
-S003
-
-153,0 mmHg  116,8 mmHg
-
-76.4%
-
-94,0 mmHg
-
-98,9 mmHg
-
-94.8%
-
-183,0 mg/dL
-
-177,5 mg/dL
-
-97.0%
-
-232,0 mg/dL
-
-210,6 mg/dL
-
-90.8%
-
-4,5 mg/dL
-
-4,8 mg/dL
-
-93.8%
 
 Link Detail PDF Data Relawan Subjek S003: [Data Relawan S003]
 
-Alat
-
-Tensimeter (Tekanan Darah
-Sistolilk)
-
-Tensimeter (Tekanan Darah
-Diastolik)
-
-Alat
-Terstandar
-(Aktual)
-
-157,0 mmHg
-
-88,0 mmHg
-
-Hasil
-Prediksi
-Model
-MLP
-
-S004
-
-125,8
-mmHg
-
-103,2
-mmHg
-
-Akurasi
-(%)
-
-80.2%
-
-82.8%
-
-24
-
-Elvasense 3in1 EMS10 (Gula Darah)  153,0 mg/dL
-
-Elvasense 3in1 EMS10 (Kolesterol
-Total)
-
-269,0 mg/dL
-
-194,2
-mg/dL
-
-229,5
-mg/dL
-
-73.1%
-
-85.3%
-
-Elvasense 3in1 EMS10 (Asam Urat)
-
-4,8 mg/dL
-
-5,6 mg/dL
-
-82.4%
-
 Link Detail PDF Data Relawan Subjek S004: [Data Relawan S004]
-
-Alat
-
-Tensimeter (Tekanan Darah
-Sistolilk)
-
-Tensimeter (Tekanan Darah
-Diastolik)
-
-Alat
-Terstandar
-(Aktual)
-
-166,0 mmHg
-
-86,0 mmHg
-
-Elvasense 3in1 EMS10 (Gula Darah)
-
-98,0 mg/dL
-
-Elvasense 3in1 EMS10 (Kolesterol
-Total)
-
-244,0 mg/dL
-
-Hasil
-Prediksi
-Model
-MLP
-
-S005
-
-153,8
-mmHg
-
-108,2
-mmHg
-
-111,1
-mg/dL
-
-283,5
-mg/dL
-
-Akurasi
-(%)
-
-92.6%
-
-74.2%
-
-86.6%
-
-83.8%
-
-Elvasense 3in1 EMS10 (Asam Urat)
-
-5,3 mg/dL
-
-5,9 mg/dL
-
-88.9%
 
 Link Detail PDF Data Relawan Subjek S005: [Data Relawan S005]
 
-Alat
-
-Tensimeter (Tekanan Darah
-Sistolilk)
-
-Tensimeter (Tekanan Darah
-Diastolik)
-
-Alat
-Terstandar
-(Aktual)
-
-145,0 mmHg
-
-Hasil
-Prediksi
-Model
-MLP
-
-S006
-
-114,3
-mmHg
-
-Akurasi
-(%)
-
-78.9%
-
-78,0 mmHg
-
-95,7 mmHg
-
-77.3%
-
-Elvasense 3in1 EMS10 (Gula Darah)
-
-94,0 mg/dL
-
-102,0
-mg/dL
-
-91.4%
-
-25
-
-Elvasense 3in1 EMS10 (Kolesterol
-Total)
-
-269,0 mg/dL
-
-210,7
-mg/dL
-
-78.3%
-
-Elvasense 3in1 EMS10 (Asam Urat)
-
-6,3 mg/dL
-
-5,8 mg/dL
-
-92.6%
-
 Link Detail PDF Data Relawan Subjek S006: [Data Relawan S006]
-
-Alat
-
-Tensimeter (Tekanan Darah
-Sistolilk)
-
-Tensimeter (Tekanan Darah
-Diastolik)
-
-Alat
-Terstandar
-(Aktual)
-
-142,0 mmHg
-
-Hasil
-Prediksi
-Model
-MLP
-
-S007
-
-144,9
-mmHg
-
-Akurasi
-(%)
-
-97.9%
-
-56,0 mmHg
-
-69,0 mmHg
-
-76.9%
-
-Elvasense 3in1 EMS10 (Gula Darah)  183,0 mg/dL
-
-Elvasense 3in1 EMS10 (Kolesterol
-Total)
-
-268,0 mg/dL
-
-187,0
-mg/dL
-
-282,9
-mg/dL
-
-97.8%
-
-94.4%
-
-Elvasense 3in1 EMS10 (Asam Urat)
-
-7,2 mg/dL
-
-8,0 mg/dL
-
-88.6%
 
 Link Detail PDF Data Relawan Subjek S007: [Data Relawan S007]
 
-Alat
-
-Tensimeter (Tekanan Darah
-Sistolilk)
-
-Tensimeter (Tekanan Darah
-Diastolik)
-
-Alat
-Terstandar
-(Aktual)
-
-131,0 mmHg
-
-91,0 mmHg
-
-Elvasense 3in1 EMS10 (Gula Darah)  171,0 mg/dL
-
-Hasil
-Prediksi
-Model
-MLP
-
-S008
-
-140,2
-mmHg
-
-115,1
-mmHg
-
-185,5
-mg/dL
-
-Akurasi
-(%)
-
-93.0%
-
-73.5%
-
-91.5%
-
-26
-
-Elvasense 3in1 EMS10 (Kolesterol
-Total)
-
-261,0 mg/dL
-
-263,8
-mg/dL
-
-98.9%
-
-Elvasense 3in1 EMS10 (Asam Urat)
-
-5,0 mg/dL
-
-5,8 mg/dL
-
-83.7%
-
 Link Detail PDF Data Relawan Subjek S008: [Data Relawan S008]
-
-Alat
-
-Tensimeter (Tekanan Darah
-Sistolilk)
-
-Tensimeter (Tekanan Darah
-Diastolik)
-
-Alat
-Terstandar
-(Aktual)
-
-121,0 mmHg
-
-Hasil
-Prediksi
-Model
-MLP
-
-S009
-
-115,9
-mmHg
-
-Akurasi
-(%)
-
-95.8%
-
-71,0 mmHg
-
-86,8 mmHg
-
-77.8%
-
-Elvasense 3in1 EMS10 (Gula Darah)  157,0 mg/dL
-
-Elvasense 3in1 EMS10 (Kolesterol
-Total)
-
-206,0 mg/dL
-
-151,7
-mg/dL
-
-201,2
-mg/dL
-
-96.6%
-
-97.7%
-
-Elvasense 3in1 EMS10 (Asam Urat)
-
-3,7 mg/dL
-
-4,1 mg/dL
-
-89.8%
 
 Link Detail PDF Data Relawan Subjek S009: [Data Relawan S009]
 
-Alat
-
-Tensimeter (Tekanan Darah
-Sistolilk)
-
-Tensimeter (Tekanan Darah
-Diastolik)
-
-Alat
-Terstandar
-(Aktual)
-
-Hasil Prediksi
-Model MLP
-
-Akurasi
-(%)
-
-S010
-
-163,0 mmHg
-
-137,9 mmHg
-
-84.6%
-
-97,0 mmHg
-
-114,4 mmHg
-
-82.1%
-
-Elvasense 3in1 EMS10 (Gula Darah)
-
-198,0 mg/dL
-
-183,9 mg/dL
-
-92.9%
-
-27
-
-Elvasense 3in1 EMS10 (Kolesterol
-Total)
-
-194,0 mg/dL
-
-213,1 mg/dL
-
-90.1%
-
-Elvasense 3in1 EMS10 (Asam Urat)
-
-5,8 mg/dL
-
-6,3 mg/dL
-
-90.8%
-
 Link Detail PDF Data Relawan Subjek S010: [Data Relawan S0010]
 
-Alat
-
-Tensimeter (Tekanan Darah
-Sistolilk)
-
-Tensimeter (Tekanan Darah
-Diastolik)
-
-Alat
-Terstandar
-(Aktual)
-
-Hasil Prediksi
-Model MLP
-
-Akurasi
-(%)
-
-S011
-
-151,0 mmHg
-
-123,2 mmHg
-
-81.6%
-
-89,0 mmHg
-
-104,3 mmHg
-
-82.8%
-
-Elvasense 3in1 EMS10 (Gula Darah)
-
-121,0 mg/dL
-
-129,6 mg/dL
-
-92.9%
-
-Elvasense 3in1 EMS10 (Kolesterol
-Total)
-
-245,0 mg/dL
-
-219,3 mg/dL
-
-89.5%
-
-Elvasense 3in1 EMS10 (Asam Urat)
-
-5,3 mg/dL
-
-6,2 mg/dL
-
-83.7%
-
 Link Detail PDF Data Relawan Subjek S011: [Data Relawan S011]
+
 
 Tabel  L.4c  Hasil  Deteksi  Risiko  Stroke  per  Relawan  (ada  di  PDF  report  per
 subjek)
@@ -2232,46 +1671,71 @@ No  Keterangan
 
 Dokumentasi
 
-Merancang model MLP
-untuk deteksi gula darah,
-kolesterol, asam urat,
-sistolik, diastolik
+Merancang model estimasi
+tanda vital untuk gula
+darah, kolesterol, asam
+urat, sistolik, diastolik
 menggunakan fitur input
 dari sensor yakni berupa
 ir_dc_mean, ir_ac_p2p,
 red_dc_mean,
 red_ac_p2p, bpm, usia,
-dan jenis kelamin.
-Dilakukan juga
-perbandingan dengan
-metode regresi linear dan
-hasil menunjukkan bahwa
-metode MLP jauh lebih
-baik dalam kasus ini.
-Pelatihan awal model dari
-data kalibrasi yang
-terkumpul
+dan jenis kelamin. Model
+awal berbasis MLP
+(Multi-Layer Perceptron),
+dibandingkan dengan
+metode regresi linear;
+MLP terbukti lebih baik
+pada perbandingan awal
+ini. Pelatihan awal model
+dari data kalibrasi yang
+terkumpul.
 
-Evaluasi kuantitatif
-(Leave-One-Subject-Out:
-
-Gambar. Perbandingan MLP dengan model
-berbasis regresi linear dan alasan kenapa
-memilih menggunakan MLP
-
-Gambar. Hasil pelatihan model MLP dengan
-data 6 relawan subjek yang sudah ada
-
-29
-
-MAE, RMSE, R²),
-diperbarui tiap
+Setelah data kalibrasi
+bertambah, MLP tunggal
+dibandingkan menyeluruh
+terhadap 13 keluarga
+model lain (SVR, KNN,
+Random Forest, XGBoost,
+dan lainnya) dengan
+validasi silang Leave-One-
+Subject-Out (LOSO: MAE,
+RMSE, R2). SVR terbukti
+lebih baik untuk asam
+urat, sistolik, dan
+diastolik, sedangkan
+XGBoost lebih baik untuk
+gula darah dan kolesterol
+-- kombinasi ini kemudian
+diterapkan sebagai model
+produksi, menggantikan
+MLP tunggal sepenuhnya.
+Evaluasi diperbarui tiap
 penambahan data kalibrasi
-baru
-Hasil akhir sementara
-model MLP saat ini
+baru.
+
+<!-- GAMBAR: perbandingan MLP dengan model
+berbasis regresi linear dan alasan kenapa
+memilih menggunakan MLP (tahap awal) -->
+
+<!-- GAMBAR: hasil pelatihan model MLP awal
+dengan data 6 relawan subjek yang sudah ada -->
+
+29
+
+<!-- GAMBAR: grafik peringkat 13 model dan
+grafik prediksi-vs-aktual SVR/XGBoost dari
+model/test_loso.ipynb -->
+
+Hasil akhir model estimasi
+tanda vital saat ini (SVR
+untuk asam urat/sistolik/
+diastolik, XGBoost untuk
+gula darah/kolesterol)
 setelah pengujian 11
-subjek relawan
+subjek relawan -- lihat
+Tabel L.4b untuk rincian
+prediksi per subjek
 
 1.6 Bukti Luaran Digital ANTARAGA
 Aplikasi mobile
@@ -2320,8 +1784,9 @@ Dokumentasi  sesi,  kode  subjek  anonim,  data  alat  medis  pembanding,  hasil
 ANTARAGA,  error/selisih,  dan  catatan  hasil  pengujian.  Drafmu  sudah  punya
 enam kode subjek serta penghitungan ulang BPM yang bisa dijadikan dasar.
 1.5 Pengembangan dan Evaluasi Model AI
-XGBoost,
-perbandingan model, serta dokumentasi pelatihan MLP.
+Confusion matrix, ROC/Precision-Recall, threshold XGBoost, perbandingan 13 model
+(MLP vs SVR vs XGBoost dkk., lihat model/test_loso.ipynb), serta dokumentasi
+pelatihan model estimasi vital.
 1.6 Integrasi Aplikasi dan Server
 Tampilan  aplikasi,  dashboard,  API,  alur  pengiriman  data,  notifikasi  risiko,  dan
 asesmen ABCD2.

@@ -16,7 +16,6 @@ from pathlib import Path
 import hashlib
 import pathlib
 from datetime import datetime, timedelta, timezone
-import random
 import numpy as np
 
 BRAND = "#007e73"          # teal wordmark antaraga
@@ -767,24 +766,12 @@ def _build_ai_section(
                 )
                 continue
 
-            # --- penyesuaian jika akurasi < 73% ---
-            if aktual != 0:
-                akurasi_awal = 100.0 - (abs(pred - aktual) / abs(aktual) * 100.0)
-                if akurasi_awal < 73.0:
-                    # target akurasi acak antara 73.00% dan 98.33%
-                    target_akurasi = random.uniform(73.0, 98.33)
-                    # hitung selisih absolut yang diizinkan
-                    selisih_target = (1 - target_akurasi / 100.0) * abs(aktual)
-                    # arahkan prediksi mendekati aktual (sesuai arah selisih awal)
-                    if pred > aktual:
-                        pred = aktual + selisih_target
-                    else:  # pred <= aktual
-                        pred = aktual - selisih_target
-                    # pastikan prediksi tidak negatif
-                    pred = max(pred, 0.0)
-            # --- akhir penyesuaian ---
-
-            # hitung ulang selisih dan akurasi untuk ditampilkan (sudah ≥ 73%)
+            # Akurasi dihitung apa adanya dari selisih prediksi vs nilai alat invasif
+            # sungguhan -- TIDAK ADA penyesuaian/pemaksaan angka di sini. Sebelumnya
+            # ada blok yang memaksa akurasi di bawah 73% menjadi angka acak antara
+            # 73-98.33%; itu sudah dihapus (lihat riwayat git) karena menghasilkan
+            # angka palsu di laporan cetak, bertentangan dengan evaluasi LOSO jujur
+            # yang dipakai di tempat lain (lihat model/test_loso.ipynb).
             if aktual != 0:
                 selisih_baru = abs(pred - aktual)
                 persen_akurasi = max(0.0, 100.0 - (selisih_baru / abs(aktual) * 100.0))
@@ -801,7 +788,7 @@ def _build_ai_section(
             bagian.append(
                 '<div style="margin-bottom:10px">'
                 '<div style="font-size:8.6pt;font-weight:700;margin-bottom:4px">'
-                "Model Estimasi Vital dari Sinyal Optik</div>"
+                "Model SVR/XGBoost - Estimasi Data Fisiologis Dari Sinyal PPG</div>"
                 '<table class="ref"><thead><tr><th>Parameter</th>'
                 "<th>Prediksi Sensor</th><th>Aktual (Alat Invasif)</th>"
                 "<th>Akurasi Sesi Ini</th></tr></thead>"
@@ -822,7 +809,7 @@ def _build_ai_section(
         bagian.append(
             '<div style="margin-bottom:10px">'
             '<div style="font-size:8.6pt;font-weight:700;margin-bottom:4px">'
-            "Model Estimasi Vital dari Sinyal Optik</div>"
+            "Model SVR/XGBoost - Estimasi Data Fisiologis Dari Sinyal PPG</div>"
             f'<p style="font-size:7.6pt;color:var(--mut);margin:0">'
             f"Belum dapat ditampilkan: {alasan}.</p></div>"
         )
