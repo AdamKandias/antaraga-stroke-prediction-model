@@ -873,7 +873,8 @@ def build_record_report_html(
     kode = hashlib.sha1(
         f"{rec.id}|{rec.device_id}|{rec.subject_id}|{rec.created_at}|"
         f"{rec.sistolik_mmhg}|{rec.diastolik_mmhg}|{rec.gula_darah_mg_dl}|"
-        f"{rec.kolesterol_mg_dl}|{rec.asam_urat_mg_dl}|{rec.bpm}".encode()
+        f"{rec.kolesterol_mg_dl}|{rec.asam_urat_mg_dl}|{rec.bpm}|"
+        f"{getattr(rec, 'oksimeter_bpm', None)}".encode()
     ).hexdigest()[:10].upper()
 
     sis, dia, bpm = rec.sistolik_mmhg, rec.diastolik_mmhg, rec.bpm
@@ -927,6 +928,32 @@ def build_record_report_html(
         _row("molecule", "Asam Urat", "Strip enzimatik POCT",
              _num(au, 1), "mg/dL", _uric_ref(gender, rec.age_years), st_au),
     ])
+
+    # ── Pembanding BPM: sensor ANTARAGA vs oksimeter jari ───────────────
+    # Baris "Denyut Jantung (HR)" di atas memakai bacaan sensor ANTARAGA
+    # sendiri (PPG inframerah), bukan alat standar independen. Blok ini
+    # membandingkannya dengan oksimeter jari kalau dicatat -- nullable,
+    # sebagian besar sesi lama tidak mencatatnya.
+    oksimeter_bpm = getattr(rec, "oksimeter_bpm", None)
+    if oksimeter_bpm is not None and bpm is not None:
+        selisih_bpm = bpm - oksimeter_bpm
+        akurasi_bpm_txt = (
+            f"{max(0.0, 100.0 - abs(selisih_bpm) / abs(oksimeter_bpm) * 100.0):.1f}%"
+            if oksimeter_bpm != 0 else "-"
+        )
+        oksimeter_block = f"""
+  <div style="margin:10px 0">
+    <div style="font-size:8.6pt;font-weight:700;margin-bottom:4px">
+      Pembanding Denyut Jantung - Sensor ANTARAGA vs Oksimeter</div>
+    <table class="ref"><thead><tr><th>Sumber</th><th>Metode</th><th>Hasil</th></tr></thead>
+    <tbody>
+      <tr><td>Sensor ANTARAGA</td><td class="src">PPG inframerah, autokorelasi</td><td>{_num(bpm, 0)} bpm</td></tr>
+      <tr><td>Oksimeter jari</td><td class="src">Alat standar independen</td><td>{_num(oksimeter_bpm, 0)} bpm</td></tr>
+      <tr><td>Selisih</td><td class="src">Sensor - Oksimeter</td><td>{selisih_bpm:+.1f} bpm ({akurasi_bpm_txt} akurasi relatif)</td></tr>
+    </tbody></table>
+  </div>"""
+    else:
+        oksimeter_block = ""
 
     # ── Faktor risiko stroke yang dapat dimodifikasi ─────────────────────
     usia = float(rec.age_years or 0)
@@ -1093,6 +1120,8 @@ def build_record_report_html(
     </tr></thead>
     <tbody>{rows}</tbody>
   </table>
+
+  {oksimeter_block}
 
   {strip_block}
 

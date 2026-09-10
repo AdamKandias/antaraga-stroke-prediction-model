@@ -153,6 +153,12 @@ class CalibrationRecord(Base):
     sistolik_mmhg: Mapped[float | None] = mapped_column(Float, nullable=True)
     diastolik_mmhg: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # BPM dari oksimeter jari (alat standar independen), pembanding untuk
+    # `bpm` di atas (yang dihitung dari sinyal PPG ANTARAGA sendiri lewat
+    # autokorelasi -- lihat api/ppg_analysis.py). Nullable: banyak sesi lama
+    # tidak mencatat ini.
+    oksimeter_bpm: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     # Riwayat stroke pada keluarga inti (orang tua/saudara kandung). Bukan
     # fitur yang dipakai model XGBoost (model dilatih dari dataset publik
     # yang tidak punya kolom ini) -- ditampilkan di laporan sebagai faktor

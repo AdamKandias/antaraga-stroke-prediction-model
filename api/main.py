@@ -1914,6 +1914,12 @@ def calibrate_create(
     asam_urat_mg_dl: float | None = None,
     sistolik_mmhg: float | None = None,
     diastolik_mmhg: float | None = None,
+    oksimeter_bpm: float | None = Query(
+        None,
+        description="BPM dari oksimeter jari (alat standar independen), "
+                     "dicatat manual oleh peneliti sebagai pembanding untuk "
+                     "BPM yang dihitung server dari sinyal PPG ANTARAGA.",
+    ),
     family_history_stroke: bool | None = None,
     personal_history_stroke: bool | None = None,
     db: Session = Depends(get_db),
@@ -1970,6 +1976,7 @@ def calibrate_create(
         asam_urat_mg_dl   = asam_urat_mg_dl,
         sistolik_mmhg     = sistolik_mmhg,
         diastolik_mmhg    = diastolik_mmhg,
+        oksimeter_bpm     = oksimeter_bpm,
         family_history_stroke = family_history_stroke,
         personal_history_stroke = personal_history_stroke,
     )
@@ -2065,6 +2072,12 @@ def calibrate_update(
                      "(mis. saat nilai lama dan hasil hitung ulang kebetulan "
                      "sama-sama salah). Sinyal mentah tidak ikut berubah.",
     ),
+    oksimeter_bpm: float | None = Query(
+        None,
+        description="BPM dari oksimeter jari (alat standar independen), "
+                     "dicatat manual oleh peneliti sebagai pembanding untuk "
+                     "BPM yang dihitung server dari sinyal PPG ANTARAGA.",
+    ),
     family_history_stroke: bool | None = None,
     personal_history_stroke: bool | None = None,
     session_ts: str | None = Query(
@@ -2099,6 +2112,7 @@ def calibrate_update(
     if sistolik_mmhg     is not None: rec.sistolik_mmhg     = sistolik_mmhg
     if diastolik_mmhg    is not None: rec.diastolik_mmhg    = diastolik_mmhg
     if bpm                is not None: rec.bpm               = bpm
+    if oksimeter_bpm      is not None: rec.oksimeter_bpm     = oksimeter_bpm
     if family_history_stroke is not None: rec.family_history_stroke = family_history_stroke
     if personal_history_stroke is not None: rec.personal_history_stroke = personal_history_stroke
     if session_ts        is not None:
@@ -2203,7 +2217,7 @@ def calibrate_export(
         "fs_hz", "green_raw", "red_raw", "infrared_raw",
         "ir_dc_mean", "ir_ac_p2p", "red_dc_mean", "red_ac_p2p", "bpm",
         "gula_darah_mg_dl", "kolesterol_mg_dl", "asam_urat_mg_dl",
-        "sistolik_mmhg", "diastolik_mmhg",
+        "sistolik_mmhg", "diastolik_mmhg", "oksimeter_bpm",
         # Alias kompatibel train_ppg_vitals.py
         "blood_glucose_mg_dl", "systolic_bp_mmhg", "diastolic_bp_mmhg",
     ]
@@ -2232,6 +2246,7 @@ def calibrate_export(
             "asam_urat_mg_dl": r.asam_urat_mg_dl or "",
             "sistolik_mmhg": r.sistolik_mmhg or "",
             "diastolik_mmhg": r.diastolik_mmhg or "",
+            "oksimeter_bpm": r.oksimeter_bpm or "",
             # Alias
             "blood_glucose_mg_dl": r.gula_darah_mg_dl or "",
             "systolic_bp_mmhg": r.sistolik_mmhg or "",
@@ -2336,6 +2351,7 @@ async def calibrate_import(
             asam_urat_mg_dl=_f(row, "asam_urat_mg_dl"),
             sistolik_mmhg=_f(row, "sistolik_mmhg"),
             diastolik_mmhg=_f(row, "diastolik_mmhg"),
+            oksimeter_bpm=_f(row, "oksimeter_bpm"),
             created_at=session_ts,
         )
         kandidat.append(rec)
@@ -2516,6 +2532,7 @@ def _calib_to_dict(r: models_db.CalibrationRecord) -> dict:
         "asam_urat_mg_dl":   r.asam_urat_mg_dl,
         "sistolik_mmhg":     r.sistolik_mmhg,
         "diastolik_mmhg":    r.diastolik_mmhg,
+        "oksimeter_bpm":     r.oksimeter_bpm,
         "family_history_stroke": r.family_history_stroke,
         "personal_history_stroke": r.personal_history_stroke,
     }

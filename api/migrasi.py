@@ -156,6 +156,22 @@ def _tambah_kolesterol_asam_urat_ke_vital_readings(engine: Engine) -> None:
         )
 
 
+def _tambah_oksimeter_bpm_ke_kalibrasi(engine: Engine) -> None:
+    """Tambah kolom BPM oksimeter pada rekaman kalibrasi.
+
+    Pembanding independen untuk `bpm` (dihitung dari sinyal PPG ANTARAGA
+    sendiri via autokorelasi) -- sebelumnya laporan cetak hanya melaporkan
+    BPM dari sensornya sendiri, tanpa pembanding alat standar sungguhan.
+    """
+    if _punya_kolom(engine, "calibration_records", "oksimeter_bpm"):
+        return
+    with engine.begin() as conn:
+        conn.execute(text(
+            "ALTER TABLE calibration_records ADD COLUMN oksimeter_bpm FLOAT"
+        ))
+        logger.info("[migrasi] kolom calibration_records.oksimeter_bpm dibuat")
+
+
 def jalankan(engine: Engine) -> None:
     """Jalankan seluruh penyesuaian skema. Dipanggil sekali saat server mulai.
 
@@ -169,6 +185,7 @@ def jalankan(engine: Engine) -> None:
         _tambah_riwayat_stroke_ke_kalibrasi,
         _tambah_riwayat_stroke_pribadi_ke_kalibrasi,
         _tambah_kolesterol_asam_urat_ke_vital_readings,
+        _tambah_oksimeter_bpm_ke_kalibrasi,
     ):
         try:
             langkah(engine)

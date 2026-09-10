@@ -1482,6 +1482,10 @@
             <label class="up-label">Diastolik (mmHg)</label>
             <input id="clDia" class="up-input" type="number" step="1" placeholder="mis. 80">
           </div>
+          <div>
+            <label class="up-label">Oksimeter (bpm)</label>
+            <input id="clOksimeter" class="up-input" type="number" step="1" placeholder="mis. 82">
+          </div>
         </div>
 
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -1515,6 +1519,7 @@
                 <th>Kondisi</th>
                 <th>IR DC</th>
                 <th>BPM</th>
+                <th title="BPM oksimeter jari - alat standar independen">Oksi</th>
                 <th style="color:var(--c1)">Gula ↓</th>
                 <th style="color:var(--c2)">Kol ↓</th>
                 <th style="color:var(--c3)">AU ↓</th>
@@ -1528,7 +1533,7 @@
             </thead>
             <tbody id="calibBody">
               <tr>
-                <td colspan="16" style="text-align:center;color:var(--muted);padding:20px">Belum ada data - rekam sesi
+                <td colspan="17" style="text-align:center;color:var(--muted);padding:20px">Belum ada data - rekam sesi
                   pertama di atas</td>
               </tr>
             </tbody>
@@ -1751,6 +1756,10 @@
           <div>
             <label class="up-label">Diastolik (mmHg)</label>
             <input id="editDia" class="up-input" type="number" step="1">
+          </div>
+          <div>
+            <label class="up-label">Oksimeter (bpm)</label>
+            <input id="editOksimeter" class="up-input" type="number" step="1">
           </div>
         </div>
 
@@ -2442,7 +2451,7 @@
       const tbody = document.getElementById('calibBody');
       if (!tbody) return;
       if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;color:var(--muted);padding:20px">Belum ada data</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="17" style="text-align:center;color:var(--muted);padding:20px">Belum ada data</td></tr>';
         return;
       }
       const fmt = v => v != null ? Number(v).toFixed(1) : '-';
@@ -2456,6 +2465,7 @@
       <td style="color:var(--muted)">${r.kondisi || '-'}</td>
       <td style="font-family:monospace">${fmtI(r.ir_dc_mean)}</td>
       <td>${fmt(r.bpm)}</td>
+      <td style="color:var(--muted)">${fmt(r.oksimeter_bpm)}</td>
       <td style="color:var(--c1);font-weight:600">${fmt(r.gula_darah_mg_dl)}</td>
       <td style="color:var(--c2);font-weight:600">${fmt(r.kolesterol_mg_dl)}</td>
       <td style="color:var(--c3);font-weight:600">${fmt(r.asam_urat_mg_dl)}</td>
@@ -2500,6 +2510,7 @@
       addOpt('clAU', 'asam_urat_mg_dl');
       addOpt('clSis', 'sistolik_mmhg');
       addOpt('clDia', 'diastolik_mmhg');
+      addOpt('clOksimeter', 'oksimeter_bpm');
 
       show('Menyimpan…', 'var(--muted)');
       try {
@@ -2511,7 +2522,7 @@
         show('✓ Sesi tersimpan!', 'var(--good)');
         calibLoad();
         // Reset form
-        ['clSubject', 'clGula', 'clKol', 'clAU', 'clSis', 'clDia'].forEach(id => document.getElementById(id).value = '');
+        ['clSubject', 'clGula', 'clKol', 'clAU', 'clSis', 'clDia', 'clOksimeter'].forEach(id => document.getElementById(id).value = '');
         document.getElementById('clRiwayatStroke').checked = false;
         document.getElementById('clRiwayatStrokePribadi').checked = false;
         setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
@@ -2643,6 +2654,7 @@
       document.getElementById('editAU').value = rec.asam_urat_mg_dl ?? '';
       document.getElementById('editSis').value = rec.sistolik_mmhg ?? '';
       document.getElementById('editDia').value = rec.diastolik_mmhg ?? '';
+      document.getElementById('editOksimeter').value = rec.oksimeter_bpm ?? '';
       // Tanggal/jam sengaja dikosongkan (bukan diisi nilai sekarang) -- kosong
       // berarti "jangan ubah", nilai yang tersimpan cuma ditampilkan sebagai
       // teks bantuan supaya operator tidak menimpa tanpa sadar apa yang ada.
@@ -2689,6 +2701,7 @@
       addOpt('editAU', 'asam_urat_mg_dl');
       addOpt('editSis', 'sistolik_mmhg');
       addOpt('editDia', 'diastolik_mmhg');
+      addOpt('editOksimeter', 'oksimeter_bpm');
 
       // Tanggal dan jam masing-masing boleh diisi sendiri-sendiri -- server
       // mempertahankan bagian yang tidak dikirim (jam saja tanpa tanggal =
@@ -2720,6 +2733,7 @@
         if (saved?.asam_urat_mg_dl != null) parts.push(`AU: ${saved.asam_urat_mg_dl} mg/dL`);
         if (saved?.sistolik_mmhg != null) parts.push(`Sis: ${saved.sistolik_mmhg} mmHg`);
         if (saved?.diastolik_mmhg != null) parts.push(`Dia: ${saved.diastolik_mmhg} mmHg`);
+        if (saved?.oksimeter_bpm != null) parts.push(`Oksi: ${saved.oksimeter_bpm} bpm`);
         show(`✓ Tersimpan${parts.length ? ' - ' + parts.join(' | ') : ''}`, 'var(--good)');
         setTimeout(() => calibCloseEdit(), 1800);
         calibLoad();
