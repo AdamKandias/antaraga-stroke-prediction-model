@@ -790,7 +790,7 @@ def _build_ai_section(
                 '<div style="font-size:8.6pt;font-weight:700;margin-bottom:4px">'
                 "Model SVR/XGBoost - Estimasi Data Fisiologis Dari Sinyal PPG</div>"
                 '<table class="ref"><thead><tr><th>Parameter</th>'
-                "<th>Prediksi Sensor</th><th>Aktual (Alat Invasif)</th>"
+                "<th>Hasil Prediksi (SVR/XGBoost)</th><th>Aktual (Alat Invasif)</th>"
                 "<th>Akurasi Sesi Ini</th></tr></thead>"
                 f"<tbody>{''.join(baris_mlp)}</tbody></table>"
                 '<p style="font-size:7pt;color:var(--mut);margin:0 0 4px">'
