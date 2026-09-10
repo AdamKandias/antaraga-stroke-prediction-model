@@ -982,7 +982,7 @@ def build_record_report_html(
         poin.append(f"Asam urat <b>{_num(au, 1)} mg/dL</b>, <b>{st_au[0]}</b>.")
     if durasi:
         poin.append(
-            f"Sinyal PPG pendamping direkam <b>{_num(durasi, 1)} detik</b> "
+            f"Sinyal PPG direkam <b>{_num(durasi, 1)} detik</b> "
             f"pada sampling rate {_num(fs, 0)} Hz."
         )
     if not poin:
@@ -1060,11 +1060,11 @@ def build_record_report_html(
   <div class="kop">
     <div class="kop-l">
       {logo_html}
-      <div class="sub">Health Analytics Laboratory<br>Smartband Deteksi Risiko Stroke Berbasis AI</div>
+      <div class="sub">Health Analytics<br>Smartband Deteksi Risiko Stroke Berbasis AI</div>
     </div>
     <div class="kop-r">
       <h1>LAPORAN HASIL PEMERIKSAAN</h1>
-      <div class="h1s">Sesi Kalibrasi Sensor &amp; Parameter Vital</div>
+      <div class="h1s">Sesi Kalibrasi Sensor &amp; Parameter Fisiologis</div>
     </div>
   </div>
   <div class="kop-rule"></div>
@@ -1072,7 +1072,7 @@ def build_record_report_html(
   <dl class="meta">
     <div><dt>No. Laporan</dt><dd>{no_doc}</dd></div>
     <div><dt>Tanggal Terbit</dt><dd>{_tgl_panjang(terbit)}</dd></div>
-    <div><dt>Metode</dt><dd>PPG 3-Kanal &amp; Alat Rujukan</dd></div>
+    <div><dt>Metode</dt><dd>PPG 3-Kanal &amp; Alat Terstandar</dd></div>
     <div><dt>Kode Verifikasi</dt><dd>{kode}</dd></div>
   </dl>
 
@@ -1152,7 +1152,7 @@ def build_record_report_html(
   <div class="sign">
     <div class="note">
       <b>Catatan:</b> Nilai gula darah, kolesterol, asam urat, dan tekanan darah pada laporan ini
-      berasal dari alat ukur rujukan (invasif/standar medis) yang direkam berdampingan dengan
+      berasal dari alat ukur terstandar (invasif/standar medis) yang direkam berdampingan dengan
       sinyal PPG sebagai data kalibrasi model. Laporan ini merupakan dokumen hasil pengukuran
       penelitian dan <b>bukan pengganti diagnosis dokter</b>. Interpretasi akhir tetap
       memerlukan penilaian tenaga medis berwenang beserta riwayat klinis subjek.
