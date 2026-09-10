@@ -494,6 +494,8 @@ def predict_stroke_risk_endpoint(
         diastolic_bp=vital.diastolic_bp,
         heart_rate_bpm=vital.heart_rate_bpm,
         spo2_percent=vital.spo2_percent,
+        kolesterol_mg_dl=vital.kolesterol_mg_dl,
+        asam_urat_mg_dl=vital.asam_urat_mg_dl,
     )
 
     latency_ms = (time.perf_counter() - start) * 1000
@@ -523,7 +525,7 @@ def get_latest_vital(
         .first()
     )
     if reading is None:
-        raise HTTPException(status_code=404, detail="Belum ada data vital untuk parent ini")
+        raise HTTPException(status_code=404, detail="Belum ada data fisiologis untuk parent ini")
 
     log = (
         db.query(models_db.PredictionLog)
@@ -541,6 +543,8 @@ def get_latest_vital(
             heart_rate_bpm=reading.heart_rate_bpm,
             spo2_percent=reading.spo2_percent,
             blood_glucose_mg_dl=reading.blood_glucose_mg_dl,
+            kolesterol_mg_dl=reading.kolesterol_mg_dl,
+            asam_urat_mg_dl=reading.asam_urat_mg_dl,
             # All our DateTime columns are naive-but-conceptually-UTC
             # (datetime.utcnow() at insert time) -- attach the tz explicitly
             # so the JSON carries a UTC offset and the Flutter app's
@@ -600,6 +604,8 @@ def get_vital_history(
             heart_rate_bpm=r.heart_rate_bpm,
             spo2_percent=r.spo2_percent,
             blood_glucose_mg_dl=r.blood_glucose_mg_dl,
+            kolesterol_mg_dl=r.kolesterol_mg_dl,
+            asam_urat_mg_dl=r.asam_urat_mg_dl,
             timestamp=r.created_at.replace(tzinfo=timezone.utc),
         )
         for r in readings
@@ -1116,6 +1122,8 @@ def ingest_firmware_batch(
                 "systolic_bp_mmhg": last.systolic_bp,
                 "diastolic_bp_mmhg": last.diastolic_bp,
                 "blood_glucose_mg_dl": last.blood_glucose_mg_dl,
+                "kolesterol_mg_dl": last.kolesterol_mg_dl,
+                "asam_urat_mg_dl": last.asam_urat_mg_dl,
             }
 
     if not vitals:
@@ -1154,6 +1162,8 @@ def ingest_firmware_batch(
         diastolic_bp=vitals.get("diastolic_bp_mmhg"),
         blood_glucose_mg_dl=vitals.get("blood_glucose_mg_dl", 100.0),
         heart_rate_bpm=_hr,
+        kolesterol_mg_dl=vitals.get("kolesterol_mg_dl"),
+        asam_urat_mg_dl=vitals.get("asam_urat_mg_dl"),
     )
 
     latency_ms = (time.perf_counter() - start) * 1000

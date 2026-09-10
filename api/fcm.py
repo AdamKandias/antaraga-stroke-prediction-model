@@ -138,7 +138,7 @@ TEMPLAT_NOTIFIKASI: dict[str, dict] = {
         # sana pembaca sudah dalam konteks "mau mengisi form ini kenapa".
         "pesan_asesmen": lambda nama: (
             f"{nama} diprediksi memiliki risiko stroke tinggi berdasarkan "
-            "data vital realtime. Silakan isi form Assessment ABCD2 di "
+            "data fisiologis realtime. Silakan isi form Assessment ABCD2 di "
             "bawah ini untuk evaluasi lebih lanjut."
         ),
         "route": "assessment_form",
@@ -152,7 +152,7 @@ TEMPLAT_NOTIFIKASI: dict[str, dict] = {
         ),
         "pesan_asesmen": lambda nama: (
             f"{nama} diprediksi memiliki risiko stroke sedang berdasarkan "
-            "data vital realtime. Silakan isi form Assessment ABCD2 di "
+            "data fisiologis realtime. Silakan isi form Assessment ABCD2 di "
             "bawah ini untuk evaluasi lebih lanjut."
         ),
         "route": "assessment_form",

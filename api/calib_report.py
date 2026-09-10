@@ -1096,7 +1096,7 @@ def build_record_report_html(
 
   {strip_block}
 
-  <h2>{_icon("chip")}Parameter Teknis Sensor</h2>
+  <h2>{_icon("chip")}Parameter Teknis Sensor PPG</h2>
   <dl class="tech">{tech}</dl>
 
   <h2>{_icon("doc")}Interpretasi Hasil</h2>

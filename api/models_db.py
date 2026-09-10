@@ -107,6 +107,11 @@ class VitalReading(Base):
     heart_rate_bpm: Mapped[float | None] = mapped_column(Float, nullable=True)
     spo2_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
     blood_glucose_mg_dl: Mapped[float] = mapped_column(Float, nullable=False)
+    # Diisi hanya lewat model estimasi vital (predict_vitals) - jalur manual
+    # (/predict/stroke-risk) dan simulator dev-mode tidak selalu punya nilai
+    # ini, jadi nullable, bukan seperti blood_glucose_mg_dl yang wajib.
+    kolesterol_mg_dl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    asam_urat_mg_dl: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
 

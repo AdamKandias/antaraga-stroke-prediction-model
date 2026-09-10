@@ -136,6 +136,26 @@ def _tambah_riwayat_stroke_pribadi_ke_kalibrasi(engine: Engine) -> None:
         logger.info("[migrasi] kolom calibration_records.personal_history_stroke dibuat")
 
 
+def _tambah_kolesterol_asam_urat_ke_vital_readings(engine: Engine) -> None:
+    """Tambah kolom kolesterol dan asam urat pada riwayat tanda vital.
+
+    Model estimasi vital (SVR/XGBoost) sudah menghitung kelima parameter
+    (gula darah, kolesterol, asam urat, sistolik, diastolik) sejak lama, tapi
+    vital_readings -- tabel yang dibaca GET /vitals/latest dan /vitals/history
+    untuk aplikasi mobile -- cuma pernah punya kolom untuk tiga di antaranya.
+    Kolesterol dan asam urat yang sudah dihitung selama ini terbuang begitu
+    saja, tidak pernah sampai ke kartu dashboard aplikasi.
+    """
+    if _punya_kolom(engine, "vital_readings", "kolesterol_mg_dl"):
+        return
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE vital_readings ADD COLUMN kolesterol_mg_dl FLOAT"))
+        conn.execute(text("ALTER TABLE vital_readings ADD COLUMN asam_urat_mg_dl FLOAT"))
+        logger.info(
+            "[migrasi] kolom vital_readings.kolesterol_mg_dl dan .asam_urat_mg_dl dibuat"
+        )
+
+
 def jalankan(engine: Engine) -> None:
     """Jalankan seluruh penyesuaian skema. Dipanggil sekali saat server mulai.
 
@@ -148,6 +168,7 @@ def jalankan(engine: Engine) -> None:
         _tambah_kolom_notifikasi_sedang,
         _tambah_riwayat_stroke_ke_kalibrasi,
         _tambah_riwayat_stroke_pribadi_ke_kalibrasi,
+        _tambah_kolesterol_asam_urat_ke_vital_readings,
     ):
         try:
             langkah(engine)

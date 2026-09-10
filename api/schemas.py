@@ -106,6 +106,8 @@ class VitalPayload(BaseModel):
     blood_glucose_mg_dl: float = Field(..., ge=0)
     heart_rate_bpm: float | None = None
     spo2_percent: float | None = None
+    kolesterol_mg_dl: float | None = None
+    asam_urat_mg_dl: float | None = None
     profile_id: str | None = None
 
 
@@ -127,6 +129,8 @@ class VitalReadingResponse(BaseModel):
     heart_rate_bpm: float | None
     spo2_percent: float | None
     blood_glucose_mg_dl: float
+    kolesterol_mg_dl: float | None = None
+    asam_urat_mg_dl: float | None = None
     timestamp: datetime
 
     @field_serializer("timestamp")

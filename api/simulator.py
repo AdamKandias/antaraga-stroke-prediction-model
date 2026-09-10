@@ -39,6 +39,8 @@ def _simulate_vitals() -> dict:
         "avg_glucose_level": max(70.0, round(random.gauss(130, 35), 1)),
         "heart_rate_bpm": max(50, round(random.gauss(78, 10))),
         "spo2_percent": min(100, max(88, round(random.gauss(96, 2)))),
+        "kolesterol_mg_dl": max(120.0, round(random.gauss(200, 35), 1)),
+        "asam_urat_mg_dl": max(2.5, round(random.gauss(5.5, 1.2), 1)),
     }
 
 
@@ -79,6 +81,8 @@ async def _tick() -> None:
             diastolic_bp=vitals["diastolic_bp"],
             heart_rate_bpm=vitals["heart_rate_bpm"],
             spo2_percent=vitals["spo2_percent"],
+            kolesterol_mg_dl=vitals["kolesterol_mg_dl"],
+            asam_urat_mg_dl=vitals["asam_urat_mg_dl"],
         )
 
         log_prediction(

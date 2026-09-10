@@ -54,6 +54,8 @@ def record_vital_reading(
     diastolic_bp: float | None = None,
     heart_rate_bpm: float | None = None,
     spo2_percent: float | None = None,
+    kolesterol_mg_dl: float | None = None,
+    asam_urat_mg_dl: float | None = None,
 ) -> models_db.VitalReading:
     """Stores one vital-signs reading for a profile, regardless of whether it
     came from a real /predict/stroke-risk call or the dev-mode simulator --
@@ -65,6 +67,8 @@ def record_vital_reading(
         heart_rate_bpm=heart_rate_bpm,
         spo2_percent=spo2_percent,
         blood_glucose_mg_dl=blood_glucose_mg_dl,
+        kolesterol_mg_dl=kolesterol_mg_dl,
+        asam_urat_mg_dl=asam_urat_mg_dl,
     )
     db.add(reading)
     db.commit()
