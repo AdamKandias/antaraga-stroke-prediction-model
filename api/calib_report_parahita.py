@@ -903,7 +903,7 @@ def build_record_report_html_parahita(
     sesi = (rec.created_at or datetime.utcnow()).replace(tzinfo=timezone.utc).astimezone(_WIB)
     terbit = terbit_custom if terbit_custom is not None else datetime.now(_WIB)
 
-    no_doc = f"ANT/CAL/PARAHITA/{sesi.year}/{rec.id:05d}"
+    no_doc = f"ANT/CAL/PARAHITA/\n{sesi.year}/{rec.id:05d}"
     # Kode verifikasi: sidik jari isi laporan, supaya salinan cetak bisa
     # dicocokkan dengan baris database aslinya.
     kode = hashlib.sha1(
