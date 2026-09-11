@@ -159,36 +159,6 @@ def _classify_dia(dia: float | None) -> tuple[str, str]:
     return ("Optimal", "ok")
 
 
-_SYS_REF = {
-    "Optimal": "< 120", "Normal": "120 - 129", "Normal Tinggi": "130 - 139",
-    "Hipertensi Derajat 1": "140 - 159", "Hipertensi Derajat 2": "160 - 179",
-    "Hipertensi Derajat 3": "≥ 180", "Hipotensi": "< 90",
-}
-
-_DIA_REF = {
-    "Optimal": "< 80", "Normal": "80 - 84", "Normal Tinggi": "85 - 89",
-    "Hipertensi Derajat 1": "90 - 99", "Hipertensi Derajat 2": "100 - 109",
-    "Hipertensi Derajat 3": "≥ 110", "Hipotensi": "< 60",
-}
-
-
-def _sys_ref(label: str) -> str:
-    """Rentang PERHI yang cocok dengan kategori HASIL _classify_sys().
-
-    Sengaja ikut kategori yang keluar, bukan selalu "< 120" -- angka itu
-    cuma ambang Optimal, jadi salah kalau ditampilkan untuk hasil yang
-    dikategorikan Normal/Normal Tinggi/dst (nilainya bisa lebih tinggi dari
-    120 tapi memang benar bukan hipertensi).
-    """
-    return _SYS_REF.get(label, "< 120")
-
-
-def _dia_ref(label: str) -> str:
-    """Rentang PERHI yang cocok dengan kategori hasil _classify_dia(). Lihat
-    catatan _sys_ref() -- alasannya sama, untuk diastolik."""
-    return _DIA_REF.get(label, "< 80")
-
-
 def _classify_bpm(bpm: float | None) -> tuple[str, str]:
     """Rentang detak jantung istirahat dewasa, American Heart Association (AHA).
 
@@ -216,15 +186,6 @@ _KONDISI_LABEL = {
     "2j_makan": "2 Jam Setelah Makan",
     "sewaktu": "Sewaktu (Acak)",
 }
-
-
-def _glucose_ref(kondisi: str | None) -> str:
-    k = (kondisi or "sewaktu").lower()
-    if k == "puasa":
-        return "70 - 99 (puasa)"
-    if k.startswith("2j"):
-        return "< 140 (2 jam PP)"
-    return "< 200 (sewaktu)"
 
 
 def _classify_glucose(val: float | None, kondisi: str | None) -> tuple[str, str]:
@@ -332,11 +293,6 @@ def _classify_uric(val: float | None, gender: str,
     return ("Hiperurisemia", "high")
 
 
-def _uric_ref(gender: str, usia: float | None = None) -> str:
-    lo, hi, ket = _uric_range(gender, usia)
-    return f"{_num(lo,1)} - {_num(hi,1)} ({ket})"
-
-
 # ── Utilitas format (locale Indonesia: koma desimal, titik ribuan) ─────────
 
 def _num(v: float | None, dec: int = 1) -> str:
@@ -429,13 +385,9 @@ def _ppg_strip_svg(ir: np.ndarray, fs: float, seconds: float = 8.0) -> str:
 
 # ── Komponen HTML ──────────────────────────────────────────────────────────
 
-def _badge(label: str, tone: str) -> str:
-    return f'<span class="bdg t-{tone}">{label}</span>'
-
-
 def _row(icon: str, name: str, sub: str, value: str, unit: str,
          ref: str, status: tuple[str, str]) -> str:
-    label, tone = status
+    _, tone = status
     dim = ' class="dim"' if tone == "na" else ""
     return f"""<tr>
       <td class="p-name"><span class="p-ic">{_icon(icon)}</span>
@@ -443,7 +395,6 @@ def _row(icon: str, name: str, sub: str, value: str, unit: str,
       <td class="p-val"{dim}>{value}</td>
       <td class="p-unit">{unit}</td>
       <td class="p-ref">{ref}</td>
-      <td class="p-st">{_badge(label, tone)}</td>
     </tr>"""
 
 
@@ -539,21 +490,18 @@ thead th{background:#f2f7f6;color:var(--ink2);font-size:7.3pt;text-transform:upp
   border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 tbody td{padding:6.5px 9px;border-bottom:1px solid var(--line2);vertical-align:middle}
 tbody tr:last-child td{border-bottom:1px solid var(--line)}
-.p-name{width:38%%}
+.p-name{width:47%%}
 .p-name > span:last-child{display:inline-block;vertical-align:middle}
 .p-name b{font-weight:670;font-size:9.7pt;display:block;line-height:1.25}
 .p-name em{font-style:normal;font-size:7.6pt;color:var(--mut);display:block}
 .p-ic{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;
   border-radius:5px;background:#e9f4f2;color:var(--brand);margin-right:8px;vertical-align:middle}
 .p-val{font-size:11.6pt;font-weight:750;text-align:right;white-space:nowrap;
-  font-variant-numeric:tabular-nums;width:15%%}
+  font-variant-numeric:tabular-nums;width:18%%}
 .p-val.dim{color:var(--mut);font-weight:600}
-.p-unit{font-size:8pt;color:var(--mut);width:11%%;font-weight:600}
-.p-ref{font-size:8.4pt;color:var(--ink2);width:17%%;font-variant-numeric:tabular-nums}
-.p-st{width:19%%;text-align:right}
+.p-unit{font-size:8pt;color:var(--mut);width:14%%;font-weight:600}
+.p-ref{font-size:8.4pt;color:var(--ink2);width:21%%;font-variant-numeric:tabular-nums}
 
-.bdg{display:inline-block;padding:2px 8px;border-radius:20px;font-size:7.7pt;font-weight:750;
-  letter-spacing:.015em;white-space:nowrap}
 .t-ok{background:var(--ok-bg);color:var(--ok)}
 .t-watch{background:var(--watch-bg);color:var(--watch)}
 .t-high{background:var(--high-bg);color:var(--high)}
@@ -959,17 +907,17 @@ def build_record_report_html_parahita(
 
     rows = "".join([
         _row("gauge", "Tekanan Darah Sistolik", "Klinik Parahita",
-             _num(sis, 0), "mmHg", _sys_ref(st_sis[0]), st_sis),
+             _num(sis, 0), "mmHg", "<120", st_sis),
         _row("gauge", "Tekanan Darah Diastolik", "Klinik Parahita",
-             _num(dia, 0), "mmHg", _dia_ref(st_dia[0]), st_dia),
+             _num(dia, 0), "mmHg", "<80", st_dia),
         _row("heart", "Denyut Jantung (HR)", "Sensor ANTARAGA",
-             _num(bpm, 0), "bpm", "60 - 100", st_bpm),
-        _row("droplet", "Gula Darah", f"Klinik Parahita, {kondisi_txt}",
-             _num(gula, 0), "mg/dL", _glucose_ref(kondisi_parahita), st_gula),
+             _num(bpm, 0), "bpm", "", st_bpm),
+        _row("droplet", "Glukosa Sewaktu", f"Klinik Parahita, {kondisi_txt}",
+             _num(gula, 0), "mg/dL", "Indikasi DM : ≥ 200mg/dL", st_gula),
         _row("flask", "Kolesterol Total", "Klinik Parahita",
              _num(kol, 0), "mg/dL", "< 200", st_kol),
         _row("molecule", "Asam Urat", "Klinik Parahita",
-             _num(au, 1), "mg/dL", _uric_ref(gender, rec.age_years), st_au),
+             _num(au, 1), "mg/dL", "3,4 - 7mg/dL", st_au),
     ])
 
     # ── Faktor risiko stroke yang dapat dimodifikasi ─────────────────────
