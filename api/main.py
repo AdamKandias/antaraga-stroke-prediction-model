@@ -2185,6 +2185,57 @@ def calibrate_record_report(
     return StreamingResponse(iter([html]), media_type="text/html; charset=utf-8")
 
 
+@app.get("/v1/calibrate/{record_id}/laporan-parahita.html")
+def calibrate_record_report_parahita(
+    record_id: int,
+    autoprint: bool = True,
+    terbit: str | None = Query(
+        None,
+        description="Tanggal terbit kustom untuk kop & tanda tangan laporan, "
+                     "format YYYY-MM-DD atau YYYY-MM-DDTHH:MM, WIB (jam opsional "
+                     "-- kosong dianggap 00:00). Kosongkan parameter ini untuk "
+                     "memakai tanggal & jam saat laporan dibuka (perilaku lama).",
+    ),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    """Varian /laporan.html KHUSUS validasi terhadap Lab Klinik Parahita (S010).
+
+    Tabel prediksi-vs-aktual pada bagian AI memakai hasil pemeriksaan Klinik
+    Parahita (lihat api/calib_report_parahita.py) sebagai rujukan eksternal,
+    bukan field ground-truth alat invasif milik record ini -- field tsb tidak
+    ikut berubah. Bagian lain laporan (data sesi, sinyal PPG, dst.) tetap
+    memakai data record seperti biasa.
+    """
+    rec = db.get(models_db.CalibrationRecord, record_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail=f"Rekaman kalibrasi #{record_id} tidak ditemukan")
+
+    terbit_custom = None
+    if terbit:
+        _wib = timezone(timedelta(hours=7))
+        nilai = terbit.strip()
+        try:
+            if "T" in nilai:
+                bagian_tgl, bagian_jam = nilai.split("T", 1)
+                potongan_jam = bagian_jam.split(":")
+                jam = int(potongan_jam[0])
+                menit = int(potongan_jam[1]) if len(potongan_jam) > 1 else 0
+            else:
+                bagian_tgl, jam, menit = nilai, 0, 0
+            tahun, bulan, tanggal = (int(x) for x in bagian_tgl.split("-"))
+            terbit_custom = datetime(tahun, bulan, tanggal, jam, menit, tzinfo=_wib)
+        except (ValueError, IndexError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Format terbit tidak dikenali: {terbit!r} ({exc})",
+            )
+
+    from api.calib_report_parahita import build_record_report_html_parahita
+
+    html = build_record_report_html_parahita(rec, autoprint=autoprint, terbit_custom=terbit_custom)
+    return StreamingResponse(iter([html]), media_type="text/html; charset=utf-8")
+
+
 @app.get("/v1/calibrate/training-report")
 def calibrate_training_report() -> dict:
     """Baca hasil pelatihan model estimasi vital terakhir dari artifacts (jika sudah dilatih)."""
