@@ -576,14 +576,6 @@ tbody tr:last-child td{border-bottom:1px solid var(--line)}
   background:#fafcfb;border-top:1px solid var(--line);font-size:7.5pt;color:var(--mut);
   font-weight:600}
 
-/* Interpretasi */
-.interp{border:1px solid var(--line);border-left:3px solid var(--brand);border-radius:5px;
-  padding:9px 12px;background:#fbfdfc}
-.interp ul{margin:0;padding-left:15px}
-.interp li{margin:0 0 4px;font-size:9.2pt;line-height:1.55}
-.interp li:last-child{margin-bottom:0}
-.interp b{font-weight:700}
-
 /* Faktor risiko */
 .risk{display:grid;grid-template-columns:repeat(2,1fr);gap:5px 9px}
 .rk{display:flex;align-items:flex-start;gap:7px;padding:6px 9px;border:1px solid var(--line);
@@ -626,7 +618,7 @@ tbody tr:last-child td{border-bottom:1px solid var(--line)}
   body{background:#fff}
   .bar{display:none}
   .sheet{width:auto;min-height:0;margin:0;padding:0;box-shadow:none}
-  h2,table,.tiles,.ident,.tech,.strip,.interp,.risk,.sign{break-inside:avoid;
+  h2,table,.tiles,.ident,.tech,.strip,.risk,.sign{break-inside:avoid;
     page-break-inside:avoid}
   tr{break-inside:avoid;page-break-inside:avoid}
   h2{break-after:avoid;page-break-after:avoid}
@@ -675,7 +667,13 @@ _VITAL_TARGETS: dict[str, tuple[str, str]] = {
 _PARAHITA_META = {
     "klinik": "Klinik Utama PARAHITA - Cabang Surabaya Dharmawangsa",
     "no_lab": "2326UG0006",
-    "tanggal_sampel": "07 September 2026, 19:03:14 WIB",
+    # 15:30:14 WIB -- jam sampel darah SEBENARNYA diambil (bersamaan dengan
+    # sesi sensor ANTARAGA), BUKAN jam "Sampel" 19:03:14 yang tercetak di
+    # PDF. PDF mencatat "Surabaya, 07 September 2026 19:54:57" sebagai jam
+    # validasi/hasil dicetak di lab, jauh setelah sampel diambil dan
+    # dikirim -- bukan jam pengambilan. Jangan "dibetulkan" balik ke jam
+    # yang tercetak di PDF.
+    "tanggal_sampel": "07 September 2026, 15:30:14 WIB",
     "dokter": "Prof. DR. Aryati, dr, MS, SpPK. (K)",
     "kondisi": "Tanpa puasa (Glukosa Sewaktu)",
 }
@@ -960,17 +958,17 @@ def build_record_report_html_parahita(
                  else '<div class="sp"></div>')
 
     rows = "".join([
-        _row("gauge", "Tekanan Darah Sistolik", "Tensimeter · Klinik Parahita",
+        _row("gauge", "Tekanan Darah Sistolik", "Klinik Parahita",
              _num(sis, 0), "mmHg", _sys_ref(st_sis[0]), st_sis),
-        _row("gauge", "Tekanan Darah Diastolik", "Tensimeter · Klinik Parahita",
+        _row("gauge", "Tekanan Darah Diastolik", "Klinik Parahita",
              _num(dia, 0), "mmHg", _dia_ref(st_dia[0]), st_dia),
-        _row("heart", "Denyut Jantung (HR)", "Fotopletismografi inframerah · sensor ANTARAGA",
+        _row("heart", "Denyut Jantung (HR)", "Sensor ANTARAGA",
              _num(bpm, 0), "bpm", "60 - 100", st_bpm),
-        _row("droplet", "Gula Darah", f"Hexokinase · Klinik Parahita, {kondisi_txt}",
+        _row("droplet", "Gula Darah", f"Klinik Parahita, {kondisi_txt}",
              _num(gula, 0), "mg/dL", _glucose_ref(kondisi_parahita), st_gula),
-        _row("flask", "Kolesterol Total", "Enzimatik kolorimetri · Klinik Parahita",
+        _row("flask", "Kolesterol Total", "Klinik Parahita",
              _num(kol, 0), "mg/dL", "< 200", st_kol),
-        _row("molecule", "Asam Urat", "Enzimatik kolorimetri · Klinik Parahita",
+        _row("molecule", "Asam Urat", "Klinik Parahita",
              _num(au, 1), "mg/dL", _uric_ref(gender, rec.age_years), st_au),
     ])
 
@@ -995,49 +993,9 @@ def build_record_report_html_parahita(
         ("Riwayat Stroke Pribadi", "Subjek sendiri memiliki riwayat stroke",
          bool(riwayat_pribadi)),
     ]
-    risk_html = "".join(
-        f'<div class="rk {"on" if on else "off"}">{_icon("alert" if on else "check", 13)}'
-        f'<div><b>{nm}</b><span>{desc}</span></div></div>'
-        for nm, desc, on in faktor
-    )
 
     # ── Hasil model kecerdasan buatan (estimasi vital + XGBoost) ───────────
     ai_block = _build_ai_section_parahita(rec, gender, usia, faktor, riwayat_pribadi)
-
-    # ── Interpretasi naratif ─────────────────────────────────────────────
-    poin: list[str] = []
-    if sis is not None and dia is not None:
-        poin.append(
-            f"Tekanan darah tercatat <b>{_int(sis)}/{_int(dia)} mmHg</b>, "
-            f"masuk kategori <b>{st_bp[0]}</b>."
-        )
-    if bpm is not None:
-        poin.append(
-            f"Laju denyut dari sinyal PPG <b>{_num(bpm, 0)} bpm</b> "
-            f"(<b>{st_bpm[0]}</b>), diambil dengan autokorelasi pada kanal inframerah."
-        )
-    if gula is not None:
-        poin.append(
-            f"Gula darah <b>{_num(gula, 0)} mg/dL</b> pada kondisi "
-            f"<b>{kondisi_txt.lower()}</b>, interpretasi <b>{st_gula[0]}</b> "
-            f"(rujukan {_glucose_ref(kondisi_parahita)} mg/dL)."
-        )
-    if kol is not None:
-        poin.append(f"Kolesterol total <b>{_num(kol, 0)} mg/dL</b>, <b>{st_kol[0]}</b>.")
-    if au is not None:
-        poin.append(f"Asam urat <b>{_num(au, 1)} mg/dL</b>, <b>{st_au[0]}</b>.")
-    if durasi:
-        poin.append(
-            f"Sinyal PPG direkam <b>{_num(durasi, 1)} detik</b> "
-            f"pada sampling rate {_num(fs, 0)} Hz."
-        )
-    if not poin:
-        # Semua nilai rujukan kosong, jangan cetak kotak interpretasi melompong.
-        poin.append(
-            "Tidak ada nilai alat rujukan yang terisi pada sesi ini. Laporan hanya "
-            "memuat identitas subjek dan parameter teknis sensor."
-        )
-    interp = "".join(f"<li>{p}</li>" for p in poin)
 
     # ── Panel teknis sensor ──────────────────────────────────────────────
     tech = "".join([
@@ -1054,7 +1012,7 @@ def build_record_report_html_parahita(
     ])
 
     strip = _ppg_strip_svg(ir, fs)
-    strip_block = (f'<h2>{_icon("wave")}Rekaman Gelombang Denyut (PPG)</h2>{strip}'
+    strip_block = (f'<h2>{_icon("wave")}Rekaman Gelombang Denyut (PPG) ANTARAGA</h2>{strip}'
                    if strip else "")
 
     riwayat_txt = (
@@ -1110,7 +1068,7 @@ def build_record_report_html_parahita(
     </div>
     <div class="kop-r">
       <h1>LAPORAN HASIL PEMERIKSAAN</h1>
-      <div class="h1s">Validasi Estimasi Vital vs Lab Klinik Parahita</div>
+      <div class="h1s">Validasi Estimasi Fisiologis vs Lab Klinik Parahita</div>
     </div>
   </div>
   <div class="kop-rule"></div>
@@ -1135,65 +1093,16 @@ def build_record_report_html_parahita(
       <th style="text-align:right">Hasil</th>
       <th>Satuan</th>
       <th>Nilai Rujukan</th>
-      <th style="text-align:right">Interpretasi</th>
     </tr></thead>
     <tbody>{rows}</tbody>
   </table>
 
   {strip_block}
 
-  <h2>{_icon("chip")}Parameter Teknis Sensor PPG</h2>
+  <h2>{_icon("chip")}Parameter Teknis Sensor PPG (ANTARAGA)</h2>
   <dl class="tech">{tech}</dl>
 
-  <h2>{_icon("doc")}Interpretasi Hasil</h2>
-  <div class="interp"><ul>{interp}</ul></div>
-
-  <h2>{_icon("shield")}Faktor Risiko Stroke</h2>
-  <div class="risk">{risk_html}</div>
-
   {ai_block}
-
-  <h2>{_icon("book")}Landasan Nilai Rujukan</h2>
-  <table class="ref">
-    <thead><tr><th>Parameter</th><th>Klasifikasi</th><th>Acuan</th></tr></thead>
-    <tbody>
-      <tr>
-        <td rowspan="4"><b>Tekanan Darah</b><br><span class="src">Perhimpunan Dokter Hipertensi Indonesia (PERHI) 2019<br>WHO/ISH, sejalan dengan ESC/ESH 2018</span></td>
-        <td>Optimal &lt; 120/80 · Normal 120-129/80-84</td><td rowspan="4" class="src">Batas hipertensi 140/90 mmHg dipakai di Indonesia, berbeda dari ACC/AHA 2017 yang memakai 130/80. Laporan ini memakai ambang PERHI agar sesuai praktik klinis setempat.</td>
-      </tr>
-      <tr><td>Normal Tinggi 130-139/85-89</td></tr>
-      <tr><td>Hipertensi Derajat 1: 140-159/90-99</td></tr>
-      <tr><td>Derajat 2: 160-179/100-109 · Derajat 3: &ge; 180/110</td></tr>
-
-      <tr>
-        <td rowspan="3"><b>Gula Darah</b><br><span class="src">PERKENI 2021 (Pedoman Pengelolaan dan Pencegahan DM Tipe 2)<br>ADA Standards of Care in Diabetes</span></td>
-        <td>Puasa (GDP): normal 70-99 · prediabetes (GDPT) 100-125 · diabetes &ge; 126</td>
-        <td rowspan="3" class="src">Tiga kondisi pengambilan punya ambang berbeda dan TIDAK boleh disamakan -- sewaktu (GDS) hanya punya satu ambang diagnostik (&ge; 200 disertai gejala klasik), berbeda dari TTGO 2 jam yang punya zona prediabetes (TGT) mulai 140. Kondisi pengambilan wajib dicatat saat perekaman.</td>
-      </tr>
-      <tr><td>TTGO 2 jam setelah beban glukosa: normal &lt; 140 · prediabetes (TGT) 140-199 · diabetes &ge; 200</td></tr>
-      <tr><td>Sewaktu/acak (GDS): normal &lt; 200 · rentang diabetes &ge; 200 disertai gejala klasik (bukan diagnosis tunggal, disarankan konfirmasi GDP/TTGO)</td></tr>
-
-      <tr>
-        <td><b>Kolesterol Total</b><br><span class="src">NCEP ATP III</span></td>
-        <td>Optimal &lt; 200 · Batas Tinggi 200-239 · Tinggi &ge; 240</td>
-        <td class="src">Kolesterol total, bukan LDL maupun HDL. Sensor optik tidak dapat memisahkan fraksinya.</td>
-      </tr>
-
-      <tr>
-        <td rowspan="3"><b>Asam Urat</b><br><span class="src">Mayo Clinic Laboratories (rentang rujukan)<br>Kelarutan monosodium urat pada 37&deg;C/pH 7,4 (ambang jenuh)</span></td>
-        <td>Laki-laki: 3,4-7,0 mg/dL</td>
-        <td rowspan="3" class="src">Estrogen bersifat urikosurik. Setelah menopause kadarnya menurun sehingga batas atas perempuan bergeser naik. Nilai di antara batas rujukan dan 6,8 mg/dL ditandai batas atas, karena pada rentang itu kristal monosodium urat belum terbentuk pada 37 &deg;C dan pH 7,4.</td>
-      </tr>
-      <tr><td>Perempuan usia subur (&lt; 50 th): 2,4-6,0 mg/dL</td></tr>
-      <tr><td>Perempuan pascamenopause (&ge; 50 th): 2,4-6,5 mg/dL</td></tr>
-
-      <tr>
-        <td><b>Detak Jantung</b><br><span class="src">American Heart Association (AHA)</span></td>
-        <td>Normal (Sinus) 60-100 bpm · Bradikardia &lt; 60 · Takikardia &gt; 100</td>
-        <td class="src">Rentang detak jantung istirahat dewasa baku menurut AHA. Nilai diambil dari sinyal PPG kanal inframerah setelah melewati penyaring lonjakan, bukan EKG -- klasifikasi aritmia yang lebih rinci (mis. sinus bradikardia vs blok konduksi) tetap butuh EKG.</td>
-      </tr>
-    </tbody>
-  </table>
 
   <div class="sign">
     <div class="note">
@@ -1202,8 +1111,12 @@ def build_record_report_html_parahita(
       (No. Lab {_PARAHITA_META['no_lab']}, sampel diambil {_PARAHITA_META['tanggal_sampel']},
       DPJP {_PARAHITA_META['dokter']}) sebagai rujukan eksternal independen -- BUKAN field
       ground-truth alat invasif milik sesi kalibrasi ini (nilai sesi kalibrasi tidak diubah di
-      database, hanya tidak ditampilkan pada laporan varian ini). Denyut jantung (BPM) tetap
-      dari sensor ANTARAGA sendiri karena Klinik Parahita tidak melakukan pemeriksaan nadi.
+      database, hanya tidak ditampilkan pada laporan varian ini). Jam pengambilan sampel di atas
+      mengikuti jam sesi pengukuran sensor ANTARAGA yang dilakukan bersamaan; lembar hasil resmi
+      Klinik Parahita sendiri mencantumkan jam validasi/pencetakan hasil di sistem laboratorium
+      (Surabaya, 07 September 2026 19:54:57), yaitu setelah sampel diambil dan diproses, bukan
+      jam pengambilan darahnya. Denyut jantung (BPM) tetap dari sensor ANTARAGA sendiri karena
+      Klinik Parahita tidak melakukan pemeriksaan nadi.
       Laporan ini merupakan dokumen hasil pengukuran penelitian dan
       <b>bukan pengganti diagnosis dokter</b>. Interpretasi akhir tetap memerlukan penilaian
       tenaga medis berwenang beserta riwayat klinis subjek. Rentang rujukan antar
