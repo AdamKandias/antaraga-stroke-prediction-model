@@ -393,8 +393,8 @@ def _row(icon: str, name: str, sub: str, value: str, unit: str,
       <td class="p-name"><span class="p-ic">{_icon(icon)}</span>
         <span><b>{name}</b><em>{sub}</em></span></td>
       <td class="p-val"{dim}>{value}</td>
-      <td class="p-unit">{unit}</td>
       <td class="p-ref">{ref}</td>
+      <td class="p-unit">{unit}</td>
     </tr>"""
 
 
@@ -624,6 +624,7 @@ _PARAHITA_META = {
     "tanggal_sampel": "07 September 2026, 15:30:14 WIB",
     "dokter": "Prof. DR. Aryati, dr, MS, SpPK. (K)",
     "kondisi": "Tanpa puasa (Glukosa Sewaktu)",
+    "usia": "63 tahun 8 bulan",  # persis seperti tercetak di PDF ("63 Thn 8 Bln")
 }
 
 _PARAHITA_AKTUAL: dict[str, float] = {
@@ -776,16 +777,7 @@ def _build_ai_section_parahita(
                 "<th>Hasil Prediksi (SVR/XGBoost)</th><th>Aktual (Lab Parahita)</th>"
                 "<th>Akurasi vs Lab Parahita</th></tr></thead>"
                 f"<tbody>{''.join(baris_mlp)}</tbody></table>"
-                '<p style="font-size:7pt;color:var(--mut);margin:0 0 4px">'
-                f"Aktual bersumber dari {_PARAHITA_META['klinik']}, "
-                f"No. Lab {_PARAHITA_META['no_lab']}, sampel diambil "
-                f"{_PARAHITA_META['tanggal_sampel']} ({_PARAHITA_META['kondisi']}), "
-                f"DPJP {_PARAHITA_META['dokter']} -- BUKAN field ground-truth alat "
-                "invasif sesi kalibrasi ini. Akurasi dihitung khusus untuk sesi ini, "
-                "bukan metrik agregat model. Metrik menyeluruh memakai validasi "
-                "Leave-One-Subject-Out dari seluruh subjek kalibrasi, "
-                "dilaporkan terpisah lewat menu Pelatihan Model Estimasi Fisiologis pada dashboard."
-                "</p></div>"
+                "</div>"
             )
     else:
         alasan = (
@@ -913,11 +905,11 @@ def build_record_report_html_parahita(
         _row("heart", "Denyut Jantung (HR)", "Sensor ANTARAGA",
              _num(bpm, 0), "bpm", "", st_bpm),
         _row("droplet", "Glukosa Sewaktu", f"Klinik Parahita, {kondisi_txt}",
-             _num(gula, 0), "mg/dL", "Indikasi DM : ≥ 200mg/dL", st_gula),
+             _num(gula, 0), "mg/dL", "Indikasi DM : ≥ 200", st_gula),
         _row("flask", "Kolesterol Total", "Klinik Parahita",
              _num(kol, 0), "mg/dL", "< 200", st_kol),
         _row("molecule", "Asam Urat", "Klinik Parahita",
-             _num(au, 1), "mg/dL", "3,4 - 7mg/dL", st_au),
+             _num(au, 1), "mg/dL", "3,4 - 7", st_au),
     ])
 
     # ── Faktor risiko stroke yang dapat dimodifikasi ─────────────────────
@@ -973,7 +965,7 @@ def build_record_report_html_parahita(
     )
     ident = "".join([
         _kv("ID Subjek", rec.subject_id or "-"),
-        _kv("Usia", f"{_num(usia, 0)} tahun"),
+        _kv("Usia", _PARAHITA_META["usia"]),
         _kv("Jenis Kelamin", gender_txt),
         _kv("Kondisi Pengambilan", kondisi_txt),
         _kv("Riwayat Stroke Keluarga", riwayat_txt),
@@ -1039,8 +1031,8 @@ def build_record_report_html_parahita(
     <thead><tr>
       <th>Parameter Pemeriksaan</th>
       <th style="text-align:right">Hasil</th>
-      <th>Satuan</th>
       <th>Nilai Rujukan</th>
+      <th>Satuan</th>
     </tr></thead>
     <tbody>{rows}</tbody>
   </table>
@@ -1057,9 +1049,7 @@ def build_record_report_html_parahita(
       <b>Catatan:</b> Nilai gula darah, kolesterol, asam urat, dan tekanan darah pada tabel
       "Hasil Pemeriksaan Lab Parahita" di atas berasal dari {_PARAHITA_META['klinik']}
       (No. Lab {_PARAHITA_META['no_lab']}, sampel diambil {_PARAHITA_META['tanggal_sampel']},
-      DPJP {_PARAHITA_META['dokter']}) sebagai rujukan eksternal independen -- BUKAN field
-      ground-truth alat invasif milik sesi kalibrasi ini (nilai sesi kalibrasi tidak diubah di
-      database, hanya tidak ditampilkan pada laporan varian ini). Jam pengambilan sampel di atas
+      DPJP {_PARAHITA_META['dokter']}). Jam pengambilan sampel di atas
       mengikuti jam sesi pengukuran sensor ANTARAGA yang dilakukan bersamaan; lembar hasil resmi
       Klinik Parahita sendiri mencantumkan jam validasi/pencetakan hasil di sistem laboratorium
       (Surabaya, 07 September 2026 19:54:57), yaitu setelah sampel diambil dan diproses, bukan
