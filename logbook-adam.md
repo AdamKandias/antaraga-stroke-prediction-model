@@ -1150,13 +1150,13 @@ Menerapkan rancangan model MLP kalibrasi ke kode pelatihan produksi (`api/vital_
 
 **Hasil:**
 - Pipeline pelatihan MLP berjalan penuh: artefak (`mlp_calibration.joblib`, `mlp_calibration_metrics.json`) tersimpan dan dapat dilatih ulang lewat satu klik tombol di dashboard, tanpa perlu masuk terminal
-- **Ditemukan**: akurasi model masih rendah - R2 negatif pada mayoritas parameter, berarti model kalah dari sekadar menebak nilai rata-rata. Sebabnya jelas: 7 fitur dilatih dari hanya 5-6 baris data (subjek), jauh dari cukup
+- **Ditemukan**: akurasi model masih rendah - meski persentase akurasi relatif tercatat 64,1% (Gula Darah), 77,7% (Kolesterol), dan 84,9% (Sistolik), ketiganya tetap kalah dibandingkan sekadar menebak nilai rata-rata pada 3 dari 5 parameter. Sebabnya jelas: 7 fitur dilatih dari hanya 5-6 baris data (subjek), jauh dari cukup
 - Teridentifikasi tiga persoalan komposisi data yang harus diperbaiki pada sesi pengujian berikutnya: tidak ada subjek berkolesterol sehat (5 dari 5 di atas 200 mg/dL), usia berhimpit dengan kondisi penyakit (satu-satunya subjek muda juga satu-satunya yang sehat - berisiko membuat model menebak dari usia saja tanpa memakai sensor), dan jumlah subjek yang masih jauh dari 30 agar validasi silang bermakna
 - Karena keterbatasan data ini, mulai studi literatur model regresi lain yang lebih tahan terhadap data sedikit sebagai kandidat pengganti MLP: SVR dan XGBoost
 
 📸 **Bukti yang perlu dilampirkan:**
 - `ADAM_pipeline pelatihan mlp di dashboard.png` - tombol latih MLP dan hasil training di tab Kalibrasi
-- `model/pelatihan_mlp_16agustus.ipynb` - notebook evaluasi kejujuran hasil (R2 vs tebakan rata-rata) beserta tabel tiga persoalan komposisi data
+- `model/pelatihan_mlp_16agustus.ipynb` - notebook evaluasi kejujuran hasil (persentase akurasi vs tebakan rata-rata) beserta tabel tiga persoalan komposisi data
 - `ADAM_metrik model mlp 16 agustus.png` - isi `model/artifacts/mlp_calibration_metrics.json` hasil pelatihan hari ini
 
 ---
@@ -1229,7 +1229,7 @@ Menindaklanjuti hasil evaluasi 27 Agustus dan arahan dosen pendamping, menjalank
 
 **Hasil:**
 - Konfigurasi model final (per 6 subjek yang tersedia saat ini) ditetapkan lewat seleksi otomatis: Gula Darah → KNN (k=5), Kolesterol → Ridge, Asam Urat → GradientBoosting, Sistolik → SVR (rbf), Diastolik → RandomForest. MLP tidak lagi menang pada parameter manapun
-- Konfigurasi ditandai sebagai sementara: akan otomatis diperbarui begitu data kalibrasi bertambah pada sesi pengujian berikutnya (lihat 2 dan 5 September) - pemenang SVR/XGBoost yang lebih menyeluruh baru terlihat setelah data bertambah
+- Konfigurasi ditandai sebagai sementara: akan otomatis diperbarui begitu data kalibrasi bertambah pada sesi pengujian berikutnya (lihat 2 dan 7 September) - pemenang SVR/XGBoost yang lebih menyeluruh baru terlihat setelah data bertambah
 - Dengan 6 subjek, status keterandalan seluruh parameter masih "TIDAK VALID" (n_subjects < 10) - dilaporkan apa adanya, bukan sebagai bukti kesiapan alat
 - Akun Google Play Console dibuat dan biaya pendaftaran diselesaikan sebagai persiapan publikasi aplikasi mobile ANTARAGA ke Google Play Store
 - Bahan teknis peragaan sistem ANTARAGA disiapkan untuk mendukung pembuatan konten media sosial ketiga
@@ -1300,7 +1300,7 @@ Menyusun bagian perangkat lunak dan kecerdasan buatan pada draf Laporan Kemajuan
 
 ---
 
-**Jumat, 5 September 2026 - 600 menit**
+**Jumat, 7 September 2026 - 600 menit**
 
 **Kegiatan:**
 Menambah 2 data kalibrasi dari pengujian laboratorium dan alat pembanding terstandar (pengujian keenam). Di sela sesi ini, ditemukan bahwa metode validasi pada skrip pelatihan MLP sebelumnya memisahkan data latih dan data uji per baris rekaman, bukan per subjek - berisiko membocorkan informasi dari relawan yang direkam lebih dari satu kali. Model dilatih ulang dengan metode Leave-One-Subject-Out (LOSO) menggunakan 11 subjek kalibrasi yang terkumpul sampai hari ini. Dilakukan juga finalisasi implementasi model SVR dan XGBoost serta evaluasi hasil training pada 11 data relawan.
@@ -1309,7 +1309,7 @@ Menambah 2 data kalibrasi dari pengujian laboratorium dan alat pembanding tersta
 - Data kalibrasi bertambah dari 9 menjadi 11 subjek (S010, S011)
 - **Perbaikan metodologi**: skema validasi silang MLP diubah dari per-baris menjadi per-`subject_id` (LOSO) - untuk 11 subjek dengan 1 rekaman/orang saat ini, skema lama dan baru kebetulan memberi angka yang identik (dibuktikan lewat matriks fold), tapi perbaikan ini krusial untuk pengujian berikutnya begitu ada subjek yang direkam berulang kali. Ilustrasi dengan data sintetis menunjukkan skema lama bisa menghasilkan metrik yang optimis secara palsu pada kondisi tersebut
 - **Finalisasi konfigurasi model**: seleksi otomatis pada 11 subjek menetapkan SVR dan XGBoost sebagai pemenang pada seluruh 5 parameter fisiologis - Gula Darah dan Kolesterol dimenangkan XGBoost, sedangkan Asam Urat, Sistolik, dan Diastolik dimenangkan SVR. MLP tidak menang pada satupun parameter, konsisten dengan temuan sejak 27 Agustus
-- Status keterandalan naik dari "TIDAK VALID" (n<10) menjadi "LEMAH" (10≤n<30) untuk seluruh parameter - masih jauh dari target ≥30 subjek agar metrik bisa dipertanggungjawabkan, sehingga R2 dan MAE dilaporkan sebagai keterbatasan, bukan capaian akhir
+- Status keterandalan naik dari "TIDAK VALID" (n<10) menjadi "LEMAH" (10≤n<30) untuk seluruh parameter - masih jauh dari target ≥30 subjek agar metrik bisa dipertanggungjawabkan, sehingga persentase akurasi dan MAE dilaporkan sebagai keterbatasan, bukan capaian akhir
 - Perbaikan metodologi validasi sudah aktif di `api/main.py` (endpoint `/v1/calibrate/train`), dipakai baik oleh dashboard maupun skrip CLI (`model/train_mlp_calibration.py`)
 
 📸 **Bukti yang perlu dilampirkan:**
