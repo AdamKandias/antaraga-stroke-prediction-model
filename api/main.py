@@ -40,6 +40,7 @@ from api.profile_utils import (
     compute_risk_flags,
     profile_to_features,
     record_vital_reading,
+    reject_negative,
     resolve_active_profile,
 )
 from api.security import hash_password, verify_password
@@ -536,15 +537,20 @@ def get_latest_vital(
     )
     risk = schemas.StrokeRiskResponse(**json.loads(log.response_payload)) if log else None
 
+    # reject_negative(): jaring pengaman baca-balik, kalau-kalau ada baris
+    # lama di DB yang sempat tersimpan minus sebelum penyaringan di
+    # record_vital_reading() ada -- lihat profile_utils.reject_negative().
+    _sys = reject_negative(reading.systolic_bp)
+    _glu = reject_negative(reading.blood_glucose_mg_dl)
     return schemas.LatestVitalResponse(
         vital=schemas.VitalReadingResponse(
-            systolic_bp=reading.systolic_bp,
-            diastolic_bp=reading.diastolic_bp,
-            heart_rate_bpm=reading.heart_rate_bpm,
-            spo2_percent=reading.spo2_percent,
-            blood_glucose_mg_dl=reading.blood_glucose_mg_dl,
-            kolesterol_mg_dl=reading.kolesterol_mg_dl,
-            asam_urat_mg_dl=reading.asam_urat_mg_dl,
+            systolic_bp=120.0 if _sys is None else _sys,
+            diastolic_bp=reject_negative(reading.diastolic_bp),
+            heart_rate_bpm=reject_negative(reading.heart_rate_bpm),
+            spo2_percent=reject_negative(reading.spo2_percent),
+            blood_glucose_mg_dl=100.0 if _glu is None else _glu,
+            kolesterol_mg_dl=reject_negative(reading.kolesterol_mg_dl),
+            asam_urat_mg_dl=reject_negative(reading.asam_urat_mg_dl),
             # All our DateTime columns are naive-but-conceptually-UTC
             # (datetime.utcnow() at insert time) -- attach the tz explicitly
             # so the JSON carries a UTC offset and the Flutter app's
@@ -597,19 +603,23 @@ def get_vital_history(
         .order_by(models_db.VitalReading.created_at)
         .all()
     )
-    return [
-        schemas.VitalReadingResponse(
-            systolic_bp=r.systolic_bp,
-            diastolic_bp=r.diastolic_bp,
-            heart_rate_bpm=r.heart_rate_bpm,
-            spo2_percent=r.spo2_percent,
-            blood_glucose_mg_dl=r.blood_glucose_mg_dl,
-            kolesterol_mg_dl=r.kolesterol_mg_dl,
-            asam_urat_mg_dl=r.asam_urat_mg_dl,
+    def _to_response(r: models_db.VitalReading) -> schemas.VitalReadingResponse:
+        # Jaring pengaman baca-balik yang sama seperti /vitals/latest -- lihat
+        # catatan di sana.
+        sys_ = reject_negative(r.systolic_bp)
+        glu_ = reject_negative(r.blood_glucose_mg_dl)
+        return schemas.VitalReadingResponse(
+            systolic_bp=120.0 if sys_ is None else sys_,
+            diastolic_bp=reject_negative(r.diastolic_bp),
+            heart_rate_bpm=reject_negative(r.heart_rate_bpm),
+            spo2_percent=reject_negative(r.spo2_percent),
+            blood_glucose_mg_dl=100.0 if glu_ is None else glu_,
+            kolesterol_mg_dl=reject_negative(r.kolesterol_mg_dl),
+            asam_urat_mg_dl=reject_negative(r.asam_urat_mg_dl),
             timestamp=r.created_at.replace(tzinfo=timezone.utc),
         )
-        for r in readings
-    ]
+
+    return [_to_response(r) for r in readings]
 
 
 @app.post("/assessment/abcd2", response_model=schemas.Abcd2Response)
@@ -1155,6 +1165,25 @@ def ingest_firmware_batch(
                 "kolesterol_mg_dl": last.kolesterol_mg_dl,
                 "asam_urat_mg_dl": last.asam_urat_mg_dl,
             })
+
+    # Buang nilai negatif sebelum dipakai untuk apa pun -- termasuk sebelum
+    # prediksi stroke risk di bawah, bukan cuma sebelum disimpan. Sumbernya
+    # bisa model estimasi vital yang berekstrapolasi di luar rentang data
+    # latihnya (masih sedikit subjek), atau bacaan lama dari DB (fallback
+    # "vital terakhir" di atas) yang kebetulan tersimpan minus sebelum
+    # penyaringan ini ada. Tekanan darah/gula darah/detak jantung/kolesterol/
+    # asam urat tidak pernah bernilai minus secara fisiologis, jadi minus
+    # pasti anomali data, bukan hasil terukur yang sah.
+    for _key in (
+        "systolic_bp_mmhg", "diastolic_bp_mmhg", "blood_glucose_mg_dl",
+        "kolesterol_mg_dl", "asam_urat_mg_dl", "heart_rate_bpm",
+    ):
+        if _key in vitals:
+            cleaned = reject_negative(vitals[_key])
+            if cleaned is None:
+                vitals.pop(_key)
+            else:
+                vitals[_key] = cleaned
 
     if not vitals:
         # Tidak ada data vital sama sekali (BP/glukosa maupun BPM) → simpan

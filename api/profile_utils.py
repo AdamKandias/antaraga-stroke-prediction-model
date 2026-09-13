@@ -19,6 +19,18 @@ def age_from_birthday(birthday) -> float:
     return float(years)
 
 
+def reject_negative(value: float | None) -> float | None:
+    """Buang nilai vital yang negatif -- tekanan darah, gula darah, detak
+    jantung, kolesterol, dan asam urat tidak pernah bernilai minus secara
+    fisiologis, jadi angka minus pasti galat sensor/model (mis. ekstrapolasi
+    model estimasi vital di luar rentang data latihnya yang memang masih
+    sedikit), bukan hasil terukur yang sah. Diperlakukan sama seperti "belum
+    ada data" (None), bukan disimpan atau dipakai apa adanya."""
+    if value is not None and value < 0:
+        return None
+    return value
+
+
 def derive_hypertension(systolic_bp: float, diastolic_bp: float | None) -> bool:
     if diastolic_bp is not None:
         return systolic_bp >= 140 or diastolic_bp >= 90
@@ -59,16 +71,25 @@ def record_vital_reading(
 ) -> models_db.VitalReading:
     """Stores one vital-signs reading for a profile, regardless of whether it
     came from a real /predict/stroke-risk call or the dev-mode simulator --
-    this is what GET /vitals/latest and /vitals/history read back."""
+    this is what GET /vitals/latest and /vitals/history read back.
+
+    Nilai negatif pada tiap field disaring lewat reject_negative() sebelum
+    disimpan -- lihat docstring fungsi itu. systolic_bp dan blood_glucose_mg_dl
+    kolom NOT NULL (dan fitur wajib predict_stroke_risk), jadi kalau minus
+    jatuh ke nilai netral yang sama seperti yang dipakai saat data itu memang
+    belum tersedia sama sekali (lihat main.py, `vitals.get(..., 120.0/100.0)`),
+    bukan disimpan mentah-mentah."""
+    _sys = reject_negative(systolic_bp)
+    _glu = reject_negative(blood_glucose_mg_dl)
     reading = models_db.VitalReading(
         profile_id=profile_id,
-        systolic_bp=systolic_bp,
-        diastolic_bp=diastolic_bp,
-        heart_rate_bpm=heart_rate_bpm,
-        spo2_percent=spo2_percent,
-        blood_glucose_mg_dl=blood_glucose_mg_dl,
-        kolesterol_mg_dl=kolesterol_mg_dl,
-        asam_urat_mg_dl=asam_urat_mg_dl,
+        systolic_bp=120.0 if _sys is None else _sys,
+        diastolic_bp=reject_negative(diastolic_bp),
+        heart_rate_bpm=reject_negative(heart_rate_bpm),
+        spo2_percent=reject_negative(spo2_percent),
+        blood_glucose_mg_dl=100.0 if _glu is None else _glu,
+        kolesterol_mg_dl=reject_negative(kolesterol_mg_dl),
+        asam_urat_mg_dl=reject_negative(asam_urat_mg_dl),
     )
     db.add(reading)
     db.commit()
