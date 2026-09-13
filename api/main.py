@@ -1052,19 +1052,46 @@ def ingest_firmware_batch(
 
     # --- Estimasi vital dari sinyal PPG --------------------------------
     vitals: dict = {}
+
+    # Detak jantung dihitung SEKALI di sini, dari sinyal mentah langsung -
+    # TIDAK bergantung pada model estimasi BP/glukosa di bawah maupun pada
+    # gerbang "vitals kosong -> return" di ujung fungsi. Sebelumnya BPM baru
+    # dihitung SETELAH gerbang itu, jadi begitu BP/glukosa gagal diestimasi
+    # (mis. channel red kosong, model kalibrasi belum ada, atau
+    # predict_vitals() melempar exception apa pun) fungsi ini pulang lebih
+    # awal dan heart_rate_bpm TIDAK PERNAH tersimpan -- kartu "Detak Jantung"
+    # di mobile app permanen menampilkan "--" walau sinyal IR-nya sendiri
+    # sehat dan detak sebetulnya bisa dihitung.
+    if batch.ir:
+        try:
+            from api.ppg_analysis import bpm_autocorr
+            _raw, _cf = bpm_autocorr(
+                np.array([float(v) for v in batch.ir], dtype=float),
+                float(batch.fs_max or 400),
+            )
+            _hr = bpm_filter.filter_bpm(batch.id, _raw, _cf)["bpm"]
+            if _hr is not None:
+                vitals["heart_rate_bpm"] = _hr
+        except Exception:
+            pass
+
+    def _has_core_vitals(v: dict) -> bool:
+        return any(v.get(k) is not None for k in
+                   ("systolic_bp_mmhg", "diastolic_bp_mmhg", "blood_glucose_mg_dl"))
+
     if is_model_available() and (batch.ppg or batch.red or batch.ir):
         try:
-            vitals = predict_vitals_from_ppg(
+            vitals.update(predict_vitals_from_ppg(
                 fs_hz=float(batch.fs_ppg or batch.fs_max or 200),
                 age_years=age_from_birthday(profile.birthday),
                 green=[float(v) for v in batch.ppg] if batch.ppg else None,
                 red=[float(v) for v in batch.red] if batch.red else None,
                 infrared=[float(v) for v in batch.ir] if batch.ir else None,
-            )
+            ))
         except Exception:
             pass  # model belum dilatih atau sinyal terlalu pendek
 
-    if not vitals:
+    if not _has_core_vitals(vitals):
         # Jatuh ke MODEL ESTIMASI VITAL (mlp_calibration.joblib) - model yang dilatih
         # lewat tab Kalibrasi.  Tanpa cabang ini, model hasil latihan tidak
         # pernah terpakai di alur ingest: ml_vitals mencari artefak lain
@@ -1076,15 +1103,18 @@ def ingest_firmware_batch(
         from api.ml_calibration import is_calibration_model_available, predict_vitals
         if is_calibration_model_available() and batch.ir and batch.red:
             try:
-                from api.ppg_analysis import bpm_autocorr, channel_stats
+                from api.ppg_analysis import channel_stats
                 fs_m   = float(batch.fs_max or 400)
                 ir_f   = [float(v) for v in batch.ir]
                 red_f  = [float(v) for v in batch.red]
                 ir_st  = channel_stats(ir_f,  fs_m, "ir")
                 red_st = channel_stats(red_f, fs_m, "red")
 
-                bpm_raw, bpm_conf = bpm_autocorr(np.array(ir_f, dtype=float), fs_m)
-                bpm_use = bpm_filter.filter_bpm(batch.id, bpm_raw, bpm_conf)["bpm"] or bpm_raw or 70.0
+                # BPM sudah dihitung di atas (sekali saja) - pakai itu, jangan
+                # panggil bpm_autocorr/bpm_filter lagi di sini (dulu dipanggil
+                # dua kali per batch, salah satunya membuang hasilnya begitu
+                # saja padahal ikut mengubah state filter di bpm_filter.py).
+                bpm_use = vitals.get("heart_rate_bpm") or 70.0
 
                 gender_code = {"L": 1.0, "M": 1.0, "P": 0.0, "F": 0.0}.get(
                     str(getattr(profile, "gender", "") or "").strip().upper()[:1], 0.5
@@ -1109,7 +1139,7 @@ def ingest_firmware_batch(
             except Exception as exc:
                 logger.warning("[INGEST] Estimasi vital kalibrasi gagal untuk %s: %s", batch.id, exc)
 
-    if not vitals:
+    if not _has_core_vitals(vitals):
         # Masih kosong: ambil vital terakhir yang sudah ada di DB
         last = (
             db.query(models_db.VitalReading)
@@ -1118,16 +1148,17 @@ def ingest_firmware_batch(
             .first()
         )
         if last:
-            vitals = {
+            vitals.update({
                 "systolic_bp_mmhg": last.systolic_bp,
                 "diastolic_bp_mmhg": last.diastolic_bp,
                 "blood_glucose_mg_dl": last.blood_glucose_mg_dl,
                 "kolesterol_mg_dl": last.kolesterol_mg_dl,
                 "asam_urat_mg_dl": last.asam_urat_mg_dl,
-            }
+            })
 
     if not vitals:
-        # Tidak ada data vital sama sekali → simpan batch metadata saja
+        # Tidak ada data vital sama sekali (BP/glukosa maupun BPM) → simpan
+        # batch metadata saja
         return schemas.IngestResponse(ok=True, seq=batch.seq)
 
     # --- Prediksi stroke risk -------------------------------------------
@@ -1139,29 +1170,13 @@ def ingest_firmware_batch(
     result = predict_stroke_risk(features)
 
     # --- Simpan reading -------------------------------------------------
-    # BPM ikut disimpan - kolom heart_rate_bpm sudah ada di VitalReading tapi
-    # sebelumnya tidak pernah diisi, sehingga kartu "Detak Jantung" di mobile
-    # app selamanya menampilkan "--".
-    _hr = vitals.get("heart_rate_bpm")
-    if _hr is None:
-        try:
-            from api.ppg_analysis import bpm_autocorr
-            if batch.ir:
-                _raw, _cf = bpm_autocorr(
-                    np.array([float(v) for v in batch.ir], dtype=float),
-                    float(batch.fs_max or 400),
-                )
-                _hr = bpm_filter.filter_bpm(batch.id, _raw, _cf)["bpm"]
-        except Exception:
-            _hr = None
-
     record_vital_reading(
         db,
         profile.id,
         systolic_bp=vitals.get("systolic_bp_mmhg", 120.0),
         diastolic_bp=vitals.get("diastolic_bp_mmhg"),
         blood_glucose_mg_dl=vitals.get("blood_glucose_mg_dl", 100.0),
-        heart_rate_bpm=_hr,
+        heart_rate_bpm=vitals.get("heart_rate_bpm"),
         kolesterol_mg_dl=vitals.get("kolesterol_mg_dl"),
         asam_urat_mg_dl=vitals.get("asam_urat_mg_dl"),
     )

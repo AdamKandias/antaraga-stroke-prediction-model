@@ -656,9 +656,23 @@ void netTask(void *arg)
 #if OTA_ENABLE && OTA_CHECK_INTERVAL_MS > 0
   uint32_t lastOtaMs = millis();
 #endif
+  uint32_t lastNtpRetryMs = millis();
 
   for (;;)
   {
+    /* Retry NTP berkala, TERPISAH dari event putus-sambung WiFi di bawah.
+     * WiFi.status() bisa saja tetap WL_CONNECTED terus-menerus (asosiasi ke
+     * hotspot tidak pernah drop) padahal uplink internetnya sendiri belum
+     * hidup (mis. HP hotspot menidurkan data seluler saat idle) - tanpa ini,
+     * kegagalan NTP di awal boot tidak akan pernah dicoba ulang seumur sesi. */
+    if (!(xEventGroupGetBits(g_events) & EV_NTP_OK) &&
+        millis() - lastNtpRetryMs >= NTP_RETRY_INTERVAL_MS)
+    {
+      lastNtpRetryMs = millis();
+      if (WiFi.status() == WL_CONNECTED)
+        ntpSync();
+    }
+
     if (WiFi.status() != WL_CONNECTED)
     {
       /* Batch TIDAK diambil selama jaringan mati - biar menumpuk di qFilled

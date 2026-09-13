@@ -41,6 +41,14 @@
 #define NTP_SERVER_2 "time.google.com"
 #define NTP_WAIT_MS 6000
 
+// Jeda coba ulang NTP selama belum sinkron, DIUKUR TERPISAH dari event
+// putus-sambung WiFi. Perlu: hotspot HP bisa saja tetap WL_CONNECTED di
+// Layer 2 (asosiasi ke ESP32 tidak pernah drop) padahal uplink selulernya
+// sendiri sedang tertidur (hemat baterai) - NTP gagal sekali di awal boot
+// lalu tidak pernah dicoba lagi kalau retry-nya cuma digantung di event
+// reconnect yang mungkin tidak pernah terjadi.
+#define NTP_RETRY_INTERVAL_MS 30000
+
 // =====================================================================
 // Akuisisi — SON1303 (PPG analog, A1/GPIO2)
 // =====================================================================
