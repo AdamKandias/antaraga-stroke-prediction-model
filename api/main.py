@@ -1072,18 +1072,33 @@ def ingest_firmware_batch(
     # awal dan heart_rate_bpm TIDAK PERNAH tersimpan -- kartu "Detak Jantung"
     # di mobile app permanen menampilkan "--" walau sinyal IR-nya sendiri
     # sehat dan detak sebetulnya bisa dihitung.
-    if batch.ir:
-        try:
-            from api.ppg_analysis import bpm_autocorr
-            _raw, _cf = bpm_autocorr(
-                np.array([float(v) for v in batch.ir], dtype=float),
-                float(batch.fs_max or 400),
-            )
-            _hr = bpm_filter.filter_bpm(batch.id, _raw, _cf)["bpm"]
-            if _hr is not None:
-                vitals["heart_rate_bpm"] = _hr
-        except Exception:
-            pass
+    #
+    # PENTING: satu batch firmware cuma BATCH_MS = 1 detik (~400 sampel IR),
+    # sedangkan bpm_autocorr menolak sinyal < 4 detik (mengembalikan None).
+    # Menghitung dari `batch.ir` saja berarti BPM SELALU None. Jadi yang
+    # dipakai jendela 10 detik dari beberapa batch terakhir (batch ini sudah
+    # masuk ingest_buffer di atas), dengan pemilihan sumber yang sama persis
+    # seperti panel dashboard web (IR utama, merah cadangan bila IR tidak
+    # periodik) supaya angka di mobile app = angka di web.
+    try:
+        from api.ppg_analysis import bpm_autocorr
+        _win = _filter_good_batches(ingest_buffer.get_window_s(batch.id, 10.0))
+        _fs_b = float(batch.fs_max or 400)
+        _src_bpm, _src_cf = None, 0.0
+        for _chan in ("ir", "red"):
+            _sig = np.array([float(v) for b in _win for v in b.get(_chan, [])], dtype=float)
+            if _sig.size == 0:
+                continue
+            _b, _c = bpm_autocorr(_sig, _fs_b)
+            if _b is not None and (_src_bpm is None or _c > _src_cf):
+                _src_bpm, _src_cf = _b, _c
+            if _src_bpm is not None and _src_cf >= 0.30:
+                break
+        _hr = bpm_filter.filter_bpm(batch.id, _src_bpm, _src_cf)["bpm"]
+        if _hr is not None:
+            vitals["heart_rate_bpm"] = _hr
+    except Exception:
+        pass
 
     def _has_core_vitals(v: dict) -> bool:
         return any(v.get(k) is not None for k in

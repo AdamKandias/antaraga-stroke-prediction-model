@@ -1,0 +1,164 @@
+{
+  "cohort": [
+    [
+      "Subjects, n",
+      "11"
+    ],
+    [
+      "Age (years), mean \u00b1 SD (range)",
+      "65.0 \u00b1 16.7 (20.0\u201380.0)"
+    ],
+    [
+      "Sex, male / female",
+      "5 / 6"
+    ],
+    [
+      "Sampling condition",
+      "sewaktu (non-fasting)"
+    ],
+    [
+      "Heart rate, oximeter (bpm)",
+      "80.3 \u00b1 13.0 (54.0\u2013102.0)"
+    ],
+    [
+      "SBP (mmHg), reference device",
+      "147 \u00b1 16 (121\u2013173)"
+    ],
+    [
+      "DBP (mmHg), reference device",
+      "83 \u00b1 12 (56\u2013102)"
+    ],
+    [
+      "Glucose (mg/dL), reference device",
+      "141 \u00b1 35 (94\u2013183)"
+    ],
+    [
+      "Cholesterol (mg/dL), reference device",
+      "232 \u00b1 37 (151\u2013269)"
+    ],
+    [
+      "Uric acid (mg/dL), reference device",
+      "5.3 \u00b1 1.0 (3.7\u20137.2)"
+    ]
+  ],
+  "cv_pct": {
+    "sistolik_mmhg": 11.159315081763895,
+    "diastolik_mmhg": 14.946706668958235,
+    "gula_darah_mg_dl": 25.034751128660858,
+    "kolesterol_mg_dl": 16.00794289258896,
+    "asam_urat_mg_dl": 18.904422407887296
+  },
+  "parameters": {
+    "sistolik_mmhg": {
+      "label": "SBP (mmHg)",
+      "n": 11,
+      "model": "SVR (linear)",
+      "features": "Penuh (7 fitur)",
+      "mae": 13.17818181818182,
+      "rmse": 16.064329768436995,
+      "mape": 9.015874818719318,
+      "acc": 90.98
+    },
+    "diastolik_mmhg": {
+      "label": "DBP (mmHg)",
+      "n": 11,
+      "model": "SVR (linear)",
+      "features": "Penuh (7 fitur)",
+      "mae": 6.090909090909091,
+      "rmse": 9.608840626309616,
+      "mape": 8.632580944662866,
+      "acc": 91.37
+    },
+    "gula_darah_mg_dl": {
+      "label": "Glucose (mg/dL)",
+      "n": 11,
+      "model": "XGBoost (reg. ketat)",
+      "features": "Minimal (usia saja)",
+      "mae": 29.35727272727273,
+      "rmse": 35.5681730816138,
+      "mape": 23.778564471486103,
+      "acc": 76.22
+    },
+    "kolesterol_mg_dl": {
+      "label": "Cholesterol (mg/dL)",
+      "n": 11,
+      "model": "SVR (linear)",
+      "features": "Minimal (usia saja)",
+      "mae": 30.435454545454544,
+      "rmse": 37.38712965227959,
+      "mape": 14.859252214089558,
+      "acc": 85.14
+    },
+    "asam_urat_mg_dl": {
+      "label": "Uric acid (mg/dL)",
+      "n": 11,
+      "model": "SVR (rbf)",
+      "features": "Minimal (usia saja)",
+      "mae": 0.7463636363636362,
+      "rmse": 0.9567986394031066,
+      "mape": 13.85296454125412,
+      "acc": 86.2
+    }
+  },
+  "case_S010": {
+    "sistolik_mmhg": {
+      "lab": 150.0,
+      "poct": 155.0,
+      "est": 141.0,
+      "abs_err_est": 9.0,
+      "acc_est": 94.0,
+      "abs_err_poct": 5.0,
+      "acc_poct": 96.66666666666667
+    },
+    "diastolik_mmhg": {
+      "lab": 80.0,
+      "poct": 85.0,
+      "est": 85.42,
+      "abs_err_est": 5.420000000000002,
+      "acc_est": 93.225,
+      "abs_err_poct": 5.0,
+      "acc_poct": 93.75
+    },
+    "gula_darah_mg_dl": {
+      "lab": 178.0,
+      "poct": 175.0,
+      "est": 149.44,
+      "abs_err_est": 28.560000000000002,
+      "acc_est": 83.95505617977528,
+      "abs_err_poct": 3.0,
+      "acc_poct": 98.31460674157303
+    },
+    "kolesterol_mg_dl": {
+      "lab": 154.0,
+      "poct": 151.0,
+      "est": 240.47,
+      "abs_err_est": 86.47,
+      "acc_est": 43.85064935064935,
+      "abs_err_poct": 3.0,
+      "acc_poct": 98.05194805194805
+    },
+    "asam_urat_mg_dl": {
+      "lab": 4.6,
+      "poct": 4.8,
+      "est": 4.7,
+      "abs_err_est": 0.10000000000000053,
+      "acc_est": 97.82608695652172,
+      "abs_err_poct": 0.20000000000000018,
+      "acc_poct": 95.65217391304347
+    }
+  },
+  "htn": {
+    "n": 11,
+    "tp": 7,
+    "tn": 1,
+    "fp": 1,
+    "fn": 2,
+    "positive_true": 9,
+    "flip_rate": 0.2727272727272727,
+    "sensitivity": 0.7777777777777778,
+    "specificity": 0.5,
+    "agreement": 0.7272727272727273
+  },
+  "glucose_rmse_loso": 35.5681730816138,
+  "sbp_rmse_loso": 16.064329768436995
+}
