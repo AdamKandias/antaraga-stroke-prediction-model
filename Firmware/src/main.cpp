@@ -196,10 +196,11 @@ static void printStats()
 {
   Serial.printf(
       "[STAT] %-8s up=%lus | batch made=%lu sent=%lu drop=%lu httpfail=%lu"
-      " code=%ld post=%lums\n",
+      " forced_reconn=%lu code=%ld post=%lums\n",
       stateName(g_state), (unsigned long)(millis() / 1000),
       (unsigned long)g_stats.batches_made, (unsigned long)g_stats.batches_sent,
       (unsigned long)g_stats.batches_dropped, (unsigned long)g_stats.http_fail,
+      (unsigned long)g_stats.forced_reconnects,
       (long)g_stats.last_http_code, (unsigned long)g_stats.last_post_ms);
 
   /* fs_max_ukur = laju MAX30102 yang BENAR-BENAR tercapai. Basis waktunya

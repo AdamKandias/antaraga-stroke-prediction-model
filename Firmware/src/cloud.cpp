@@ -658,6 +658,12 @@ void netTask(void *arg)
 #endif
   uint32_t lastNtpRetryMs = millis();
 
+  /* Cacah POST gagal BERTURUT-TURUT, dihitung dari hasil POST itu sendiri -
+   * bukan dari WiFi.status() (lihat NET_FORCE_RECONNECT_FAILS di config.h
+   * untuk alasan lengkapnya: asosiasi Layer 2 ke hotspot bisa tetap hidup
+   * sementara uplink-nya sendiri mati, dan WiFi.status() tidak melihat itu). */
+  uint32_t consecutiveFail = 0;
+
   for (;;)
   {
     /* Retry NTP berkala, TERPISAH dari event putus-sambung WiFi di bawah.
@@ -770,12 +776,55 @@ void netTask(void *arg)
     if (ok)
     {
       g_stats.batches_sent++;
+      consecutiveFail = 0;
       if (g_state == ST_NET_LOST)
         setState(ST_STREAMING);
     }
     else
     {
       g_stats.http_fail++;
+      consecutiveFail++;
+
+      /* WiFi.status() masih WL_CONNECTED (kalau tidak, baris di atas loop
+       * sudah menangkapnya dan "continue" sebelum sampai sini) tapi POST
+       * tetap gagal berkali-kali berturut-turut - jalur ke server mati
+       * walau asosiasi lokal ke hotspot terlihat baik. Paksa sambung ulang
+       * dari nol, sama seperti alur WiFi-putus di atas, supaya device TIDAK
+       * diam menunggu hotspot pulih sendiri (bisa lama/tidak pernah) dan
+       * LED-nya ikut jujur menunjukkan ST_NET_LOST, bukan tetap "bernapas"
+       * normal seolah tidak terjadi apa-apa. */
+      if (consecutiveFail >= NET_FORCE_RECONNECT_FAILS)
+      {
+        Serial.printf("[HTTP] %lu gagal berturut-turut walau WiFi masih "
+                      "\"tersambung\" - memaksa sambung ulang.\n",
+                      (unsigned long)consecutiveFail);
+        g_stats.forced_reconnects++;
+        if (g_state == ST_STREAMING)
+          setState(ST_NET_LOST);
+        s_http.end();
+        s_tls.stop();
+        /* TIDAK memakai wifiWaitConnected() di sini: while-nya dipagari
+         * `WiFi.status() != WL_CONNECTED`, dan status KITA di titik ini
+         * justru masih WL_CONNECTED (itulah akar masalahnya) - kalau dipakai,
+         * fungsi itu akan langsung kembali tanpa melakukan apa pun. Panggil
+         * wifiConnectOnce() langsung dan berulang: fungsi itu SELALU
+         * memutuskan dulu baru menyambung ulang, apa pun status sekarang. */
+        while (!wifiConnectOnce())
+        {
+          Serial.println(F("[WIFI] sambung ulang paksa gagal, mencoba lagi..."));
+          vTaskDelay(pdMS_TO_TICKS(WIFI_RETRY_DELAY_MS));
+        }
+        Serial.print(F("[WIFI] sambung ulang paksa berhasil, IP "));
+        Serial.println(WiFi.localIP());
+        if (!(xEventGroupGetBits(g_events) & EV_NTP_OK))
+          ntpSync();
+        if (g_state == ST_NET_LOST)
+          setState(ST_STREAMING);
+        consecutiveFail = 0;
+#if OTA_ENABLE && OTA_CHECK_INTERVAL_MS > 0
+        lastOtaMs = millis(); // jangan langsung cek OTA sesaat setelah reconnect
+#endif
+      }
     }
 
 #if OTA_ENABLE

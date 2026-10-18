@@ -140,6 +140,12 @@ struct Stats {
   volatile uint32_t batches_sent;
   volatile uint32_t batches_dropped;  // qFree habis -> batch tertua dibuang
   volatile uint32_t http_fail;
+  // Dipicu saat POST gagal NET_FORCE_RECONNECT_FAILS kali berturut-turut
+  // meski WiFi.status() masih WL_CONNECTED -- lihat NET_FORCE_RECONNECT_FAILS
+  // di config.h untuk alasannya. Naik tiap kali ini terjadi; kalau angkanya
+  // sering bertambah di serial/[STAT], itu tanda hotspot/uplink-nya yang
+  // sering "tidur", bukan device-nya yang mati.
+  volatile uint32_t forced_reconnects;
   volatile uint32_t max_ovf_total;    // FIFO MAX30102 kebablasan
   volatile uint32_t ppg_overrun;      // sensorTask telat dari jadwal 5 ms
   volatile uint32_t max_trunc;        // sampel MAX30102 dibuang, MAX_CAP penuh

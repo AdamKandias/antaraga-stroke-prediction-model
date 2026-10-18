@@ -33,6 +33,25 @@
 
 #define HTTP_TIMEOUT_MS 8000
 
+// Jumlah POST GAGAL BERTURUT-TURUT (tiap kegagalan sudah mencakup 1x retry
+// sendiri di cloudPost(), lihat cloud.cpp) sebelum firmware memaksa diskoneksi
+// + sambung ulang WiFi dari NOL, MESKI WiFi.status() masih bilang WL_CONNECTED.
+//
+// Kenapa perlu: WiFi.status() cuma mencerminkan asosiasi Layer 2 ke
+// access point (hotspot HP). Hotspot bisa saja tetap menunjukkan "tersambung"
+// ke ESP32 padahal uplink-nya sendiri (data seluler/WiFi rumah di belakangnya)
+// sudah mati atau macet -- DHCP lease kedaluwarsa, AP sedang sibuk, dsb --
+// jadi asosiasi lokal tidak pernah drop, tapi paket tidak pernah sampai ke
+// server mana pun. Tanpa penanda ini, netTask tidak PERNAH mendeteksi kondisi
+// itu: baris `if (WiFi.status() != WL_CONNECTED)` di netTask tidak pernah
+// bernilai true, jadi tidak pernah ada reconnect, LED tidak pernah pindah ke
+// pola ST_NET_LOST, dan device terlihat "menyala normal" padahal berhenti
+// mengirim data sampai hotspot pulih sendiri (bisa lama/tidak pernah).
+//
+// Keputusan "gagal beneran" di sini memakai HASIL POST (satu-satunya bukti
+// bahwa jalur ke server benar-benar hidup), bukan status asosiasi WiFi.
+#define NET_FORCE_RECONNECT_FAILS 5
+
 // =====================================================================
 // Waktu (NTP) — supaya cloud punya timestamp absolut per batch
 // =====================================================================
