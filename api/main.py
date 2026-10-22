@@ -1064,11 +1064,27 @@ def get_wifi_status(
     menunggu firmware mencoba (`pending`), dan/atau hasil percobaan
     terakhir (`last_result`). Dipoll app setelah POST /v1/wifi/request
     untuk menampilkan "menghubungkan... / berhasil / gagal, kembali ke
-    WiFi sebelumnya"."""
+    WiFi sebelumnya".
+
+    `current_ssid` BUKAN dari state ganti-WiFi -- itu dibaca langsung dari
+    batch ingest TERAKHIR yang dikirim device (field wifi_ssid, dikirim
+    tiap batch terlepas dari ada/tidaknya percobaan ganti WiFi), sama
+    seperti baterai di /vitals/latest. Null kalau device belum pernah
+    mengirim data sama sekali."""
     profile = _resolve_profile_for_request(db, user_id, profile_id)
     if not profile.device_key:
-        return {"has_device": False, "pending": None, "last_result": None}
-    return {"has_device": True, **wifi_config.get_status(profile.device_key)}
+        return {"has_device": False, "pending": None, "last_result": None, "current_ssid": None}
+
+    current_ssid = None
+    latest_batch = ingest_buffer.get_latest(profile.device_key)
+    if latest_batch:
+        current_ssid = latest_batch.get("wifi_ssid") or None
+
+    return {
+        "has_device": True,
+        "current_ssid": current_ssid,
+        **wifi_config.get_status(profile.device_key),
+    }
 
 
 @app.post("/v1/ingest", response_model=schemas.IngestResponse)

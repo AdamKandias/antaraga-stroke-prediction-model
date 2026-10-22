@@ -26,6 +26,23 @@
 #include <time.h>
 
 // =====================================================================
+// NVS + kredensial WiFi runtime - dideklarasikan di awal file (bukan di
+// bagian "WiFi" di bawah) karena buildJson() tepat di bawah ini perlu
+// membaca s_wifiSsid untuk mengirim field "wifi_ssid" tiap batch.
+// =====================================================================
+// NVS bersama ("antaraga" namespace) - dibuka SEKALI oleh wifiCredsLoad(),
+// dipakai juga oleh anti-brick OTA dan oleh WIFI_CFG_*. Diletakkan tidak
+// di dalam #if OTA_ENABLE supaya tetap ada walau OTA mati.
+static Preferences s_nvs;
+
+/* Kredensial yang BENAR-BENAR dipakai saat runtime. WIFI_SSID/WIFI_PASS di
+ * config.h cuma default awal (dipakai sekali kalau NVS masih kosong) -
+ * lihat WIFI_CFG_* di config.h untuk alasan lengkapnya. 33/65 = panjang
+ * maksimum SSID (32 byte) dan passphrase WPA2 (63 byte) + NUL. */
+static char s_wifiSsid[33] = {0};
+static char s_wifiPass[65] = {0};
+
+// =====================================================================
 // Buffer JSON - dihitung compile-time dari ukuran batch
 //   PPG  : maks 4 digit + koma      -> 6 byte/nilai (aman)
 //   RED/IR: maks 6 digit + koma     -> 8 byte/nilai (aman)
@@ -58,6 +75,19 @@ struct JsonWriter
   {
     while (*s)
       chr(*s++);
+  }
+  // Seperti str(), tapi meng-escape '"' dan '\\' -- dipakai untuk nilai
+  // string yang BUKAN konstanta firmware (mis. SSID WiFi dari NVS/app),
+  // supaya karakter kutip di dalamnya tidak merusak JSON.
+  void strEsc(const char *s)
+  {
+    while (*s)
+    {
+      const char c = *s++;
+      if (c == '"' || c == '\\')
+        chr('\\');
+      chr(c);
+    }
   }
   void key(const char *k)
   {
@@ -123,6 +153,14 @@ static size_t buildJson(const Batch *b, const Sqi *q)
   w.chr(',');
   w.key("batt_pct");
   w.u32(b->batt_pct);
+  w.chr(',');
+  // SSID WiFi yang SEDANG dipakai -- dikirim tiap batch (bukan cuma saat
+  // WIFI_CFG_* dipanggil) supaya app/dashboard bisa menampilkan "WiFi saat
+  // ini" tanpa harus menunggu ada percobaan ganti WiFi dulu.
+  w.key("wifi_ssid");
+  w.chr('"');
+  w.strEsc(s_wifiSsid);
+  w.chr('"');
   w.chr(',');
   w.key("ovf");
   w.u32(b->max_ovf);
@@ -215,17 +253,10 @@ static size_t buildJson(const Batch *b, const Sqi *q)
 // =====================================================================
 // WiFi
 // =====================================================================
-// NVS bersama ("antaraga" namespace) - dibuka SEKALI oleh wifiCredsLoad()
-// di bawah, dipakai juga oleh anti-brick OTA dan oleh WIFI_CFG_*.
-// Diletakkan tidak di dalam #if OTA_ENABLE supaya tetap ada walau OTA mati.
-static Preferences s_nvs;
-
-/* Kredensial yang BENAR-BENAR dipakai saat runtime. WIFI_SSID/WIFI_PASS di
- * config.h cuma default awal (dipakai sekali kalau NVS masih kosong) -
- * lihat WIFI_CFG_* di config.h untuk alasan lengkapnya. 33/65 = panjang
- * maksimum SSID (32 byte) dan passphrase WPA2 (63 byte) + NUL. */
-static char s_wifiSsid[33] = {0};
-static char s_wifiPass[65] = {0};
+// s_nvs/s_wifiSsid/s_wifiPass dideklarasikan lebih awal di file ini
+// (lihat dekat #include di atas) karena buildJson() -- yang muncul lebih
+// dulu di file ini daripada bagian ini -- butuh membaca s_wifiSsid untuk
+// field "wifi_ssid".
 
 // Dipanggil SEKALI di awal netTask(), sebelum WiFi/OTA/apa pun lain yang
 // butuh NVS - membuka s_nvs (dipakai bersama OTA & WIFI_CFG) dan memuat
@@ -703,12 +734,44 @@ static void wifiCfgReport(const char *ssid, bool success, const char *message)
  * listrik di tengah percobaan. */
 static void wifiCfgApply(const char *newSsid, const char *newPass)
 {
+  Serial.printf("[WIFICFG] permintaan ganti WiFi ke \"%s\" diterima, memindai dulu...\n", newSsid);
+
+  /* Pra-cek: pastikan SSID baru benar-benar TERLIHAT di sekitar SEBELUM
+   * memutus WiFi lama sama sekali. WiFi.scanNetworks() bisa dilakukan
+   * sambil tetap terhubung ke AP saat ini (ESP32 "menyelinap" ke channel
+   * lain sebentar lalu kembali) -- beda dengan WiFi.begin() yang PASTI
+   * memutus dulu baru mencoba. Jadi untuk kasus tersering (SSID salah
+   * ketik / di luar jangkauan), device TIDAK PERNAH kehilangan koneksi ke
+   * WiFi lama sama sekali -- bukan cuma "cepat kembali" setelah gagal.
+   *
+   * Filter SSID langsung di scanNetworks() (parameter ke-6) supaya tidak
+   * perlu membandingkan string hasil scan satu-satu. 300 ms/channel x 13
+   * channel (1-13) ~= maks 4 detik kalau SSID itu benar tidak ada. */
+  const int16_t seen = WiFi.scanNetworks(
+      /*async=*/false, /*show_hidden=*/true, /*passive=*/false,
+      /*max_ms_per_chan=*/300, /*channel=*/0, newSsid);
+  WiFi.scanDelete();
+  if (seen <= 0)
+  {
+    Serial.printf("[WIFICFG] SSID \"%s\" tidak terlihat di sekitar perangkat - "
+                  "dibatalkan TANPA memutus WiFi lama.\n", newSsid);
+    wifiCfgReport(newSsid, false, "SSID tidak ditemukan di sekitar perangkat");
+    return;
+  }
+  Serial.printf("[WIFICFG] SSID \"%s\" terlihat (RSSI %ld dBm) - menguji sambungannya...\n",
+                newSsid, (long)WiFi.RSSI(0));
+
+  /* Dari titik ini SSID TERBUKTI ada, tapi password/kompatibilitasnya
+   * belum teruji -- menguji itu MENGHARUSKAN memutus WiFi lama dulu,
+   * keterbatasan radio WiFi tunggal ESP32 (tidak bisa terasosiasi ke dua
+   * access point sekaligus). Jendela putus di bawah ini tidak terhindarkan;
+   * pra-cek di atas hanya menghilangkan SATU sumber putus yang paling
+   * sering terjadi (salah ketik SSID / WiFi tujuan di luar jangkauan). */
   char oldSsid[sizeof(s_wifiSsid)];
   char oldPass[sizeof(s_wifiPass)];
   memcpy(oldSsid, s_wifiSsid, sizeof(oldSsid));
   memcpy(oldPass, s_wifiPass, sizeof(oldPass));
 
-  Serial.printf("[WIFICFG] permintaan ganti WiFi ke \"%s\" diterima, mencoba...\n", newSsid);
   if (g_state == ST_STREAMING)
     setState(ST_NET_LOST);
   s_http.end();

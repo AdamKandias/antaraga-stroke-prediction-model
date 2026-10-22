@@ -234,6 +234,11 @@ class IngestBatch(BaseModel):
     fs_max: int
     batt_mv: int = 0
     batt_pct: int = 0
+    # SSID WiFi yang SEDANG dipakai device saat ini -- dikirim tiap batch
+    # (lihat Firmware/src/cloud.cpp: buildJson()) supaya app/dashboard bisa
+    # menampilkan "WiFi saat ini" tanpa menunggu ada percobaan ganti WiFi.
+    # Opsional agar payload firmware lama (sebelum field ini ada) tetap valid.
+    wifi_ssid: str = ""
     ovf: int = 0
     # SQI metadata - dikirim firmware sejak v0.x; opsional agar payload lama tetap valid
     sqi: int = 0           # skor 0–100 (MINIMUM sub-skor; 0 jika ada flag aktif)
