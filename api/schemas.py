@@ -132,6 +132,12 @@ class VitalReadingResponse(BaseModel):
     kolesterol_mg_dl: float | None = None
     asam_urat_mg_dl: float | None = None
     timestamp: datetime
+    # Telemetri baterai gelang (bukan vital sign) -- null kalau profil belum
+    # pernah dipasangkan ke device atau device itu belum pernah kirim data.
+    # Sudah dihaluskan di battery_filter.py (EMA + histeresis persen) supaya
+    # tidak melompat 2-4% seperti bacaan mentahnya. Lihat juga IngestBatch.
+    batt_pct: int | None = None
+    batt_mv: int | None = None
 
     @field_serializer("timestamp")
     def _ts_utc(self, v: datetime, _info) -> str:

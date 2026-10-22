@@ -24,7 +24,7 @@ from fastapi.responses import (
 from sqlalchemy import desc, func, or_
 from sqlalchemy.orm import Session
 
-from api import bpm_filter, dashboard_auth, ingest_buffer, models_db, schemas
+from api import battery_filter, bpm_filter, dashboard_auth, ingest_buffer, models_db, schemas
 from api.auth import create_access_token, get_current_user_id, get_ingest_user_id
 from api.config import DASHBOARD_SESSION_DAYS, DEV_MODE
 from api.apk import router as apk_router
@@ -542,6 +542,22 @@ def get_latest_vital(
     # record_vital_reading() ada -- lihat profile_utils.reject_negative().
     _sys = reject_negative(reading.systolic_bp)
     _glu = reject_negative(reading.blood_glucose_mg_dl)
+
+    # Telemetri baterai gelang: bukan kolom di vital_readings (device_key
+    # bisa berganti per-profil dan baterai bukan "vital sign" historis),
+    # jadi diambil live dari buffer ingest device yang SEDANG terpasang ke
+    # profil ini, dihaluskan dengan filter yang sama dipakai dashboard web
+    # (/v1/ingest/latest) supaya kedua sisi konsisten.
+    _batt_pct: int | None = None
+    _batt_mv: int | None = None
+    if profile.device_key:
+        _latest_batch = ingest_buffer.get_latest(profile.device_key)
+        if _latest_batch:
+            _batt = battery_filter.filter_battery(
+                profile.device_key, _latest_batch.get("batt_mv", 0)
+            )
+            _batt_pct, _batt_mv = _batt["batt_pct"], _batt["batt_mv"]
+
     return schemas.LatestVitalResponse(
         vital=schemas.VitalReadingResponse(
             systolic_bp=120.0 if _sys is None else _sys,
@@ -557,6 +573,8 @@ def get_latest_vital(
             # DateTime.parse(...).toLocal() converts to the *device's*
             # timezone instead of silently treating UTC as if it were local.
             timestamp=reading.created_at.replace(tzinfo=timezone.utc),
+            batt_pct=_batt_pct,
+            batt_mv=_batt_mv,
         ),
         risk=risk,
     )
@@ -1710,8 +1728,10 @@ def ingest_latest_dashboard(
         "bpm_display": stage_bpm_display,
         "seq": latest.get("seq", 0),
         "received_at": latest.get("_received_at", ""),
-        "batt_pct": latest.get("batt_pct", 0),
-        "batt_mv": latest.get("batt_mv", 0),
+        # Dihaluskan (EMA + histeresis persen), bukan passthrough mentah --
+        # lihat battery_filter.py untuk alasannya (1% == 8 mV saja, jadi
+        # noise ADC langsung kelihatan sebagai lompatan beberapa persen).
+        **battery_filter.filter_battery(device_id, latest.get("batt_mv", 0)),
         "sqi": _sqi_summary(batches),
         "raw": stage_raw,
         "pwa": stage_pwa,
