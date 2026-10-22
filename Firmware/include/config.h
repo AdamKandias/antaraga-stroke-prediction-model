@@ -267,6 +267,42 @@
 #define OTA_TRIAL_TIMEOUT_MS 120000
 
 // =====================================================================
+// Ganti WiFi dari mobile app (cloud-mediated, dengan rollback otomatis)
+// ---------------------------------------------------------------------
+// WIFI_SSID/WIFI_PASS di atas cuma DEFAULT AWAL: begitu device pernah
+// berhasil konek sekali (default atau hasil ganti dari app), kredensial
+// yang BENAR-BENAR dipakai disimpan runtime di NVS ("antaraga" namespace,
+// key wifi_ssid/wifi_pass — lihat wifiCredsLoad() di cloud.cpp) dan itu yang
+// dipakai tiap boot berikutnya, bukan dua define ini lagi.
+//
+// Alur: app kirim SSID/password baru ke server -> device yang MASIH
+// tersambung ke WiFi lama polling GET {WIFI_CFG_PATH_CHECK} tiap
+// WIFI_CFG_CHECK_INTERVAL_MS -> kalau ada permintaan, device MENCOBA WiFi
+// baru itu maksimal WIFI_CFG_TRY_TIMEOUT_MS. Berhasil -> kredensial baru
+// ditulis ke NVS (jadi "WiFi lama" untuk percobaan berikutnya). Gagal
+// (SSID salah/password salah/sinyal tidak terjangkau) -> device otomatis
+// kembali ke kredensial LAMA (yang belum ditimpa sampai percobaan baru
+// benar-benar terbukti jalan) sehingga tidak pernah terputus permanen
+// hanya karena salah ketik dari app. Hasilnya dilaporkan balik lewat POST
+// {WIFI_CFG_PATH_RESULT} supaya app bisa menampilkan status.
+//
+// KONTRAK SERVER (dua endpoint):
+//
+//   GET  {WIFI_CFG_PATH_CHECK}?device_id=<id>
+//        -> {"pending":true,"ssid":"...","password":"..."}  ada permintaan
+//        -> {"pending":false}                               tidak ada
+//
+//   POST {WIFI_CFG_PATH_RESULT}?device_id=<id>&success=<true|false>
+//        body {"ssid":"...","message":"..."}
+#define WIFI_CFG_ENABLE 1
+#define WIFI_CFG_CHECK_INTERVAL_MS 20000 // jeda antar pengecekan (0 = mati)
+#define WIFI_CFG_PATH_CHECK "/v1/wifi/check"
+#define WIFI_CFG_PATH_RESULT "/v1/wifi/result"
+// Batas waktu TOTAL mencoba WiFi baru (termasuk beberapa kali retry di
+// dalamnya) sebelum dianggap gagal dan kembali ke WiFi lama.
+#define WIFI_CFG_TRY_TIMEOUT_MS 45000
+
+// =====================================================================
 // LED indikator (D10)
 // =====================================================================
 /* Saat STREAMING, LED "bernapas" — meredup dan menyala perlahan, bukan kedip.

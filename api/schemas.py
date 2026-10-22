@@ -212,6 +212,18 @@ class RegisterDeviceTokenRequest(BaseModel):
     fcm_token: str
 
 
+class WifiConfigRequest(BaseModel):
+    """Body untuk POST /v1/wifi/request -- app minta smartband pindah WiFi.
+
+    32/63 = panjang maksimum SSID dan passphrase WPA2 (lihat
+    Firmware/src/cloud.cpp: s_wifiSsid[33]/s_wifiPass[65], 1 byte untuk NUL).
+    Password boleh kosong (jaringan terbuka)."""
+
+    ssid: str = Field(..., min_length=1, max_length=32)
+    password: str = Field(default="", max_length=63)
+    profile_id: str | None = None
+
+
 class IngestBatch(BaseModel):
     """Payload dari firmware XIAO ESP32-S3 ke POST /v1/ingest."""
     id: str

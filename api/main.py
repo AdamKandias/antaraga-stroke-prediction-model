@@ -31,6 +31,8 @@ from api.apk import router as apk_router
 from api.firmware import router as firmware_router
 from api.ota import router as ota_router
 from api.pwa_config import get_pwa_config, router as pwa_router
+from api import wifi_config
+from api.wifi_config import router as wifi_router
 from api.database import Base, engine, get_db
 from api.logging_utils import access_logger, log_prediction, logger
 from api.ml import predict_stroke_risk
@@ -120,6 +122,7 @@ app.include_router(apk_router)
 app.include_router(firmware_router)
 app.include_router(ota_router)
 app.include_router(pwa_router)
+app.include_router(wifi_router)
 
 
 def _profile_to_response(profile: models_db.Profile) -> schemas.ProfileResponse:
@@ -1030,6 +1033,42 @@ def device_status(
             profile_name=profile.name if profile else None,
         )
     return schemas.DeviceStatusResponse(paired=False)
+
+
+@app.post("/v1/wifi/request")
+def request_wifi_change(
+    body: schemas.WifiConfigRequest,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+) -> dict:
+    """App minta smartband pindah ke WiFi lain. Device TIDAK diputus di
+    sini -- cuma dicatat sebagai "pending", lalu diambil firmware sendiri
+    lewat polling GET /v1/wifi/check (lihat api/wifi_config.py) begitu
+    device yang MASIH tersambung ke WiFi lama sempat mengecek. Kalau WiFi
+    baru gagal, firmware otomatis kembali ke WiFi lama -- lihat
+    WIFI_CFG_* di Firmware/include/config.h."""
+    profile = _resolve_profile_for_request(db, user_id, body.profile_id)
+    if not profile.device_key:
+        raise HTTPException(status_code=400, detail="Profil ini belum terhubung ke perangkat apa pun")
+    wifi_config.set_pending(profile.device_key, body.ssid, body.password)
+    return {"ok": True, "device_id": profile.device_key}
+
+
+@app.get("/v1/wifi/status")
+def get_wifi_status(
+    profile_id: str | None = None,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+) -> dict:
+    """Status permintaan ganti WiFi untuk device milik profil ini: masih
+    menunggu firmware mencoba (`pending`), dan/atau hasil percobaan
+    terakhir (`last_result`). Dipoll app setelah POST /v1/wifi/request
+    untuk menampilkan "menghubungkan... / berhasil / gagal, kembali ke
+    WiFi sebelumnya"."""
+    profile = _resolve_profile_for_request(db, user_id, profile_id)
+    if not profile.device_key:
+        return {"has_device": False, "pending": None, "last_result": None}
+    return {"has_device": True, **wifi_config.get_status(profile.device_key)}
 
 
 @app.post("/v1/ingest", response_model=schemas.IngestResponse)

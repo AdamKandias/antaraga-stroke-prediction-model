@@ -215,10 +215,50 @@ static size_t buildJson(const Batch *b, const Sqi *q)
 // =====================================================================
 // WiFi
 // =====================================================================
+// NVS bersama ("antaraga" namespace) - dibuka SEKALI oleh wifiCredsLoad()
+// di bawah, dipakai juga oleh anti-brick OTA dan oleh WIFI_CFG_*.
+// Diletakkan tidak di dalam #if OTA_ENABLE supaya tetap ada walau OTA mati.
+static Preferences s_nvs;
+
+/* Kredensial yang BENAR-BENAR dipakai saat runtime. WIFI_SSID/WIFI_PASS di
+ * config.h cuma default awal (dipakai sekali kalau NVS masih kosong) -
+ * lihat WIFI_CFG_* di config.h untuk alasan lengkapnya. 33/65 = panjang
+ * maksimum SSID (32 byte) dan passphrase WPA2 (63 byte) + NUL. */
+static char s_wifiSsid[33] = {0};
+static char s_wifiPass[65] = {0};
+
+// Dipanggil SEKALI di awal netTask(), sebelum WiFi/OTA/apa pun lain yang
+// butuh NVS - membuka s_nvs (dipakai bersama OTA & WIFI_CFG) dan memuat
+// kredensial WiFi yang terakhir terbukti jalan. Kalau belum pernah
+// tersimpan (device baru / belum pernah diganti dari app), pakai default
+// config.h.
+static void wifiCredsLoad()
+{
+  s_nvs.begin("antaraga", false);
+  const size_t ssidLen = s_nvs.getString("wifi_ssid", s_wifiSsid, sizeof(s_wifiSsid));
+  s_nvs.getString("wifi_pass", s_wifiPass, sizeof(s_wifiPass));
+  if (ssidLen == 0)
+  {
+    strncpy(s_wifiSsid, WIFI_SSID, sizeof(s_wifiSsid) - 1);
+    strncpy(s_wifiPass, WIFI_PASS, sizeof(s_wifiPass) - 1);
+  }
+}
+
+#if WIFI_CFG_ENABLE
+// Menimpa kredensial yang tersimpan - dipanggil HANYA setelah WiFi baru
+// terbukti bisa konek (lihat wifiCfgApply). Sebelum itu, s_wifiSsid/
+// s_wifiPass lama yang masih dipegang pemanggil-lah jaring pengaman rollback.
+static void wifiCredsSave(const char *ssid, const char *pass)
+{
+  s_nvs.putString("wifi_ssid", ssid);
+  s_nvs.putString("wifi_pass", pass);
+}
+#endif
+
 static bool wifiConnectOnce()
 {
   WiFi.disconnect(false, false); // eraseap=false: jangan tulis NVS tiap retry
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  WiFi.begin(s_wifiSsid, s_wifiPass);
   const uint32_t t0 = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - t0 < WIFI_CONNECT_TIMEOUT_MS)
   {
@@ -233,7 +273,7 @@ static void wifiWaitConnected()
   while (WiFi.status() != WL_CONNECTED)
   {
     Serial.printf("[WIFI] menyambung ke \"%s\" (percobaan %lu)...\n",
-                  WIFI_SSID, (unsigned long)++attempt);
+                  s_wifiSsid, (unsigned long)++attempt);
     if (wifiConnectOnce())
       break;
     vTaskDelay(pdMS_TO_TICKS(WIFI_RETRY_DELAY_MS));
@@ -309,12 +349,14 @@ static void tlsInit()
 }
 
 // =====================================================================
-// OTA - pengurai JSON minimal
+// Pengurai JSON minimal - dipakai OTA dan WiFi-reconfig (WIFI_CFG_*)
 // ---------------------------------------------------------------------
-// Respons OTA cuma beberapa puluh byte, jadi ArduinoJson tidak sepadan -
-// library itu justru memfragmentasi heap yang sedang kita jaga untuk TLS.
+// Respons kedua fitur ini cuma beberapa puluh byte, jadi ArduinoJson tidak
+// sepadan - library itu justru memfragmentasi heap yang sedang kita jaga
+// untuk TLS. Diletakkan TIDAK di dalam #if OTA_ENABLE supaya tetap tersedia
+// walau OTA dimatikan tapi WIFI_CFG_ENABLE menyala, atau sebaliknya.
 // =====================================================================
-#if OTA_ENABLE
+#if OTA_ENABLE || WIFI_CFG_ENABLE
 static bool jsonFindBool(const String &s, const char *key, bool *out)
 {
   String pat = String('"') + key + '"';
@@ -353,6 +395,7 @@ static bool jsonFindStr(const String &s, const char *key, char *out, size_t cap)
   out[n] = '\0';
   return true;
 }
+#endif // OTA_ENABLE || WIFI_CFG_ENABLE
 
 // =====================================================================
 // OTA - pengaman percobaan (anti-brick)
@@ -365,7 +408,7 @@ static bool jsonFindStr(const String &s, const char *key, char *out, size_t cap)
 // "good_part" hanya ditulis setelah firmware di slot itu sukses POST. Tanpa
 // syarat ini, revert pada OTA pertama justru melompat ke slot kosong.
 // =====================================================================
-static Preferences s_nvs;
+#if OTA_ENABLE
 static bool s_inTrial = false;
 static uint32_t s_trialStart = 0;
 static uint32_t s_trialOk = 0;
@@ -378,7 +421,7 @@ static const char *runningLabel()
 
 static void otaTrialInit()
 {
-  s_nvs.begin("antaraga", false);
+  // s_nvs sudah dibuka wifiCredsLoad() sebelum netTask memanggil fungsi ini.
   s_inTrial = s_nvs.getBool("ota_trial", false);
   s_trialStart = millis();
   s_trialOk = 0;
@@ -587,6 +630,136 @@ static void otaPerform()
 }
 #endif // OTA_ENABLE
 
+// =====================================================================
+// Ganti WiFi dari mobile app (cloud-mediated, dengan rollback otomatis)
+// ---------------------------------------------------------------------
+// Lihat blok komentar WIFI_CFG_* di config.h untuk kontrak server & alasan
+// desainnya. Dipanggil dari netTask(), sela di antara batch - sama seperti
+// pola otaCheckPending()/otaPerform() di atas.
+// =====================================================================
+#if WIFI_CFG_ENABLE
+static bool wifiCfgCheckPending(char *ssidOut, size_t ssidCap,
+                                 char *passOut, size_t passCap)
+{
+  char url[256];
+  snprintf(url, sizeof(url), "https://%s:%d%s?device_id=%s",
+           CLOUD_HOST, CLOUD_PORT, WIFI_CFG_PATH_CHECK, DEVICE_ID);
+
+  if (!s_otaHttp.begin(s_otaTls, url))
+    return false;
+  if (strlen(CLOUD_API_KEY) > 0)
+    s_otaHttp.addHeader("Authorization", "Bearer " CLOUD_API_KEY);
+  s_otaHttp.setTimeout(HTTP_TIMEOUT_MS);
+
+  const int code = s_otaHttp.GET();
+  String body;
+  if (code == 200)
+    body = s_otaHttp.getString();
+  s_otaHttp.end();
+
+  if (code != 200)
+    return false;
+
+  bool pending = false;
+  if (!jsonFindBool(body, "pending", &pending) || !pending)
+    return false;
+
+  if (!jsonFindStr(body, "ssid", ssidOut, ssidCap) || ssidOut[0] == '\0')
+    return false; // SSID kosong tidak pernah valid -- anggap tidak ada permintaan
+
+  // Password BOLEH kosong (jaringan terbuka) -- gagal-parse di sini bukan
+  // alasan untuk membatalkan permintaan, cukup pastikan buffer-nya NUL.
+  passOut[0] = '\0';
+  jsonFindStr(body, "password", passOut, passCap);
+  return true;
+}
+
+static void wifiCfgReport(const char *ssid, bool success, const char *message)
+{
+  char url[320];
+  snprintf(url, sizeof(url), "https://%s:%d%s?device_id=%s&success=%s",
+           CLOUD_HOST, CLOUD_PORT, WIFI_CFG_PATH_RESULT, DEVICE_ID,
+           success ? "true" : "false");
+  if (!s_otaHttp.begin(s_otaTls, url))
+    return;
+  if (strlen(CLOUD_API_KEY) > 0)
+    s_otaHttp.addHeader("Authorization", "Bearer " CLOUD_API_KEY);
+  s_otaHttp.addHeader("Content-Type", "application/json");
+  s_otaHttp.setTimeout(HTTP_TIMEOUT_MS);
+
+  char payload[192];
+  snprintf(payload, sizeof(payload), "{\"ssid\":\"%s\",\"message\":\"%s\"}", ssid, message);
+  s_otaHttp.POST((uint8_t *)payload, strlen(payload));
+  s_otaHttp.end();
+}
+
+/* Coba sambung ke SSID/password baru, batas waktu TOTAL WIFI_CFG_TRY_TIMEOUT_MS.
+ *
+ * Jaring pengaman rollback-nya: s_wifiSsid/s_wifiPass LAMA disalin ke
+ * oldSsid/oldPass dulu SEBELUM ditimpa, dan wifiCredsSave() (penulisan ke
+ * NVS) hanya dipanggil SETELAH WiFi baru terbukti konek. Kalau gagal,
+ * oldSsid/oldPass yang dipulihkan -- NVS tidak pernah tersentuh sama
+ * sekali, jadi tidak ada risiko "setengah tersimpan" walau device mati
+ * listrik di tengah percobaan. */
+static void wifiCfgApply(const char *newSsid, const char *newPass)
+{
+  char oldSsid[sizeof(s_wifiSsid)];
+  char oldPass[sizeof(s_wifiPass)];
+  memcpy(oldSsid, s_wifiSsid, sizeof(oldSsid));
+  memcpy(oldPass, s_wifiPass, sizeof(oldPass));
+
+  Serial.printf("[WIFICFG] permintaan ganti WiFi ke \"%s\" diterima, mencoba...\n", newSsid);
+  if (g_state == ST_STREAMING)
+    setState(ST_NET_LOST);
+  s_http.end();
+  s_tls.stop();
+
+  strncpy(s_wifiSsid, newSsid, sizeof(s_wifiSsid) - 1);
+  s_wifiSsid[sizeof(s_wifiSsid) - 1] = '\0';
+  strncpy(s_wifiPass, newPass, sizeof(s_wifiPass) - 1);
+  s_wifiPass[sizeof(s_wifiPass) - 1] = '\0';
+
+  const uint32_t t0 = millis();
+  bool ok = false;
+  do
+  {
+    if (wifiConnectOnce())
+    {
+      ok = true;
+      break;
+    }
+    vTaskDelay(pdMS_TO_TICKS(WIFI_RETRY_DELAY_MS));
+  } while (millis() - t0 < WIFI_CFG_TRY_TIMEOUT_MS);
+
+  if (ok)
+  {
+    Serial.printf("[WIFICFG] berhasil sambung ke \"%s\" - disimpan sebagai WiFi utama.\n", newSsid);
+    wifiCredsSave(s_wifiSsid, s_wifiPass);
+    wifiCfgReport(newSsid, true, "Tersambung");
+  }
+  else
+  {
+    Serial.printf("[WIFICFG] GAGAL sambung ke \"%s\" dalam %lu ms - kembali ke \"%s\".\n",
+                  newSsid, (unsigned long)WIFI_CFG_TRY_TIMEOUT_MS, oldSsid);
+    memcpy(s_wifiSsid, oldSsid, sizeof(s_wifiSsid));
+    memcpy(s_wifiPass, oldPass, sizeof(s_wifiPass));
+    while (!wifiConnectOnce())
+    {
+      Serial.println(F("[WIFICFG] sambung ulang ke WiFi lama gagal, mencoba lagi..."));
+      vTaskDelay(pdMS_TO_TICKS(WIFI_RETRY_DELAY_MS));
+    }
+    Serial.printf("[WIFICFG] kembali tersambung ke WiFi lama \"%s\", IP ", s_wifiSsid);
+    Serial.println(WiFi.localIP());
+    wifiCfgReport(newSsid, false, "Gagal konek, kembali ke WiFi sebelumnya");
+  }
+
+  if (!(xEventGroupGetBits(g_events) & EV_NTP_OK))
+    ntpSync();
+  if (g_state == ST_NET_LOST)
+    setState(ST_STREAMING);
+}
+#endif // WIFI_CFG_ENABLE
+
 // true = HTTP 2xx
 static bool cloudPost(const char *body, size_t len)
 {
@@ -635,7 +808,8 @@ void netTask(void *arg)
 
   // --- Langkah 1: WiFi harus hidup DULU, baru sensor boleh menyala -----
   setState(ST_WIFI_CONNECTING);
-  WiFi.persistent(false); // jangan aus-kan flash: kredensial sudah di config.h
+  wifiCredsLoad(); // buka NVS + muat kredensial WiFi (atau default config.h)
+  WiFi.persistent(false); // jangan aus-kan flash: kredensial sudah di s_wifiSsid/s_wifiPass
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false); // modem-sleep bikin latensi POST melonjak ratusan ms
   WiFi.setAutoReconnect(true);
@@ -655,6 +829,9 @@ void netTask(void *arg)
   // --- Langkah 2: pompa batch ke cloud --------------------------------
 #if OTA_ENABLE && OTA_CHECK_INTERVAL_MS > 0
   uint32_t lastOtaMs = millis();
+#endif
+#if WIFI_CFG_ENABLE && WIFI_CFG_CHECK_INTERVAL_MS > 0
+  uint32_t lastWifiCfgMs = millis();
 #endif
   uint32_t lastNtpRetryMs = millis();
 
@@ -697,6 +874,9 @@ void netTask(void *arg)
 #if OTA_ENABLE && OTA_CHECK_INTERVAL_MS > 0
       lastOtaMs = millis(); // jangan langsung cek OTA sesaat setelah reconnect
 #endif
+#if WIFI_CFG_ENABLE && WIFI_CFG_CHECK_INTERVAL_MS > 0
+      lastWifiCfgMs = millis(); // begitu juga cek ganti-WiFi
+#endif
       continue;
     }
 
@@ -718,6 +898,27 @@ void netTask(void *arg)
         s_tls.stop();         // heap untuk buffer TLS-nya sendiri
         otaPerform();         // berhasil -> esp_restart(), tidak kembali ke sini
         lastOtaMs = millis(); // gagal -> jangan langsung ulang, beri jeda penuh
+      }
+    }
+#endif
+
+#if WIFI_CFG_ENABLE && WIFI_CFG_CHECK_INTERVAL_MS > 0
+    /* Sama seperti cek OTA di atas: sela di antara batch, bukan di tengah
+     * pengiriman. wifiCfgApply() sendiri yang menutup sesi streaming
+     * (s_http/s_tls) sebelum pindah WiFi dan membukanya lagi lewat POST
+     * batch berikutnya seperti biasa setelah sambungan pulih. */
+    if (millis() - lastWifiCfgMs >= WIFI_CFG_CHECK_INTERVAL_MS)
+    {
+      lastWifiCfgMs = millis();
+      char newSsid[sizeof(s_wifiSsid)] = {0};
+      char newPass[sizeof(s_wifiPass)] = {0};
+      if (wifiCfgCheckPending(newSsid, sizeof(newSsid), newPass, sizeof(newPass)))
+      {
+        wifiCfgApply(newSsid, newPass);
+#if OTA_ENABLE && OTA_CHECK_INTERVAL_MS > 0
+        lastOtaMs = millis(); // jangan langsung cek OTA sesaat setelah ini
+#endif
+        lastWifiCfgMs = millis();
       }
     }
 #endif
