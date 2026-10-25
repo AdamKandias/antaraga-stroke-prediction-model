@@ -3042,11 +3042,16 @@
       noteEl.innerHTML = '';
       if (badge) { badge.textContent = 'mlp_calibration.joblib'; badge.style.background = 'rgba(58,190,120,.15)'; badge.style.color = 'var(--good)'; }
 
-      const kolStatus = v => v < 200 ? { label: 'Normal', color: 'var(--good)' } : v < 240 ? { label: 'Batas Tinggi', color: 'var(--warn)' } : { label: 'Sangat Tinggi', color: 'var(--critical)' };
+      const kolStatus = v => v < 200 ? { label: 'Normal', color: 'var(--good)' } : v < 240 ? { label: 'Batas Tinggi', color: 'var(--warn)' } : { label: 'Tinggi', color: 'var(--critical)' };
       const uratStatus = v => v <= 6.2 ? { label: 'Normal', color: 'var(--good)' } : { label: 'Tinggi', color: 'var(--critical)' };
 
-      tile('mSys', 'mSysSt', cv.sistolik_mmhg, sysStatus);
-      tile('mDia', 'mDiaSt', cv.diastolik_mmhg, diaStatus);
+      // Tekanan darah: SATU status gabungan dari sistolik+diastolik bersama
+      // (lihat bpJointStatus di bawah), diterapkan ke KEDUA kartu supaya
+      // keduanya selalu menunjukkan kategori yang sama -- sistolik dan
+      // diastolik bukan dua kondisi terpisah, melainkan satu tekanan darah.
+      const bpSt = bpJointStatus(cv.sistolik_mmhg, cv.diastolik_mmhg);
+      tile('mSys', 'mSysSt', cv.sistolik_mmhg, () => bpSt);
+      tile('mDia', 'mDiaSt', cv.diastolik_mmhg, () => bpSt);
       tile('mGlu', 'mGluSt', cv.gula_darah_mg_dl, gluStatus);
 
       document.getElementById('mlpCalibTiles').style.display = '';
@@ -3075,9 +3080,22 @@
         el.textContent = s.label; el.style.color = s.color;
       }
     }
-    const sysStatus = v => v < 120 ? { label: 'Normal', color: 'var(--good)' } : v < 130 ? { label: 'Meninggi', color: 'var(--warn)' } : v < 140 ? { label: 'Hipertensi Tkt 1', color: 'var(--serious)' } : { label: 'Hipertensi Tkt 2', color: 'var(--critical)' };
-    const diaStatus = v => v < 80 ? { label: 'Normal', color: 'var(--good)' } : v < 90 ? { label: 'Meninggi', color: 'var(--warn)' } : { label: 'Hipertensi', color: 'var(--critical)' };
-    const gluStatus = v => v < 100 ? { label: 'Normal', color: 'var(--good)' } : v < 126 ? { label: 'Prediabetes', color: 'var(--warn)' } : { label: 'Diabetes', color: 'var(--critical)' };
+    // Ambang & label di bawah ini SENGAJA disamakan persis dengan
+    // lib/core/constants/vital_ranges.dart di mobile app -- supaya web
+    // dashboard dan aplikasi Android menunjukkan kategori yang sama untuk
+    // angka yang sama. Sebelumnya dashboard ini memakai ambang klinis
+    // glukosa PUASA (Prediabetes 100-125, Diabetes >=126) padahal bacaan
+    // sensor di sini bukan glukosa puasa -- itu yang membuat 129 mg/dL
+    // (nilai yang wajar di luar kondisi puasa) salah ditandai "Diabetes".
+    function bpJointStatus(sys, dia) {
+      if (sys == null) return { label: '-', color: 'var(--muted)' };
+      if (sys < 90 || (dia != null && dia < 60)) return { label: 'Rendah', color: 'var(--warn)' };
+      if (sys >= 140 || (dia != null && dia >= 90)) return { label: 'Tinggi', color: 'var(--critical)' };
+      if (sys >= 130 || (dia != null && dia >= 80)) return { label: 'Agak Tinggi', color: 'var(--serious)' };
+      if (sys >= 120 || (dia != null && dia >= 80)) return { label: 'Elevated', color: 'var(--warn)' };
+      return { label: 'Normal', color: 'var(--good)' };
+    }
+    const gluStatus = v => v < 70 ? { label: 'Rendah', color: 'var(--critical)' } : v > 140 ? { label: 'Tinggi', color: 'var(--critical)' } : { label: 'Normal', color: 'var(--good)' };
 
     // ── XGBoost ──
     function renderXgb(x) {
