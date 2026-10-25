@@ -9,8 +9,12 @@
 // =====================================================================
 // [WAJIB DIISI]  WiFi
 // =====================================================================
-#define WIFI_SSID "duhh"
-#define WIFI_PASS "alamakdiasbaikpol"
+// Hotspot Dias
+// #define WIFI_SSID "duhh"
+// #define WIFI_PASS "alamakdiasbaikpol"
+// Hotspot Orbit
+#define WIFI_SSID "E5576_EE1D"
+#define WIFI_PASS "iY8Dai52DAg"
 #define WIFI_CONNECT_TIMEOUT_MS 20000 // batas 1x percobaan connect
 #define WIFI_RETRY_DELAY_MS 3000      // jeda antar percobaan
 
