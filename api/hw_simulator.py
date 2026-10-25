@@ -190,8 +190,19 @@ async def _loop() -> None:
             payload = build_batch()
             batch   = schemas.IngestBatch(**payload)
 
-            # Pakai user yang paling terakhir aktif - perilaku yang sama dengan
-            # DEVICE_INGEST_KEY pada firmware asli (lihat auth.get_ingest_user_id).
+            # user_id di bawah ini cuma SEED/cadangan -- ingest_firmware_batch
+            # mengabaikannya kecuali device_id (s.device_id) ini benar-benar
+            # di-pair ke suatu profil/akun (lewat /device/pair, sama seperti
+            # device asli). Dulu ada fallback "pakai user yang paling
+            # terakhir aktif" di sini supaya simulator langsung jalan tanpa
+            # pairing, tapi itu persis bug yang membuat gelang yang sudah
+            # dilepas (atau belum pernah dipasangkan) tetap menempel ke akun
+            # manapun yang kebetulan aktif -- sudah dibuang dari
+            # ingest_firmware_batch demi keamanan data, jadi simulator ikut
+            # mengikuti: pair dulu s.device_id ke sebuah profil kalau mau
+            # lihat hasilnya sampai ke VitalReading/risiko/FCM. Tanpa itu,
+            # datanya tetap masuk ke ingest_buffer (live di /dashboard) tapi
+            # tidak tersimpan sebagai pembacaan vital siapa pun.
             user = db.query(models_db.User).order_by(
                 models_db.User.last_seen_at.desc()
             ).first()

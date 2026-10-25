@@ -1124,12 +1124,21 @@ def ingest_firmware_batch(
         )
         if paired_user:
             user_id = paired_user.id
+            profile = resolve_active_profile(db, user_id)
+        # else: batch.id TIDAK terpasang ke profil ATAU akun manapun --
+        # `profile` dibiarkan None di sini, SENGAJA TIDAK jatuh ke
+        # resolve_active_profile(db, user_id) pakai `user_id` dari
+        # get_ingest_user_id(). Itu "user yang paling terakhir aktif"
+        # (lihat auth.get_ingest_user_id), BUKAN pemilik device_key ini --
+        # kalau dipakai di sini, gelang yang baru dilepas (device_key tidak
+        # cocok ke profil/akun manapun lagi) tetap akan menempel ke akun
+        # MANAPUN yang kebetulan sedang aktif di HP lain, termasuk akun yang
+        # belum pernah terhubung ke device ini sama sekali. Itu bug
+        # kebocoran data lintas-akun yang nyata, bukan cuma salah profil.
 
     # Simpan ke buffer dulu (sebelum early-return) supaya dashboard bisa membaca
     ingest_buffer.store(batch.id, batch.model_dump())
 
-    if profile is None:
-        profile = resolve_active_profile(db, user_id)
     if profile is None:
         return schemas.IngestResponse(ok=True, seq=batch.seq)
 
